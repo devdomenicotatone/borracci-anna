@@ -1,39 +1,154 @@
 @import "tailwindcss";
 
-/* Palette neutra contemporanea del brand "by Frody".
-   Tutto resta basato sul setup Tailwind v4 esistente: aggiungiamo solo
-   poche variabili/utility di marchio senza toccarne la configurazione. */
+/* =========================================================================
+   by Frody — design system "Pop mare"
+   Negozio di abbigliamento sul lungomare di Rimini.
+   Palette solare e balneare: blu mare, ciano laguna, corallo, giallo sole.
+
+   Resta tutto su Tailwind v4: i valori grezzi stanno in :root e li mappiamo
+   in @theme inline, cosi le utility (bg-coral, text-sea, shadow-coral,
+   font-display, ...) sono disponibili ovunque senza toccare la config.
+   Tema unico chiaro e solare: niente dark mode.
+   ========================================================================= */
 
 :root {
-  --background: #fafaf9; /* sabbia chiarissima, piu caldo del bianco puro */
-  --foreground: #1c1917; /* quasi nero, caldo */
-  --muted: #78716c; /* testo secondario */
-  --line: #e7e5e4; /* bordi/divisori sottili */
-  --surface: #ffffff; /* card e superfici */
-  --accent: #1c1917; /* accento tipografico (il nero del brand) */
+  --background: #ffffff; /* bianco pieno */
+  --surface: #f4fbfe; /* azzurrino chiarissimo per card/sezioni */
+  --surface-2: #e7f6fc; /* azzurrino un filo piu carico */
+  --foreground: #0a1f33; /* inchiostro blu notte (testo principale) */
+  --muted: #41566b; /* testo secondario */
+  --line: #dceef6; /* bordi/divisori sottili */
+
+  --sea: #0077c8; /* blu mare — primario "istituzionale" */
+  --lagoon: #00b4d8; /* ciano laguna — accento fresco */
+  --coral: #ff5c5c; /* corallo — call-to-action / energia */
+  --sun: #ffd23f; /* giallo sole — highlight */
+
+  --accent: var(--sea); /* accento tipografico storico = blu mare */
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-line: var(--line);
-  --color-surface: var(--surface);
+
+  --color-sea: var(--sea);
+  --color-lagoon: var(--lagoon);
+  --color-coral: var(--coral);
+  --color-sun: var(--sun);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-poppins);
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+
+  --shadow-soft: 0 10px 30px -16px rgba(10, 31, 51, 0.35);
+  --shadow-sea: 0 14px 34px -18px rgba(0, 119, 200, 0.55);
+  --shadow-coral: 0 14px 34px -18px rgba(255, 92, 92, 0.55);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Wordmark del brand: spaziatura ravvicinata, vibe firma. */
+/* Titoli sempre nel display font (Poppins): serrati e decisi. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+/* Focus visibile coerente col brand. */
+:focus-visible {
+  outline: 3px solid var(--sea);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* -------------------------------------------------------------------------
+   Wordmark "by Frody": "by" piccolo blu mare, "Frody" con la F corallo marcata.
+   Markup: <span class="wordmark"><span class="wm-by">by</span><span class="wm-frody">Frody</span></span>
+   ------------------------------------------------------------------------- */
 .wordmark {
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.06em;
+  color: var(--foreground);
+}
+.wordmark .wm-by {
+  color: var(--sea);
+  font-weight: 600;
+  font-size: 0.74em;
+}
+.wordmark .wm-frody {
+  position: relative;
+}
+.wordmark .wm-frody::first-letter {
+  color: var(--coral);
+  font-weight: 800;
+  font-size: 1.18em;
+}
+
+/* -------------------------------------------------------------------------
+   Sfondi e texture balneari riutilizzabili.
+   ------------------------------------------------------------------------- */
+/* Gradiente mare (hero, bande "tuffo"). */
+.bg-sea-gradient {
+  background: linear-gradient(135deg, #00b4d8 0%, #0099d4 45%, #0077c8 100%);
+}
+/* Barra scura del gestionale. */
+.bg-ink-gradient {
+  background: linear-gradient(90deg, #0a1f33, #123a57);
+}
+/* Texture a puntini bianchi sopra gli sfondi mare. */
+.dots-overlay {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.55) 2px,
+    transparent 2.5px
+  );
+  background-size: 26px 26px;
+}
+
+/* Gradienti delle "tile" placeholder per i prodotti senza foto. */
+.tile-cyan {
+  background: linear-gradient(150deg, #00b4d8, #0077c8);
+}
+.tile-cyan-soft {
+  background: linear-gradient(150deg, #7fe3f5, #00b4d8);
+}
+.tile-coral {
+  background: linear-gradient(150deg, #ff8a8a, #ff5c5c 70%);
+}
+.tile-deep {
+  background: linear-gradient(150deg, #0099d4, #005c9e);
+}
+.tile-sun {
+  background: linear-gradient(150deg, #ffe08a, #ffc42f);
+}
+.tile-sunset {
+  background: linear-gradient(150deg, #ffb36b, #ff6a6a 65%, #c84bc8);
+}
+
+/* Rispetta chi preferisce meno movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

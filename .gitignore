@@ -45,3 +45,5 @@ next-env.d.ts
 
 # foto temporanee di lavorazione (non versionare)
 /cartella foto momentanea da eliminare/
+
+.vercel

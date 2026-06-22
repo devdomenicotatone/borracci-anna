@@ -45,14 +45,18 @@ function IconaPiu({ className }: { className?: string }) {
 }
 
 const Wordmark = (
-  <span className="wordmark text-xl text-foreground">
-    <span className="font-normal text-muted">by</span>
-    <span className="ml-1 italic">
-      <span className="text-[1.15em] font-bold">F</span>rody
-    </span>
-    <span className="ml-1.5 align-middle text-xs font-normal not-italic text-muted">
-      · gestore
-    </span>
+  <span className="wordmark text-xl">
+    <span className="wm-by">by</span>
+    <span className="wm-frody">Frody</span>
+    <span className="ml-1 text-sm font-medium text-muted">· gestore</span>
+  </span>
+);
+
+const WordmarkBianco = (
+  <span className="wordmark text-xl text-white">
+    <span className="wm-by !text-lagoon">by</span>
+    <span className="wm-frody">Frody</span>
+    <span className="ml-1 text-sm font-medium text-white/70">· gestore</span>
   </span>
 );
 
@@ -73,14 +77,14 @@ export default function AdminNav({
   return (
     <>
       {/* HEADER mobile */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-surface/85 px-4 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-white/85 px-4 backdrop-blur md:hidden">
         <Link href="/gestore/prodotti" aria-label="Area gestore by Frody">
           {Wordmark}
         </Link>
         <form action={logoutGestore}>
           <button
             type="submit"
-            className="text-sm font-medium text-muted transition-colors hover:text-foreground"
+            className="rounded-full px-3 py-2 text-sm font-display font-bold text-sea transition-colors hover:bg-surface"
           >
             Esci
           </button>
@@ -88,15 +92,22 @@ export default function AdminNav({
       </header>
 
       {/* SIDEBAR desktop */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-line bg-surface px-4 py-5 md:flex">
-        <Link
-          href="/gestore/prodotti"
-          aria-label="Area gestore by Frody"
-          className="px-2"
-        >
-          {Wordmark}
-        </Link>
-        <nav className="mt-8 flex flex-1 flex-col gap-1">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-line bg-surface md:flex">
+        {/* Topbar mare scura del gestionale */}
+        <div className="bg-ink-gradient px-4 py-4">
+          <Link
+            href="/gestore/prodotti"
+            aria-label="Area gestore by Frody"
+            className="flex items-center gap-2"
+          >
+            <span
+              className="h-2.5 w-2.5 flex-none rounded-full bg-coral shadow-[0_0_0_4px_rgba(255,92,92,0.25)]"
+              aria-hidden="true"
+            />
+            {WordmarkBianco}
+          </Link>
+        </div>
+        <nav className="mt-6 flex flex-1 flex-col gap-1 px-4">
           <Link href="/gestore/prodotti" className={voceSidebar(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             Prodotti
@@ -106,15 +117,25 @@ export default function AdminNav({
             Nuovo prodotto
           </Link>
         </nav>
-        <div className="border-t border-line pt-4">
-          <p className="px-2 text-sm font-medium text-foreground">
-            {nome ?? "Gestore"}
-          </p>
-          <p className="px-2 text-xs capitalize text-muted">{ruolo}</p>
-          <form action={logoutGestore} className="mt-2">
+        <div className="border-t border-line p-4">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid h-9 w-9 flex-none place-items-center rounded-full bg-gradient-to-br from-lagoon to-sea text-sm font-display font-bold text-white"
+              aria-hidden="true"
+            >
+              {(nome ?? "Gestore").charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-display font-bold text-foreground">
+                {nome ?? "Gestore"}
+              </p>
+              <p className="truncate text-xs capitalize text-muted">{ruolo}</p>
+            </div>
+          </div>
+          <form action={logoutGestore} className="mt-3">
             <button
               type="submit"
-              className="w-full rounded-lg px-2 py-2 text-left text-sm text-muted transition-colors hover:bg-background hover:text-foreground"
+              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-background hover:text-foreground"
             >
               Esci
             </button>
@@ -124,7 +145,7 @@ export default function AdminNav({
 
       {/* BOTTOM-NAV mobile (nascosta sulle pagine di form) */}
       {!suFormProdotto && (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-2 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-2 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <Link href="/gestore/prodotti" className={voceBottom(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             <span>Prodotti</span>
@@ -141,16 +162,16 @@ export default function AdminNav({
 
 function voceSidebar(attivo: boolean): string {
   return [
-    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-display font-bold transition-colors",
     attivo
-      ? "bg-foreground text-background"
-      : "text-muted hover:bg-background hover:text-foreground",
+      ? "bg-sea text-white shadow-sea"
+      : "text-muted hover:bg-surface hover:text-foreground",
   ].join(" ");
 }
 
 function voceBottom(attivo: boolean): string {
   return [
-    "flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
-    attivo ? "text-foreground" : "text-muted",
+    "flex h-16 flex-col items-center justify-center gap-1 text-xs font-display font-bold transition-colors",
+    attivo ? "text-sea" : "text-muted",
   ].join(" ");
 }

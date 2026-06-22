@@ -64,12 +64,41 @@ export function ToasterProvider({
             key={t.id}
             role={t.tipo === "errore" ? "alert" : "status"}
             className={[
-              "pointer-events-auto max-w-sm rounded-full px-4 py-2.5 text-sm font-medium shadow-lg",
+              "pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-2xl px-4 py-3 font-display text-sm font-bold text-white",
               t.tipo === "errore"
-                ? "bg-red-700 text-white"
-                : "bg-foreground text-background",
+                ? "bg-coral shadow-coral"
+                : "bg-sea shadow-sea",
             ].join(" ")}
           >
+            <span
+              aria-hidden="true"
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/20"
+            >
+              {t.tipo === "errore" ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  className="h-3 w-3"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3 w-3"
+                >
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              )}
+            </span>
             {t.messaggio}
           </div>
         ))}

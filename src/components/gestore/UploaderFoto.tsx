@@ -84,9 +84,28 @@ export default function UploaderFoto({
 
   return (
     <section className="mx-auto mt-8 max-w-xl">
-      <h2 className="mb-3 text-base font-semibold text-foreground">Foto</h2>
+      <span className="mb-2 inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+          aria-hidden="true"
+        >
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <circle cx="9" cy="11" r="2" />
+          <path d="m21 16-4-4-7 7" />
+        </svg>
+        Foto
+      </span>
+      <h2 className="mb-3 font-display text-base font-extrabold text-foreground">
+        Foto del prodotto
+      </h2>
       <div className="flex items-start gap-4">
-        <div className="relative aspect-[4/5] w-32 shrink-0 overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="relative aspect-[3/3.4] w-32 shrink-0 overflow-hidden rounded-2xl bg-surface ring-1 ring-line">
           {mostrato ? (
             // eslint-disable-next-line @next/next/no-img-element -- url Storage / blob locale
             <img
@@ -95,16 +114,25 @@ export default function UploaderFoto({
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="h-full w-full bg-[repeating-linear-gradient(45deg,var(--surface),var(--surface)_10px,var(--background)_10px,var(--background)_20px)]" />
+            <div className="tile-cyan-soft grid h-full w-full place-items-center text-white">
+              <svg
+                viewBox="0 0 100 100"
+                fill="currentColor"
+                aria-hidden="true"
+                className="w-2/5 drop-shadow-[0_6px_12px_rgba(0,40,70,0.25)]"
+              >
+                <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+              </svg>
+            </div>
           )}
           {caricando && (
-            <div className="absolute inset-0 flex items-center justify-center bg-foreground/30 text-xs font-medium text-background">
+            <div className="absolute inset-0 flex items-center justify-center bg-sea/40 font-display text-xs font-bold text-white backdrop-blur-sm">
               Caricamento…
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           <input
             ref={inputRef}
             type="file"
@@ -116,8 +144,20 @@ export default function UploaderFoto({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={caricando}
-            className="flex h-11 items-center justify-center rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/85 disabled:opacity-40"
+            className="flex h-12 items-center justify-center gap-2 rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
           >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M12 16V4m0 0L8 8m4-4 4 4M4 20h16" />
+            </svg>
             {url ? "Sostituisci foto" : "Carica foto"}
           </button>
           {url && (
@@ -125,7 +165,7 @@ export default function UploaderFoto({
               type="button"
               onClick={() => setConfermaApri(true)}
               disabled={caricando}
-              className="flex h-11 items-center justify-center rounded-full border border-line px-5 text-sm font-medium text-muted transition-colors hover:text-red-700 disabled:opacity-40"
+              className="flex h-12 items-center justify-center rounded-full bg-white px-5 font-display text-sm font-bold text-coral ring-2 ring-coral/30 transition-all hover:-translate-y-0.5 hover:bg-coral/10 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
             >
               Rimuovi
             </button>

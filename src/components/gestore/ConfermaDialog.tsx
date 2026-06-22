@@ -24,24 +24,26 @@ export default function ConfermaDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-4 backdrop-blur-sm sm:items-center"
       onClick={onAnnulla}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={titolo}
-        className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl"
+        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft ring-1 ring-line"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold text-foreground">{titolo}</h2>
-        <p className="mt-1.5 text-sm text-muted">{messaggio}</p>
-        <div className="mt-5 flex gap-2">
+        <h2 className="font-display text-lg font-extrabold text-foreground">
+          {titolo}
+        </h2>
+        <p className="mt-2 text-sm text-muted">{messaggio}</p>
+        <div className="mt-6 flex gap-2.5">
           <button
             type="button"
             onClick={onAnnulla}
             disabled={inCorso}
-            className="h-11 flex-1 rounded-full border border-line text-sm font-medium text-foreground transition-colors hover:bg-background disabled:opacity-50"
+            className="h-12 flex-1 rounded-full bg-white text-sm font-bold text-muted ring-2 ring-surface-2 transition-all hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             Annulla
           </button>
@@ -49,7 +51,7 @@ export default function ConfermaDialog({
             type="button"
             onClick={onConferma}
             disabled={inCorso}
-            className="h-11 flex-1 rounded-full bg-red-700 text-sm font-medium text-white transition-colors hover:bg-red-800 disabled:opacity-50"
+            className="flex h-12 flex-1 items-center justify-center rounded-full bg-coral font-display text-sm font-bold text-white shadow-coral transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
           >
             {inCorso ? "Attendi…" : etichettaConferma}
           </button>

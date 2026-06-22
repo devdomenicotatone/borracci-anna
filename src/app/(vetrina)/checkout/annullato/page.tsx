@@ -11,11 +11,22 @@ export const metadata = {
 export default function CheckoutAnnullatoPage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
-      <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-10 text-center shadow-sm">
-        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-line text-2xl text-muted">
-          ×
+      <div className="w-full max-w-md rounded-3xl bg-surface p-10 text-center shadow-soft ring-1 ring-line">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-surface-2 text-lagoon ring-2 ring-line">
+          <svg
+            className="h-8 w-8"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-foreground">
           Pagamento annullato
         </h1>
         <p className="mt-3 text-base leading-7 text-muted">
@@ -25,13 +36,13 @@ export default function CheckoutAnnullatoPage() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
             href="/carrello"
-            className="inline-flex h-12 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition-opacity hover:opacity-90"
+            className="inline-flex h-12 items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
           >
             Torna al carrello
           </Link>
           <Link
             href="/"
-            className="inline-flex h-12 items-center justify-center rounded-full border border-line px-6 text-sm font-medium text-foreground transition-colors hover:bg-black/[.04]"
+            className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 font-display font-bold text-sea ring-2 ring-sea transition-colors hover:bg-surface"
           >
             Continua lo shopping
           </Link>

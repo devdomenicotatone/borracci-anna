@@ -28,7 +28,7 @@ export default async function CarrelloPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground">
         Il tuo carrello
       </h1>
 
@@ -36,27 +36,27 @@ export default async function CarrelloPage() {
         <StatoVuoto />
       ) : (
         <div className="mt-8">
-          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+          <ul className="divide-y divide-line">
             {righe.map((riga) => (
               <CartItem key={riga.id} riga={riga} />
             ))}
           </ul>
 
           {/* Riepilogo */}
-          <div className="mt-8 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+          <div className="mt-8 rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line">
             <div className="flex items-center justify-between text-base">
-              <span className="text-zinc-600 dark:text-zinc-400">
+              <span className="text-muted">
                 Totale{" "}
                 <span className="text-sm">
                   ({totaleArticoli}{" "}
                   {totaleArticoli === 1 ? "articolo" : "articoli"})
                 </span>
               </span>
-              <span className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+              <span className="font-display text-2xl font-extrabold text-sea">
                 {formatPrezzo(totaleCents, valuta)}
               </span>
             </div>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-muted">
               Spedizione e imposte calcolate al pagamento.
             </p>
 
@@ -67,7 +67,7 @@ export default async function CarrelloPage() {
             <div className="mt-4 text-center">
               <Link
                 href="/"
-                className="text-sm font-medium text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
+                className="text-sm font-medium text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
               >
                 Continua lo shopping
               </Link>
@@ -82,21 +82,21 @@ export default async function CarrelloPage() {
 /** Stato vuoto curato quando non ci sono righe nel carrello. */
 function StatoVuoto() {
   return (
-    <div className="mt-12 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-zinc-200 py-16 text-center dark:border-zinc-800">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 text-2xl dark:bg-zinc-900">
-        🛍️
+    <div className="mt-12 flex flex-col items-center gap-4 rounded-3xl bg-surface py-16 text-center shadow-soft ring-1 ring-line">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-2 text-3xl">
+        🏖️
       </div>
       <div>
-        <p className="font-medium text-zinc-900 dark:text-zinc-50">
+        <p className="font-display text-lg font-bold text-foreground">
           Il carrello e vuoto
         </p>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Non hai ancora aggiunto nessun articolo.
+        <p className="mt-1 text-sm text-muted">
+          Non hai ancora aggiunto nessun articolo. Tuffati nella collezione!
         </p>
       </div>
       <Link
         href="/"
-        className="mt-2 flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition-colors hover:opacity-90"
+        className="mt-2 flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
       >
         Scopri i prodotti
       </Link>

@@ -1,21 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Inter: testo e UI. Variable font, nessun peso da dichiarare.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Poppins: titoli e wordmark — rotondo, amichevole, "da spiaggia".
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "by Frody — abbigliamento",
+  title: "by Frody — moda fresca sul lungomare di Rimini",
   description:
-    "by Frody: capi d'abbigliamento dal taglio essenziale e contemporaneo. Selezione curata, pochi pezzi, qualita prima di tutto.",
+    "by Frody: abbigliamento fresco e leggero, scelto uno a uno. Vieni a trovarci sul lungomare di Rimini o ricevi i capi comodamente a casa.",
 };
 
 // Root layout MINIMALE: emette solo <html>/<body> + font + metadata globale.
@@ -30,9 +35,9 @@ export default function RootLayout({
   return (
     <html
       lang="it"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${poppins.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-background text-foreground">
+      <body className="min-h-full bg-background font-sans text-foreground">
         {children}
       </body>
     </html>

@@ -15,7 +15,7 @@ export default async function AppGestoreLayout({
 
   return (
     <ToasterProvider>
-      <div className="min-h-screen md:pl-60">
+      <div className="min-h-screen bg-background md:pl-60">
         <AdminNav nome={profilo.nome} ruolo={profilo.ruolo} />
         <main className="px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-8">
           {children}

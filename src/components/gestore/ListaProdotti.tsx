@@ -49,26 +49,63 @@ export default function ListaProdotti({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-5 flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-foreground">Prodotti</h1>
+        <div>
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="7" height="7" rx="1.5" />
+              <rect x="14" y="4" width="7" height="7" rx="1.5" />
+              <rect x="3" y="15" width="7" height="5" rx="1.5" />
+              <rect x="14" y="15" width="7" height="5" rx="1.5" />
+            </svg>
+            Catalogo
+          </span>
+          <h1 className="font-display text-2xl font-extrabold text-foreground">
+            Prodotti
+          </h1>
+        </div>
         <Link
           href="/gestore/prodotti/nuovo"
-          className="inline-flex h-10 items-center rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/85"
+          className="inline-flex h-11 items-center gap-1.5 rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5"
         >
           + Nuovo
         </Link>
       </div>
 
       {/* Toolbar: ricerca + filtro */}
-      <div className="sticky top-14 z-10 -mx-4 mb-4 flex flex-col gap-2 bg-background/95 px-4 py-2 backdrop-blur md:top-0 md:mx-0 md:px-0">
-        <input
-          type="search"
-          inputMode="search"
-          placeholder="Cerca per nome o slug…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="h-11 w-full rounded-full border border-line bg-surface px-4 text-base text-foreground outline-none transition-colors focus-visible:border-foreground"
-        />
-        <div className="flex gap-1 rounded-full border border-line bg-surface p-1 text-sm">
+      <div className="sticky top-14 z-10 -mx-4 mb-4 flex flex-col gap-2.5 bg-background/95 px-4 py-2 backdrop-blur md:top-0 md:mx-0 md:px-0">
+        <div className="relative">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute inset-y-0 left-4 my-auto h-5 w-5 text-muted"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            type="search"
+            inputMode="search"
+            placeholder="Cerca per nome o slug…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-12 w-full rounded-full bg-white pl-11 pr-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
+          />
+        </div>
+        <div className="flex gap-1 rounded-full bg-surface-2 p-1 text-sm">
           {(["tutti", "attivi", "nascosti"] as Filtro[]).map((f) => (
             <button
               key={f}
@@ -76,9 +113,9 @@ export default function ListaProdotti({
               aria-pressed={filtro === f}
               onClick={() => setFiltro(f)}
               className={[
-                "flex-1 rounded-full py-1.5 font-medium capitalize transition-colors",
+                "flex-1 rounded-full py-2 font-display font-bold capitalize transition-all",
                 filtro === f
-                  ? "bg-foreground text-background"
+                  ? "bg-sea text-white shadow-sea"
                   : "text-muted hover:text-foreground",
               ].join(" ")}
             >
@@ -91,11 +128,11 @@ export default function ListaProdotti({
       {visibili.length === 0 ? (
         <StatoVuoto haProdotti={prodotti.length > 0} />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2.5">
           {visibili.map((p) => (
             <li
               key={p.id}
-              className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3"
+              className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line transition-all hover:-translate-y-0.5 hover:shadow-sea"
             >
               <Link
                 href={`/gestore/prodotti/${p.id}`}
@@ -103,14 +140,14 @@ export default function ListaProdotti({
               >
                 <Miniatura url={p.immagine_url} nome={p.nome} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
+                  <p className="truncate font-display text-sm font-bold text-foreground">
                     {p.nome}
                   </p>
                   <p className="truncate font-mono text-xs text-muted">
                     /{p.slug}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span className="text-sm tabular-nums text-foreground">
+                    <span className="text-sm font-bold tabular-nums text-sea">
                       {formatPrezzo(p.prezzo_cents, p.valuta)}
                     </span>
                     <BadgeStock
@@ -123,8 +160,8 @@ export default function ListaProdotti({
               <div className="flex flex-col items-end gap-2">
                 <span
                   className={[
-                    "text-xs font-medium",
-                    p.attivo ? "text-foreground" : "text-muted",
+                    "font-display text-xs font-bold",
+                    p.attivo ? "text-sea" : "text-muted",
                   ].join(" ")}
                 >
                   {p.attivo ? "In vendita" : "Nascosto"}
@@ -141,7 +178,7 @@ export default function ListaProdotti({
 
 function Miniatura({ url, nome }: { url: string | null; nome: string }) {
   return (
-    <div className="relative aspect-[4/5] w-14 shrink-0 overflow-hidden rounded-lg border border-line bg-surface">
+    <div className="relative aspect-[3/3.4] w-14 shrink-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- url da Storage con cache-bust
         <img
@@ -151,7 +188,16 @@ function Miniatura({ url, nome }: { url: string | null; nome: string }) {
           className="h-full w-full object-cover"
         />
       ) : (
-        <div className="h-full w-full bg-[repeating-linear-gradient(45deg,var(--surface),var(--surface)_8px,var(--background)_8px,var(--background)_16px)]" />
+        <div className="tile-cyan grid h-full w-full place-items-center text-white">
+          <svg
+            viewBox="0 0 100 100"
+            fill="currentColor"
+            aria-hidden="true"
+            className="w-1/2 drop-shadow-[0_4px_8px_rgba(0,40,70,0.25)]"
+          >
+            <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+          </svg>
+        </div>
       )}
     </div>
   );
@@ -166,33 +212,45 @@ function BadgeStock({
 }) {
   if (numVarianti === 0) {
     return (
-      <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted">
+      <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted">
         Nessuna variante
       </span>
     );
   }
   if (stock === 0) {
     return (
-      <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+      <span className="rounded-full bg-coral/15 px-2.5 py-0.5 text-xs font-bold text-coral">
         Esaurito
       </span>
     );
   }
   if (stock <= SOGLIA_SCORTE) {
     return (
-      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-sun/30 px-2.5 py-0.5 text-xs font-bold text-[#8a6500]">
+        <span
+          aria-hidden="true"
+          className="h-2 w-2 rounded-full bg-sun"
+        />
         Scorte basse · {stock}
       </span>
     );
   }
-  return (
-    <span className="text-xs text-muted">{stock} pz</span>
-  );
+  return <span className="text-xs text-muted">{stock} pz</span>;
 }
 
 function StatoVuoto({ haProdotti }: { haProdotti: boolean }) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-surface px-6 py-12 text-center">
+    <div className="rounded-3xl bg-surface px-6 py-12 text-center ring-1 ring-dashed ring-line">
+      <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-surface-2 text-sea">
+        <svg
+          viewBox="0 0 100 100"
+          fill="currentColor"
+          aria-hidden="true"
+          className="h-8 w-8"
+        >
+          <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+        </svg>
+      </span>
       <p className="text-sm text-muted">
         {haProdotti
           ? "Nessun prodotto corrisponde alla ricerca."
@@ -201,7 +259,7 @@ function StatoVuoto({ haProdotti }: { haProdotti: boolean }) {
       {!haProdotti && (
         <Link
           href="/gestore/prodotti/nuovo"
-          className="mt-4 inline-flex h-10 items-center rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/85"
+          className="mt-4 inline-flex h-11 items-center rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5"
         >
           + Crea il primo prodotto
         </Link>

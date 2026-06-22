@@ -16,7 +16,7 @@ export default function FormLogin() {
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="email" className="text-sm font-medium text-foreground">
+        <label htmlFor="email" className="text-sm font-display font-bold text-foreground">
           Email
         </label>
         <input
@@ -26,14 +26,14 @@ export default function FormLogin() {
           inputMode="email"
           autoComplete="email"
           required
-          className="h-12 rounded-xl border border-line bg-surface px-4 text-base text-foreground outline-none transition-colors focus-visible:border-foreground"
+          className="h-12 rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line"
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="password"
-          className="text-sm font-medium text-foreground"
+          className="text-sm font-display font-bold text-foreground"
         >
           Password
         </label>
@@ -43,12 +43,12 @@ export default function FormLogin() {
           type="password"
           autoComplete="current-password"
           required
-          className="h-12 rounded-xl border border-line bg-surface px-4 text-base text-foreground outline-none transition-colors focus-visible:border-foreground"
+          className="h-12 rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line"
         />
       </div>
 
       {stato?.error && (
-        <p role="alert" className="text-sm font-medium text-red-700">
+        <p role="alert" className="text-sm font-medium text-coral">
           {stato.error}
         </p>
       )}
@@ -56,7 +56,7 @@ export default function FormLogin() {
       <button
         type="submit"
         disabled={pending}
-        className="flex h-12 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition-colors hover:bg-foreground/85 disabled:opacity-50"
+        className="flex h-12 items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
       >
         {pending ? "Accesso in corso…" : "Accedi"}
       </button>

@@ -129,20 +129,25 @@ export default async function PaginaProdotto({ params }: PdpProps) {
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <nav className="mb-8 text-sm text-zinc-500 dark:text-zinc-400">
+      <nav
+        className="mb-8 flex items-center gap-2 text-sm text-muted"
+        aria-label="Percorso di navigazione"
+      >
         <Link
           href="/"
-          className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+          className="font-medium text-sea transition-colors hover:text-lagoon"
         >
           by Frody
         </Link>
-        <span className="px-2">/</span>
-        <span className="text-zinc-900 dark:text-zinc-100">{prodotto.nome}</span>
+        <span aria-hidden="true" className="text-line">
+          /
+        </span>
+        <span className="font-medium text-foreground">{prodotto.nome}</span>
       </nav>
 
-      <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-2">
         {/* Immagine prodotto */}
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-zinc-100 dark:bg-zinc-900">
+        <div className="relative aspect-square w-full overflow-hidden rounded-3xl shadow-sea">
           {prodotto.immagine_url ? (
             <Image
               src={prodotto.immagine_url}
@@ -153,35 +158,59 @@ export default async function PaginaProdotto({ params }: PdpProps) {
               priority
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-zinc-400 dark:text-zinc-600">
-              <span className="text-sm">Immagine non disponibile</span>
+            <div className="tile-cyan dots-overlay flex h-full w-full items-center justify-center">
+              <svg
+                className="w-2/5 text-white drop-shadow-[0_6px_12px_rgba(0,40,70,0.25)]"
+                viewBox="0 0 100 100"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+              </svg>
             </div>
           )}
         </div>
 
         {/* Dettagli e acquisto */}
         <div className="flex flex-col">
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <span className="mb-2 inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+              <circle cx="12" cy="12" r="3.4" />
+            </svg>
+            Dettaglio prodotto
+          </span>
+
+          <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
             {prodotto.nome}
           </h1>
 
-          <p className="mt-3 text-2xl font-medium text-zinc-900 dark:text-zinc-100">
+          <p className="mt-3 font-display text-3xl font-extrabold text-coral">
             {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
           </p>
 
           {prodotto.descrizione && (
-            <p className="mt-6 leading-relaxed text-zinc-600 dark:text-zinc-300">
+            <p className="mt-6 max-w-prose leading-relaxed text-muted">
               {prodotto.descrizione}
             </p>
           )}
 
           <div className="mt-8">
             {senzaVarianti ? (
-              <p className="rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+              <p className="rounded-2xl bg-surface px-4 py-3 text-sm text-muted ring-1 ring-line">
                 Nessuna variante disponibile per questo prodotto.
               </p>
             ) : esaurito ? (
-              <p className="rounded-lg bg-zinc-100 px-4 py-3 text-sm font-medium text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+              <p className="rounded-2xl bg-surface px-4 py-3 text-sm font-semibold text-coral ring-1 ring-coral/30">
                 Prodotto esaurito.
               </p>
             ) : (
@@ -189,7 +218,7 @@ export default async function PaginaProdotto({ params }: PdpProps) {
             )}
           </div>
 
-          <p className="mt-8 text-xs text-zinc-400 dark:text-zinc-500">
+          <p className="mt-8 font-mono text-xs text-muted">
             SKU prodotto: {prodotto.slug}
           </p>
         </div>

@@ -55,7 +55,7 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
       aria-busy={inAttesa}
     >
       {/* Immagine prodotto */}
-      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900">
+      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl">
         {riga.prodotto.immagine_url ? (
           <Image
             src={riga.prodotto.immagine_url}
@@ -65,8 +65,15 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
             className="object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
-            Nessuna immagine
+          <div className="tile-cyan flex h-full w-full items-center justify-center">
+            <svg
+              className="w-1/2 text-white drop-shadow-[0_4px_8px_rgba(0,40,70,0.25)]"
+              viewBox="0 0 100 100"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+            </svg>
           </div>
         )}
       </div>
@@ -75,38 +82,36 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
       <div className="flex flex-1 flex-col justify-between gap-2">
         <div className="flex justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="truncate font-medium text-zinc-900 dark:text-zinc-50">
+            <h3 className="truncate font-display font-bold text-foreground">
               {riga.prodotto.nome}
             </h3>
             {variante && (
-              <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-                {variante}
-              </p>
+              <p className="mt-0.5 text-sm text-muted">{variante}</p>
             )}
-            <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="mt-0.5 text-sm text-muted">
               {formatPrezzo(riga.prodotto.prezzo_cents, riga.prodotto.valuta)}{" "}
               cad.
             </p>
           </div>
-          <p className="shrink-0 font-medium text-zinc-900 dark:text-zinc-50">
+          <p className="shrink-0 font-display font-bold text-sea">
             {formatPrezzo(subtotale, riga.prodotto.valuta)}
           </p>
         </div>
 
         <div className="flex items-center justify-between gap-4">
           {/* Selettore quantita */}
-          <div className="flex items-center rounded-full border border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center gap-1 rounded-full bg-white p-1 ring-2 ring-surface-2">
             <button
               type="button"
               onClick={() => impostaQuantita(riga.quantita - 1)}
               disabled={inAttesa}
               aria-label="Diminuisci quantita"
-              className="flex h-9 w-9 items-center justify-center rounded-l-full text-lg text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
             >
               −
             </button>
             <span
-              className="w-8 text-center text-sm tabular-nums text-zinc-900 dark:text-zinc-50"
+              className="w-8 text-center font-display text-sm font-bold tabular-nums text-foreground"
               aria-live="polite"
             >
               {riga.quantita}
@@ -116,7 +121,7 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
               onClick={() => impostaQuantita(riga.quantita + 1)}
               disabled={inAttesa || riga.quantita >= maxQuantita}
               aria-label="Aumenta quantita"
-              className="flex h-9 w-9 items-center justify-center rounded-r-full text-lg text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
             >
               +
             </button>
@@ -127,7 +132,7 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
             type="button"
             onClick={rimuovi}
             disabled={inAttesa}
-            className="text-sm font-medium text-zinc-500 underline-offset-2 transition-colors hover:text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:text-red-400"
+            className="text-sm font-medium text-muted underline-offset-2 transition-colors hover:text-coral hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             Rimuovi
           </button>
@@ -167,7 +172,7 @@ export function CheckoutButton({ disabilitato = false }: { disabilitato?: boolea
       type="button"
       onClick={vaiAlPagamento}
       disabled={disabilitato || inAttesa}
-      className="flex h-12 w-full items-center justify-center rounded-full bg-foreground px-6 font-medium text-background transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
     >
       {inAttesa ? "Reindirizzamento…" : "Vai al pagamento"}
     </button>

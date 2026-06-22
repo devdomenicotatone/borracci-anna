@@ -24,7 +24,7 @@ export interface ProdottoForm {
 }
 
 const inputCls =
-  "h-12 w-full rounded-xl border border-line bg-surface px-4 text-base text-foreground outline-none transition-colors focus-visible:border-foreground";
+  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 export default function FormProdotto({ prodotto }: { prodotto?: ProdottoForm }) {
   const modifica = !!prodotto;
@@ -127,7 +127,7 @@ export default function FormProdotto({ prodotto }: { prodotto?: ProdottoForm }) 
             value={descrizione}
             onChange={(e) => setDescrizione(e.target.value)}
             rows={4}
-            className="min-h-24 w-full resize-y rounded-xl border border-line bg-surface px-4 py-3 text-base text-foreground outline-none transition-colors focus-visible:border-foreground"
+            className="min-h-24 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
           />
         </Campo>
 
@@ -159,9 +159,11 @@ export default function FormProdotto({ prodotto }: { prodotto?: ProdottoForm }) 
           </div>
         </Campo>
 
-        <div className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3">
+        <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 shadow-soft ring-1 ring-line">
           <div className="pr-4">
-            <p className="text-sm font-medium text-foreground">In vendita</p>
+            <p className="font-display text-sm font-bold text-foreground">
+              In vendita
+            </p>
             <p className="text-xs text-muted">
               Se disattivo, il prodotto non compare in vetrina.
             </p>
@@ -173,44 +175,50 @@ export default function FormProdotto({ prodotto }: { prodotto?: ProdottoForm }) 
             aria-label="In vendita"
             onClick={() => setAttivo((a) => !a)}
             className={[
-              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-              attivo ? "bg-foreground" : "bg-line",
+              "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
+              attivo ? "bg-sea" : "bg-line",
             ].join(" ")}
           >
             <span
               className={[
-                "inline-block h-5 w-5 transform rounded-full bg-surface shadow transition-transform",
-                attivo ? "translate-x-5" : "translate-x-0.5",
+                "inline-block h-5 w-5 transform rounded-full bg-white shadow-soft transition-transform",
+                attivo ? "translate-x-6" : "translate-x-1",
               ].join(" ")}
             />
           </button>
         </div>
 
         {stato.errors?.generale && (
-          <p role="alert" className="text-sm font-medium text-red-700">
+          <p
+            role="alert"
+            className="rounded-2xl bg-coral/10 px-4 py-3 text-sm font-bold text-coral"
+          >
             {stato.errors.generale}
           </p>
         )}
         {stato.ok && stato.message && (
-          <p role="status" className="text-sm font-medium text-foreground">
+          <p
+            role="status"
+            className="rounded-2xl bg-surface-2 px-4 py-3 text-sm font-bold text-sea"
+          >
             {stato.message}
           </p>
         )}
       </div>
 
       {/* Save-bar sticky in basso */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur md:left-60">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur md:left-60">
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
           <Link
             href="/gestore/prodotti"
-            className="flex h-11 items-center rounded-full px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
+            className="flex h-12 items-center rounded-full px-4 font-display text-sm font-bold text-muted transition-colors hover:text-foreground"
           >
             Annulla
           </Link>
           <button
             type="submit"
             disabled={!valido || !dirty || pending}
-            className="flex h-11 items-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition-colors hover:bg-foreground/85 disabled:opacity-40"
+            className="flex h-12 items-center rounded-full bg-sea px-7 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
           >
             {pending
               ? "Salvataggio…"
@@ -239,12 +247,15 @@ function Campo({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+      <label
+        htmlFor={htmlFor}
+        className="font-display text-sm font-bold text-foreground"
+      >
         {label}
       </label>
       {children}
       {errore ? (
-        <p className="text-xs font-medium text-red-700">{errore}</p>
+        <p className="text-xs font-bold text-coral">{errore}</p>
       ) : hint ? (
         <p className="text-xs text-muted">{hint}</p>
       ) : null}

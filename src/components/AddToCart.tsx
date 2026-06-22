@@ -63,13 +63,13 @@ export default function AddToCart({ varianti }: AddToCartProps) {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {/* Selettore taglia */}
       <fieldset>
-        <legend className="mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <legend className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-muted">
           Taglia
         </legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2.5">
           {varianti.map((v) => {
             const esaurita = v.stock <= 0;
             const selezionata = v.id === varianteId;
@@ -85,12 +85,12 @@ export default function AddToCart({ varianti }: AddToCartProps) {
                   setEsito(null);
                 }}
                 className={[
-                  "min-w-12 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  "h-[50px] min-w-[50px] rounded-xl px-3 font-display font-bold transition-all",
                   esaurita
-                    ? "cursor-not-allowed border-zinc-200 text-zinc-300 line-through dark:border-zinc-800 dark:text-zinc-700"
+                    ? "cursor-not-allowed text-muted line-through ring-2 ring-surface-2 [background:repeating-linear-gradient(45deg,#fff,#fff_6px,#f1f5f8_6px,#f1f5f8_12px)]"
                     : selezionata
-                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                      : "border-zinc-300 text-zinc-700 hover:border-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-100",
+                      ? "bg-sea text-white shadow-sea"
+                      : "bg-white text-foreground ring-2 ring-surface-2 hover:-translate-y-0.5 hover:ring-lagoon",
                 ].join(" ")}
                 title={esaurita ? "Esaurita" : etichettaVariante(v)}
               >
@@ -105,17 +105,17 @@ export default function AddToCart({ varianti }: AddToCartProps) {
       <div>
         <label
           htmlFor="quantita"
-          className="mb-2 block text-sm font-medium text-zinc-900 dark:text-zinc-100"
+          className="mb-3 block font-display text-sm font-bold uppercase tracking-wide text-muted"
         >
           Quantita
         </label>
-        <div className="inline-flex items-center rounded-lg border border-zinc-300 dark:border-zinc-700">
+        <div className="inline-flex items-center gap-1 rounded-full bg-white p-1.5 ring-2 ring-surface-2">
           <button
             type="button"
             aria-label="Diminuisci quantita"
             disabled={quantita <= 1}
             onClick={() => setQuantita((q) => Math.max(1, q - 1))}
-            className="px-3 py-2 text-lg leading-none text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
           >
             -
           </button>
@@ -133,22 +133,20 @@ export default function AddToCart({ varianti }: AddToCartProps) {
               }
               setQuantita(Math.min(Math.max(1, n), stockMax || 1));
             }}
-            className="w-14 border-x border-zinc-300 bg-transparent py-2 text-center text-sm text-zinc-900 outline-none dark:border-zinc-700 dark:text-zinc-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="w-12 bg-transparent text-center font-display text-lg font-bold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           <button
             type="button"
             aria-label="Aumenta quantita"
             disabled={quantita >= stockMax}
             onClick={() => setQuantita((q) => Math.min(stockMax || 1, q + 1))}
-            className="px-3 py-2 text-lg leading-none text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
           >
             +
           </button>
         </div>
         {varianteScelta && (
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            {stockMax} disponibili
-          </p>
+          <p className="mt-2 text-xs text-muted">{stockMax} disponibili</p>
         )}
       </div>
 
@@ -157,25 +155,39 @@ export default function AddToCart({ varianti }: AddToCartProps) {
         type="button"
         onClick={handleAggiungi}
         disabled={!puoAggiungere || inCorso}
-        className="flex h-12 w-full items-center justify-center rounded-full bg-zinc-900 px-6 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 sm:w-auto"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 sm:w-auto"
       >
+        <svg
+          className="h-5 w-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="9" cy="20" r="1.4" />
+          <circle cx="18" cy="20" r="1.4" />
+          <path d="M2.5 3h2l2.3 12.2a1.6 1.6 0 0 0 1.6 1.3h8.5a1.6 1.6 0 0 0 1.6-1.3L21 7H6" />
+        </svg>
         {inCorso ? "Aggiunta in corso..." : "Aggiungi al carrello"}
       </button>
 
       {/* Feedback */}
       {esito?.tipo === "ok" && (
-        <p
-          role="status"
-          className="text-sm font-medium text-green-700 dark:text-green-400"
-        >
+        <p role="status" className="text-sm font-semibold text-sea">
           Aggiunto al carrello.{" "}
-          <a href="/carrello" className="underline underline-offset-2">
+          <a
+            href="/carrello"
+            className="text-lagoon underline underline-offset-2"
+          >
             Vai al carrello
           </a>
         </p>
       )}
       {esito?.tipo === "errore" && (
-        <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm font-semibold text-coral">
           {esito.messaggio}
         </p>
       )}

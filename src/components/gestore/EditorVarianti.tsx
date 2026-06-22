@@ -27,9 +27,9 @@ interface RigaVar {
 }
 
 const inputMini =
-  "h-11 w-full rounded-lg border border-line bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-foreground";
+  "h-11 w-full rounded-xl bg-white px-3 text-sm text-foreground ring-1 ring-line outline-none transition-shadow";
 const stepBtn =
-  "flex h-11 w-9 shrink-0 items-center justify-center rounded-lg border border-line text-lg text-foreground transition-colors hover:bg-background";
+  "grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-lg font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface";
 
 function daDb(v: VarianteSalvata): RigaVar {
   return {
@@ -163,16 +163,33 @@ export default function EditorVarianti({
   return (
     <section className="mx-auto mt-8 max-w-xl">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-foreground">
-          Varianti e disponibilita
-        </h2>
-        <span className="text-xs text-muted">
+        <div>
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M4 7h16M4 12h16M4 17h10" />
+            </svg>
+            Disponibilità
+          </span>
+          <h2 className="font-display text-base font-extrabold text-foreground">
+            Varianti e disponibilita
+          </h2>
+        </div>
+        <span className="rounded-full bg-surface-2 px-3 py-1 text-xs font-bold text-sea">
           {righe.length} {righe.length === 1 ? "variante" : "varianti"}
         </span>
       </div>
 
       {righe.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface px-6 py-8 text-center">
+        <div className="rounded-2xl bg-surface px-6 py-8 text-center ring-1 ring-dashed ring-line">
           <p className="text-sm text-muted">
             Nessuna variante. Aggiungine una (es. taglia + stock).
           </p>
@@ -180,7 +197,7 @@ export default function EditorVarianti({
       ) : (
         <ul className="flex flex-col gap-3">
           {righe.map((r) => (
-            <li key={r.key} className="rounded-xl border border-line bg-surface p-3">
+            <li key={r.key} className="rounded-2xl bg-white p-3.5 shadow-soft ring-1 ring-line">
               <div className="grid grid-cols-2 gap-2">
                 <CampoMini label="Taglia">
                   <input
@@ -247,8 +264,20 @@ export default function EditorVarianti({
                 <button
                   type="button"
                   onClick={() => rimuovi(r.key)}
-                  className="text-xs font-medium text-muted transition-colors hover:text-red-700"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral/10"
                 >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3.5 w-3.5"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                  </svg>
                   Rimuovi
                 </button>
               </div>
@@ -261,7 +290,7 @@ export default function EditorVarianti({
         <button
           type="button"
           onClick={aggiungi}
-          className="flex h-11 items-center justify-center rounded-full border border-dashed border-line px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface"
+          className="flex h-12 items-center justify-center gap-2 rounded-full bg-white px-5 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
         >
           + Aggiungi variante
         </button>
@@ -269,7 +298,7 @@ export default function EditorVarianti({
           type="button"
           onClick={salva}
           disabled={pending}
-          className="flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background transition-colors hover:bg-foreground/85 disabled:opacity-40"
+          className="flex h-12 items-center justify-center rounded-full bg-sea px-6 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
         >
           {pending ? "Salvataggio…" : "Salva varianti"}
         </button>
@@ -297,7 +326,9 @@ function CampoMini({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted">{label}</span>
+      <span className="font-display text-xs font-bold uppercase tracking-wide text-muted">
+        {label}
+      </span>
       {children}
     </div>
   );

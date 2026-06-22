@@ -10,18 +10,31 @@ export const metadata: Metadata = {
 // (app)): non chiama requireGestore(), qui ci si arriva da non loggati.
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-5">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <span className="wordmark text-3xl text-foreground">
-            <span className="font-normal text-muted">by</span>
-            <span className="ml-1 italic">
-              <span className="text-[1.15em] font-bold">F</span>rody
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-sea-gradient px-5 py-10">
+      {/* Decoro balneare: puntini bianchi + sole sfumato */}
+      <div className="dots-overlay pointer-events-none absolute inset-0 opacity-50" aria-hidden="true" />
+      <div
+        className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 50%, rgba(255,210,63,.9), rgba(255,210,63,0) 70%)",
+        }}
+        aria-hidden="true"
+      />
+
+      <div className="relative w-full max-w-sm">
+        <div className="rounded-3xl bg-white p-7 shadow-soft sm:p-8">
+          <div className="mb-7 text-center">
+            <span className="wordmark text-3xl">
+              <span className="wm-by">by</span>
+              <span className="wm-frody">Frody</span>
             </span>
-          </span>
-          <p className="mt-2 text-sm text-muted">Area gestore</p>
+            <p className="mt-2 text-sm font-display font-bold uppercase tracking-wide text-lagoon">
+              Area gestore
+            </p>
+          </div>
+          <FormLogin />
         </div>
-        <FormLogin />
       </div>
     </div>
   );
