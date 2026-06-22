@@ -53,3 +53,22 @@ export interface Ordine {
   /** Timestamp ISO 8601 di creazione. */
   creato_il: string;
 }
+
+/** Un utente abilitato all'area gestore (riga in public.profili). */
+export interface Profilo {
+  id: string;
+  ruolo: "gestore" | "staff";
+  nome: string | null;
+}
+
+/**
+ * Dati di una variante mentre viene modificata nel form gestore.
+ * `id` assente => riga nuova ancora da creare.
+ */
+export interface VarianteInput {
+  id?: string;
+  taglia: string | null;
+  colore: string | null;
+  sku: string;
+  stock: number;
+}

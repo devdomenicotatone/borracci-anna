@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +18,10 @@ export const metadata: Metadata = {
     "by Frody: capi d'abbigliamento dal taglio essenziale e contemporaneo. Selezione curata, pochi pezzi, qualita prima di tutto.",
 };
 
+// Root layout MINIMALE: emette solo <html>/<body> + font + metadata globale.
+// Header e impaginazione della vetrina vivono in (vetrina)/layout.tsx; l'area
+// gestore ha la propria shell in (gestore)/. Cosi c'e un solo <html>/<body>
+// nell'albero (un secondo root layout produrrebbe markup annidato invalido).
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,9 +32,8 @@ export default function RootLayout({
       lang="it"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-background text-foreground">
-        <Header />
-        <main className="flex-1">{children}</main>
+      <body className="min-h-full bg-background text-foreground">
+        {children}
       </body>
     </html>
   );

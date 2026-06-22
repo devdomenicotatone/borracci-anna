@@ -57,12 +57,15 @@ const PRODOTTI_ESEMPIO: Prodotto[] = [
 
 /**
  * Recupera i prodotti attivi dal DB.
- * Non lancia mai: in caso di env mancanti o errore ritorna i dati di esempio.
+ * I prodotti di esempio sono SOLO un fallback per quando Supabase non e
+ * configurato (build/anteprima senza env): con DB connesso si mostrano i dati
+ * reali, e se non ci sono prodotti attivi la vetrina resta vuota (stato vuoto),
+ * senza mai mostrare prodotti finti (che porterebbero a pagine 404).
  */
 async function caricaProdotti(): Promise<Prodotto[]> {
   try {
     const supabase = await createServerSupabase();
-    if (!supabase) return PRODOTTI_ESEMPIO;
+    if (!supabase) return PRODOTTI_ESEMPIO; // nessuna env: dati di esempio
 
     const { data, error } = await supabase
       .from("prodotti")
@@ -72,11 +75,10 @@ async function caricaProdotti(): Promise<Prodotto[]> {
       .eq("attivo", true)
       .order("nome", { ascending: true });
 
-    if (error || !data || data.length === 0) return PRODOTTI_ESEMPIO;
-    return data as Prodotto[];
+    if (error) return []; // errore: vetrina vuota, niente prodotti finti
+    return (data as Prodotto[] | null) ?? [];
   } catch {
-    // Qualsiasi problema lato rete/DB: la vetrina resta comunque popolata.
-    return PRODOTTI_ESEMPIO;
+    return [];
   }
 }
 
@@ -99,15 +101,24 @@ export default async function Home() {
         </p>
       </section>
 
-      {/* Griglia prodotti */}
-      <section
-        aria-label="Prodotti in vetrina"
-        className="grid grid-cols-2 gap-x-5 gap-y-10 sm:grid-cols-3 lg:grid-cols-4"
-      >
-        {prodotti.map((prodotto) => (
-          <ProductCard key={prodotto.id} prodotto={prodotto} />
-        ))}
-      </section>
+      {/* Griglia prodotti (o stato vuoto se non ci sono prodotti attivi) */}
+      {prodotti.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line bg-surface px-6 py-20 text-center">
+          <p className="wordmark text-2xl text-line select-none">by Frody</p>
+          <p className="mt-4 text-sm text-muted">
+            La vetrina e in aggiornamento. Torna presto.
+          </p>
+        </div>
+      ) : (
+        <section
+          aria-label="Prodotti in vetrina"
+          className="grid grid-cols-2 gap-x-5 gap-y-10 sm:grid-cols-3 lg:grid-cols-4"
+        >
+          {prodotti.map((prodotto) => (
+            <ProductCard key={prodotto.id} prodotto={prodotto} />
+          ))}
+        </section>
+      )}
     </div>
   );
 }

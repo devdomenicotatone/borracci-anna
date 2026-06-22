@@ -42,3 +42,6 @@ next-env.d.ts
 
 # tieni il template di esempio sotto versione
 !.env.example
+
+# foto temporanee di lavorazione (non versionare)
+/cartella foto momentanea da eliminare/
