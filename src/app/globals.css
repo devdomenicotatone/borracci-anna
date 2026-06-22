@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Palette neutra contemporanea del brand "by Frody".
+   Tutto resta basato sul setup Tailwind v4 esistente: aggiungiamo solo
+   poche variabili/utility di marchio senza toccarne la configurazione. */
+
+:root {
+  --background: #fafaf9; /* sabbia chiarissima, piu caldo del bianco puro */
+  --foreground: #1c1917; /* quasi nero, caldo */
+  --muted: #78716c; /* testo secondario */
+  --line: #e7e5e4; /* bordi/divisori sottili */
+  --surface: #ffffff; /* card e superfici */
+  --accent: #1c1917; /* accento tipografico (il nero del brand) */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Wordmark del brand: spaziatura ravvicinata, vibe firma. */
+.wordmark {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
