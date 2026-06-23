@@ -78,8 +78,20 @@ h3 {
 }
 
 /* -------------------------------------------------------------------------
-   Wordmark "Borracci Anna": "Borracci" blu mare, "Anna" corallo — due tinte del brand.
-   Markup: <span class="wordmark"><span class="wm-lead">Borracci</span><span class="wm-accent">Anna</span></span>
+   Wordmark "Borracci Anna" — concept "Onda Sole".
+   Un sigillo balneare (sole giallo + raggi corallo + onda mare) accanto al
+   lockup bicolore: "Borracci" blu mare, "Anna" corallo. Il sigillo è puro
+   decoro (aria-hidden); il testo resta reale, selezionabile e leggibile
+   dagli screen reader.
+
+   Markup: componente <Wordmark/> in src/components/Wordmark.tsx:
+     <span class="wordmark">
+       <svg class="wm-mark" aria-hidden="true">…sole + raggi + onda…</svg>
+       <span class="wm-text">
+         <span class="wm-lead">Borracci</span><span class="wm-accent">Anna</span>
+       </span>
+     </span>
+   Su fondo SCURO (footer, sidebar gestore) aggiungere la classe "on-dark".
    ------------------------------------------------------------------------- */
 .wordmark {
   font-family: var(--font-display), sans-serif;
@@ -87,15 +99,81 @@ h3 {
   letter-spacing: -0.02em;
   line-height: 1;
   display: inline-flex;
+  align-items: center; /* il sigillo si allinea al centro ottico del testo */
+  flex-wrap: wrap; /* su contenitori molto stretti l'eventuale suffisso va a capo invece di sforare */
+  gap: 0.42em;
+  color: var(--foreground);
+}
+
+/* Lockup testuale: mantiene baseline e gap storici tra le due parole. */
+.wordmark .wm-text {
+  display: inline-flex;
   align-items: baseline;
   gap: 0.28em;
-  color: var(--foreground);
 }
 .wordmark .wm-lead {
   color: var(--sea);
 }
 .wordmark .wm-accent {
   color: var(--coral);
+}
+
+/* Sigillo "Onda Sole": forme piene + tratti, niente hairline o micro-lettere
+   → nitido anche a ~20px. Dimensione in em → scala con il testo. */
+.wordmark .wm-mark {
+  flex: none;
+  width: 1.06em;
+  height: 1.06em;
+  display: block;
+  overflow: visible;
+}
+.wordmark .wm-mark .wm-sun {
+  fill: var(--sun); /* disco sole */
+}
+.wordmark .wm-mark .wm-ray {
+  stroke: var(--coral); /* raggi caldi: richiamano "Anna" */
+}
+.wordmark .wm-mark .wm-wave {
+  stroke: var(--sea); /* onda mare: richiama "Borracci" */
+}
+
+/* Micro-vita: il sole "sorge" all'hover del link contenitore (.group, solo
+   header vetrina). Footer e sidebar non hanno .group → sigillo statico. */
+.wordmark .wm-mark .wm-sun,
+.wordmark .wm-mark .wm-ray {
+  transform-origin: 50% 70%;
+  transition: transform 0.45s cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+.group:hover .wordmark .wm-mark .wm-sun,
+.group:hover .wordmark .wm-mark .wm-ray {
+  transform: translateY(-0.06em);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wordmark .wm-mark .wm-sun,
+  .wordmark .wm-mark .wm-ray {
+    transition: none;
+  }
+  .group:hover .wordmark .wm-mark .wm-sun,
+  .group:hover .wordmark .wm-mark .wm-ray {
+    transform: none;
+  }
+}
+
+/* ---- Variante su fondo SCURO (footer #0a1f33 / sidebar ink-gradient) ----
+   "Borracci" passa a lagoon (sea è poco leggibile sul nero), il testo base
+   diventa bianco; raggi e onda del sigillo si schiariscono per brillare
+   sull'inchiostro. "Anna" e il disco sole restano invariati. */
+.wordmark.on-dark {
+  color: #ffffff;
+}
+.wordmark.on-dark .wm-lead {
+  color: var(--lagoon);
+}
+.wordmark.on-dark .wm-mark .wm-ray {
+  stroke: #ff7a7a;
+}
+.wordmark.on-dark .wm-mark .wm-wave {
+  stroke: var(--lagoon);
 }
 
 /* -------------------------------------------------------------------------

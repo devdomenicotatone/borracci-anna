@@ -5,17 +5,16 @@
 import Link from "next/link";
 
 import CartBadge from "@/components/cart/CartBadge";
+import Wordmark from "@/components/Wordmark";
 
 export default function Header() {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-        {/* Wordmark: "Moda" blu mare, "Mare" corallo (gestito da .wordmark). */}
+        {/* Wordmark "Onda Sole": sigillo + "Borracci" blu / "Anna" corallo.
+            Il sole "sorge" all'hover grazie a .group su questo Link. */}
         <Link href="/" aria-label="Borracci Anna — vai alla home" className="group">
-          <span className="wordmark text-2xl">
-            <span className="wm-lead">Borracci</span>
-            <span className="wm-accent">Anna</span>
-          </span>
+          <Wordmark className="text-2xl" />
         </Link>
 
         <nav

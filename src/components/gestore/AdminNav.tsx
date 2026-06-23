@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import Wordmark from "@/components/Wordmark";
 import { logoutGestore } from "@/lib/gestore/auth-actions";
 
 function IconaProdotti({ className }: { className?: string }) {
@@ -62,22 +63,6 @@ function IconaOrdini({ className }: { className?: string }) {
   );
 }
 
-const Wordmark = (
-  <span className="wordmark text-xl">
-    <span className="wm-lead">Borracci</span>
-    <span className="wm-accent">Anna</span>
-    <span className="ml-1 text-sm font-medium text-muted">· gestore</span>
-  </span>
-);
-
-const WordmarkBianco = (
-  <span className="wordmark text-xl text-white">
-    <span className="wm-lead !text-lagoon">Borracci</span>
-    <span className="wm-accent">Anna</span>
-    <span className="ml-1 text-sm font-medium text-white/70">· gestore</span>
-  </span>
-);
-
 export default function AdminNav({
   nome,
   ruolo,
@@ -98,7 +83,11 @@ export default function AdminNav({
       {/* HEADER mobile */}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-white/85 px-4 backdrop-blur md:hidden">
         <Link href="/gestore/prodotti" aria-label="Area gestore Borracci Anna">
-          {Wordmark}
+          <Wordmark
+            className="text-xl"
+            suffix="· gestore"
+            suffixClassName="ml-1 text-sm font-medium text-muted"
+          />
         </Link>
         <form action={logoutGestore}>
           <button
@@ -114,16 +103,18 @@ export default function AdminNav({
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-line bg-surface md:flex">
         {/* Topbar mare scura del gestionale */}
         <div className="bg-ink-gradient px-4 py-4">
+          {/* Sidebar stretta (w-60): il suffisso "· gestore" inline farebbe
+              debordare il wordmark col sigillo, quindi l'etichetta ruolo va
+              sotto come sotto-titolo — pattern da pannello admin. */}
           <Link
             href="/gestore/prodotti"
             aria-label="Area gestore Borracci Anna"
-            className="flex items-center gap-2"
+            className="block"
           >
-            <span
-              className="h-2.5 w-2.5 flex-none rounded-full bg-coral shadow-[0_0_0_4px_rgba(255,92,92,0.25)]"
-              aria-hidden="true"
-            />
-            {WordmarkBianco}
+            <Wordmark onDark className="text-xl" />
+            <p className="mt-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+              Area gestore
+            </p>
           </Link>
         </div>
         <nav className="mt-6 flex flex-1 flex-col gap-1 px-4">

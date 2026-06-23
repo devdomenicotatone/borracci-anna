@@ -8,6 +8,7 @@ import Link from "next/link";
 import type { Prodotto } from "@/lib/types";
 import { createServerSupabase } from "@/lib/supabase/server";
 import ProductCard from "@/components/ProductCard";
+import Wordmark from "@/components/Wordmark";
 
 // I dati arrivano dal DB in base alla richiesta: niente prerender statico.
 export const dynamic = "force-dynamic";
@@ -204,10 +205,7 @@ export default async function Home() {
         {/* Griglia prodotti (o stato vuoto se non ci sono prodotti attivi) */}
         {prodotti.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-line bg-surface px-6 py-20 text-center shadow-soft">
-            <p className="wordmark select-none text-3xl opacity-60">
-              <span className="wm-lead">Borracci</span>
-              <span className="wm-accent">Anna</span>
-            </p>
+            <Wordmark className="select-none text-3xl opacity-60" />
             <p className="mt-4 text-sm text-muted">
               La vetrina è in aggiornamento. Torna presto.
             </p>

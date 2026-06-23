@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 
+import Wordmark from "@/components/Wordmark";
 import { MAPPA, NEGOZIO } from "@/lib/negozio";
 
 export default function Footer() {
@@ -34,10 +35,7 @@ export default function Footer() {
         <div className="grid gap-8 md:grid-cols-[1.4fr_1fr_1fr]">
           {/* Brand */}
           <div>
-            <span className="wordmark text-2xl text-white [&_.wm-lead]:text-lagoon">
-              <span className="wm-lead">Borracci</span>
-              <span className="wm-accent">Anna</span>
-            </span>
+            <Wordmark onDark className="text-2xl" />
             <p className="mt-3 max-w-[34ch] text-[#9fb6c6]">
               Abbigliamento fresco e leggero, scelto uno a uno sul lungomare di
               Rimini.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import FormLogin from "@/components/gestore/FormLogin";
+import Wordmark from "@/components/Wordmark";
 
 export const metadata: Metadata = {
   title: "Accesso gestore — Borracci Anna",
@@ -25,10 +26,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-sm">
         <div className="rounded-3xl bg-white p-7 shadow-soft sm:p-8">
           <div className="mb-7 text-center">
-            <span className="wordmark text-3xl">
-              <span className="wm-lead">Borracci</span>
-              <span className="wm-accent">Anna</span>
-            </span>
+            <Wordmark className="text-3xl" />
             <p className="mt-2 text-sm font-display font-bold uppercase tracking-wide text-lagoon">
               Area gestore
             </p>
