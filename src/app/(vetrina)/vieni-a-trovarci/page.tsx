@@ -5,6 +5,7 @@
 
 import Link from "next/link";
 
+import MappaNegozio from "@/components/MappaNegozio";
 import { MAPPA, NEGOZIO } from "@/lib/negozio";
 
 export const metadata = {
@@ -186,21 +187,15 @@ export default function VieniATrovarciPage() {
             </div>
           </div>
 
-          {/* Mappa interattiva */}
+          {/* Mappa interattiva con pin brandizzato */}
           <div className="relative min-h-[340px] overflow-hidden rounded-3xl shadow-sea ring-1 ring-line lg:min-h-0">
-            <iframe
-              title="Mappa del negozio by Frody a Rivazzurra, Rimini"
-              src={MAPPA.embedOsm}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              className="absolute inset-0 h-full w-full border-0"
-            />
-            {/* Pillola indicazioni sovrapposta */}
+            <MappaNegozio />
+            {/* Pillola indicazioni sovrapposta (sopra i controlli Leaflet) */}
             <a
               href={MAPPA.indicazioni}
               target="_blank"
               rel="noreferrer"
-              className="absolute bottom-4 right-4 inline-flex items-center gap-2 rounded-full bg-sea px-4 py-2.5 font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
+              className="absolute bottom-4 right-4 z-[1100] inline-flex items-center gap-2 rounded-full bg-sea px-4 py-2.5 font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
             >
               <svg
                 viewBox="0 0 24 24"

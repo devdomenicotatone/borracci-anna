@@ -20,11 +20,11 @@ export const NEGOZIO = {
   /** Indirizzo in una riga, pronto da mostrare. */
   indirizzoCompleto: "Viale Regina Margherita 169/C, 47924 Rimini (RN)",
 
-  /** Coordinate del civico (geocodifica OpenStreetMap/Nominatim). */
-  coordinate: { lat: 44.0358236, lng: 12.6160012 },
+  /** Coordinate del civico 169/C (nodo indirizzo OpenStreetMap "169c"). */
+  coordinate: { lat: 44.0357392, lng: 12.6160953 },
 
   /** Contatto cliente. */
-  email: "ciao@byfrody.it",
+  email: "1.domenicotatone@gmail.com",
   /** Domicilio digitale (PEC) da visura. */
   pec: "borraccianna@pec.it",
 
@@ -39,13 +39,8 @@ const { lat, lng } = NEGOZIO.coordinate;
 
 /** Link utili per la mappa e le indicazioni. */
 export const MAPPA = {
-  /**
-   * Embed interattivo OpenStreetMap (pan/zoom). Niente cookie di tracciamento
-   * ne API key: si puo incorporare senza banner di consenso.
-   */
-  embedOsm: `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.005}%2C${lat - 0.0018}%2C${lng + 0.005}%2C${lat + 0.0018}&layer=mapnik&marker=${lat}%2C${lng}`,
   /** Apri la mappa OSM a tutto schermo. */
-  apriOsm: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`,
+  apriOsm: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`,
   /** Indicazioni stradali: apre l'app mappe (Google) su mobile e desktop. */
   indicazioni: `https://www.google.com/maps/dir/?api=1&destination=${lat}%2C${lng}`,
 } as const;
