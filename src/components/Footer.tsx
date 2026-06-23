@@ -1,5 +1,10 @@
 // Footer della vetrina: banda inchiostro con onda superiore, wordmark, contatti
 // e social. Server Component puro (nessuno stato, nessuna interazione client).
+// Dati impresa reali da @/lib/negozio (P.IVA/REA in footer: obbligo di legge).
+
+import Link from "next/link";
+
+import { MAPPA, NEGOZIO } from "@/lib/negozio";
 
 export default function Footer() {
   return (
@@ -91,7 +96,14 @@ export default function Footer() {
                 <path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11Z" />
                 <circle cx="12" cy="10" r="2.5" />
               </svg>
-              <span>Lungomare Tintori 9, Rimini</span>
+              <a
+                href={MAPPA.indicazioni}
+                target="_blank"
+                rel="noreferrer"
+                className="transition-colors hover:text-white"
+              >
+                {NEGOZIO.indirizzoCompleto}
+              </a>
             </p>
             <p className="flex items-start gap-2.5 text-[#b9cad8]">
               <svg
@@ -107,7 +119,27 @@ export default function Footer() {
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 7v5l3 2" />
               </svg>
-              <span>Tutti i giorni 9–24 in estate</span>
+              <span>{NEGOZIO.orari}</span>
+            </p>
+            <p>
+              <Link
+                href="/vieni-a-trovarci"
+                className="inline-flex items-center gap-1.5 font-semibold text-lagoon transition-colors hover:text-white"
+              >
+                Come arrivare
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </Link>
             </p>
           </div>
 
@@ -129,18 +161,30 @@ export default function Footer() {
                 <path d="m3 7 9 6 9-6" />
               </svg>
               <a
-                href="mailto:ciao@byfrody.it"
+                href={`mailto:${NEGOZIO.email}`}
                 className="transition-colors hover:text-white"
               >
-                ciao@byfrody.it
+                {NEGOZIO.email}
               </a>
             </p>
           </div>
         </div>
 
-        <p className="mt-8 border-t border-white/10 pt-5 text-sm text-[#90a6b8]">
-          © 2026 by Frody
-        </p>
+        <div className="mt-8 border-t border-white/10 pt-5 text-sm text-[#90a6b8]">
+          <p>
+            {NEGOZIO.ragioneSociale} — {NEGOZIO.indirizzoCompleto}
+          </p>
+          <p className="mt-1">
+            P.IVA {NEGOZIO.partitaIva} · REA {NEGOZIO.rea} · PEC{" "}
+            <a
+              href={`mailto:${NEGOZIO.pec}`}
+              className="transition-colors hover:text-white"
+            >
+              {NEGOZIO.pec}
+            </a>
+          </p>
+          <p className="mt-2">© 2026 by Frody</p>
+        </div>
       </div>
     </footer>
   );

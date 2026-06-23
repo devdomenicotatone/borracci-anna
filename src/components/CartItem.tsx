@@ -1,14 +1,16 @@
 "use client";
 
-// Riga del carrello (client component).
-// Permette di modificare la quantita (aggiornaQuantita) e rimuovere la riga
-// (rimuoviDalCarrello). Le mutazioni sono Server Actions: durante l'attesa la
-// riga viene messa in stato "in aggiornamento" tramite useTransition.
+// Riga del carrello (client component), usata sia nella pagina /carrello sia
+// nel mini-cart drawer (prop `compatto`). Le mutazioni passano dal CartProvider
+// (aggiorna/rimuovi) cosi badge, totali e drawer restano sincronizzati con
+// feedback ottimistico. Lo useTransition locale gestisce il pending della riga
+// (e fornisce la transition richiesta dal dispatch ottimistico del provider).
 
 import Image from "next/image";
 import { useTransition } from "react";
 
-import { aggiornaQuantita, rimuoviDalCarrello } from "@/lib/cart";
+import { useCarrello } from "@/components/cart/CartProvider";
+import { useToast } from "@/components/Toaster";
 import { formatPrezzo } from "@/lib/format";
 import type { RigaCarrello } from "@/lib/types";
 
@@ -24,38 +26,50 @@ function etichettaVariante(riga: RigaCarrello): string | null {
   return parti.length > 0 ? parti.join(" · ") : null;
 }
 
-export default function CartItem({ riga }: { riga: RigaCarrello }) {
+export default function CartItem({
+  riga,
+  compatto = false,
+}: {
+  riga: RigaCarrello;
+  compatto?: boolean;
+}) {
+  const { aggiorna, rimuovi } = useCarrello();
   const [inAttesa, startTransition] = useTransition();
 
   const variante = etichettaVariante(riga);
   const subtotale = riga.prodotto.prezzo_cents * riga.quantita;
   // Non superare lo stock disponibile della variante.
   const maxQuantita = Math.max(riga.variante.stock, riga.quantita);
+  const stockBasso = riga.variante.stock > 0 && riga.variante.stock <= 3;
+  const lato = compatto ? "h-20 w-20" : "h-24 w-24";
 
   function impostaQuantita(nuova: number) {
-    if (nuova === riga.quantita) {
+    if (nuova === riga.quantita || nuova < 1) {
       return;
     }
+    // La chiamata al provider (dispatch ottimistico) sta dentro la transition.
     startTransition(async () => {
-      await aggiornaQuantita(riga.id, nuova);
+      await aggiorna(riga.id, nuova);
     });
   }
 
-  function rimuovi() {
+  function rimuoviRiga() {
     startTransition(async () => {
-      await rimuoviDalCarrello(riga.id);
+      await rimuovi(riga.id);
     });
   }
 
   return (
     <li
-      className={`flex gap-4 py-5 transition-opacity ${
-        inAttesa ? "opacity-50" : "opacity-100"
+      className={`flex gap-4 transition-opacity ${compatto ? "py-4" : "py-5"} ${
+        inAttesa ? "opacity-60" : "opacity-100"
       }`}
       aria-busy={inAttesa}
     >
       {/* Immagine prodotto */}
-      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl">
+      <div
+        className={`relative ${lato} shrink-0 overflow-hidden rounded-2xl`}
+      >
         {riga.prodotto.immagine_url ? (
           <Image
             src={riga.prodotto.immagine_url}
@@ -79,7 +93,7 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
       </div>
 
       {/* Dettagli */}
-      <div className="flex flex-1 flex-col justify-between gap-2">
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
         <div className="flex justify-between gap-4">
           <div className="min-w-0">
             <h3 className="truncate font-display font-bold text-foreground">
@@ -92,6 +106,11 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
               {formatPrezzo(riga.prodotto.prezzo_cents, riga.prodotto.valuta)}{" "}
               cad.
             </p>
+            {stockBasso && (
+              <p className="mt-1 text-xs font-semibold text-coral">
+                Solo {riga.variante.stock} rimasti
+              </p>
+            )}
           </div>
           <p className="shrink-0 font-display font-bold text-sea">
             {formatPrezzo(subtotale, riga.prodotto.valuta)}
@@ -104,9 +123,9 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
             <button
               type="button"
               onClick={() => impostaQuantita(riga.quantita - 1)}
-              disabled={inAttesa}
+              disabled={inAttesa || riga.quantita <= 1}
               aria-label="Diminuisci quantita"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
             >
               −
             </button>
@@ -121,7 +140,7 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
               onClick={() => impostaQuantita(riga.quantita + 1)}
               disabled={inAttesa || riga.quantita >= maxQuantita}
               aria-label="Aumenta quantita"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
             >
               +
             </button>
@@ -130,7 +149,7 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
           {/* Rimuovi */}
           <button
             type="button"
-            onClick={rimuovi}
+            onClick={rimuoviRiga}
             disabled={inAttesa}
             className="text-sm font-medium text-muted underline-offset-2 transition-colors hover:text-coral hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -143,26 +162,61 @@ export default function CartItem({ riga }: { riga: RigaCarrello }) {
 }
 
 /**
- * Bottone "Vai al pagamento": fa POST a /api/checkout e redirige all'URL
- * della sessione Stripe restituita. Co-locato qui per restare un client
- * component senza aggiungere altri file.
+ * Bottone "Vai al pagamento": fa POST a /api/checkout e redirige all'URL della
+ * sessione Stripe. Gli errori NON sono piu silenziosi: vengono mostrati con il
+ * Toaster (role="alert"), e un AbortController evita lo stato "Reindirizzamento"
+ * infinito su rete lenta.
  */
-export function CheckoutButton({ disabilitato = false }: { disabilitato?: boolean }) {
+export function CheckoutButton({
+  disabilitato = false,
+}: {
+  disabilitato?: boolean;
+}) {
+  const { mostra } = useToast();
   const [inAttesa, startTransition] = useTransition();
 
   function vaiAlPagamento() {
     startTransition(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
       try {
-        const res = await fetch("/api/checkout", { method: "POST" });
+        const res = await fetch("/api/checkout", {
+          method: "POST",
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
         if (!res.ok) {
+          let messaggio = "Non e stato possibile avviare il pagamento. Riprova.";
+          if (res.status === 400) {
+            messaggio = "Il carrello e vuoto.";
+          } else if (res.status === 501) {
+            messaggio = "Pagamenti non disponibili al momento. Scrivici per ordinare.";
+          } else {
+            try {
+              const dati: { errore?: string } = await res.json();
+              if (dati?.errore) messaggio = dati.errore;
+            } catch {
+              // body non-JSON: resta il messaggio generico.
+            }
+          }
+          mostra(messaggio, "errore");
           return;
         }
+
         const dati: { url?: string } = await res.json();
         if (dati.url) {
           window.location.href = dati.url;
+        } else {
+          mostra("Risposta di pagamento non valida. Riprova.", "errore");
         }
-      } catch {
-        // Silenzioso: in caso di errore l'utente resta sul carrello.
+      } catch (err) {
+        clearTimeout(timeout);
+        const messaggio =
+          err instanceof DOMException && err.name === "AbortError"
+            ? "Il pagamento sta impiegando troppo tempo. Riprova."
+            : "Si e verificato un problema. Riprova.";
+        mostra(messaggio, "errore");
       }
     });
   }

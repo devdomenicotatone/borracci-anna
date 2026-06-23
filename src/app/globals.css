@@ -143,6 +143,51 @@ h3 {
   background: linear-gradient(150deg, #ffb36b, #ff6a6a 65%, #c84bc8);
 }
 
+/* -------------------------------------------------------------------------
+   Micro-animazioni del carrello.
+   ------------------------------------------------------------------------- */
+/* "Pop" del badge contatore a ogni incremento (rimontato via key={count}). */
+@keyframes pop-badge {
+  0% {
+    transform: scale(0.6);
+  }
+  45% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop-badge 0.28s ease-out;
+}
+
+/* Ingresso del mini-cart drawer da destra. */
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-drawer-in {
+  animation: drawer-in 0.3s ease-out;
+}
+
+/* Dissolvenza dell'overlay del drawer. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out;
+}
+
 /* Rispetta chi preferisce meno movimento. */
 @media (prefers-reduced-motion: reduce) {
   *,

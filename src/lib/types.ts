@@ -39,6 +39,26 @@ export interface RigaCarrello {
   variante: Variante;
 }
 
+/**
+ * Esito di una mutazione del carrello (Server Action).
+ * Le action ritornano sempre lo stato corrente del carrello (righe + totali),
+ * cosi il client aggiorna badge/drawer/totali senza un secondo round-trip.
+ * `ok=false` con `motivo` permette al client di reagire (toast) senza perdere
+ * lo stato gia mostrato. `avviso` segnala un esito riuscito ma corretto
+ * (es. quantita limitata allo stock).
+ */
+export interface EsitoCarrello {
+  ok: boolean;
+  righe: RigaCarrello[];
+  /** Somma delle quantita (per il badge). */
+  count: number;
+  /** Subtotale in centesimi (prezzo * quantita sommati). */
+  subtotaleCents: number;
+  valuta: string;
+  avviso?: string;
+  motivo?: "non_configurato" | "esaurito" | "stock_insufficiente" | "errore";
+}
+
 /** Stato di avanzamento di un ordine. */
 export type StatoOrdine = "in_attesa" | "pagato" | "annullato";
 

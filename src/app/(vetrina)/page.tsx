@@ -3,6 +3,8 @@
 // ci sono prodotti, degrada con grazia mostrando alcuni prodotti di esempio
 // hardcoded cosi la pagina rende SEMPRE (anche in build senza env).
 
+import Link from "next/link";
+
 import type { Prodotto } from "@/lib/types";
 import { createServerSupabase } from "@/lib/supabase/server";
 import ProductCard from "@/components/ProductCard";
@@ -140,12 +142,12 @@ export default async function Home() {
             >
               Scopri la collezione
             </a>
-            <a
-              href="#contatti"
+            <Link
+              href="/vieni-a-trovarci"
               className="inline-flex items-center justify-center rounded-full bg-white/15 px-6 py-3.5 font-display font-bold text-white ring-2 ring-white/70 backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-white/25"
             >
               Vieni a trovarci
-            </a>
+            </Link>
           </div>
         </div>
 

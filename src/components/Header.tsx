@@ -1,7 +1,10 @@
 // Header del sito: wordmark "by Frody", navigazione minimale e link al carrello.
-// Componente server-side puro (solo link), nessuno stato.
+// Server component: il badge contatore (CartBadge) e un figlio client che legge
+// il CartProvider e si aggiorna in tempo reale a ogni add/rimuovi.
 
 import Link from "next/link";
+
+import CartBadge from "@/components/cart/CartBadge";
 
 export default function Header() {
   return (
@@ -25,6 +28,12 @@ export default function Header() {
           >
             Vetrina
           </Link>
+          <Link
+            href="/vieni-a-trovarci"
+            className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea sm:inline-flex"
+          >
+            Vieni a trovarci
+          </Link>
 
           {/* Carrello: icon-btn tondo (tap target 44px) con badge corallo. */}
           <Link
@@ -47,6 +56,7 @@ export default function Header() {
               <circle cx="18" cy="20" r="1.4" />
               <path d="M2.5 3h2l2.3 12.2a1.6 1.6 0 0 0 1.6 1.3h8.5a1.6 1.6 0 0 0 1.6-1.3L21 7H6" />
             </svg>
+            <CartBadge />
           </Link>
         </nav>
       </div>

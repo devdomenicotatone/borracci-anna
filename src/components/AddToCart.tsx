@@ -1,16 +1,18 @@
 "use client";
 
 // AddToCart - by Frody.
-// Selettore di variante (taglia) + bottone "Aggiungi al carrello".
-// Chiama la Server Action aggiungiAlCarrello(varianteId, quantita) da @/lib/cart,
-// gestendo stato di caricamento e feedback all'utente.
+// Selettore di variante (taglia) + quantita + bottone "Aggiungi al carrello".
+// Delega al CartProvider (aggiungi): bump ottimistico del badge, apertura del
+// mini-cart drawer e toast di esito sono gestiti li, in modo centralizzato.
 
 import { useState, useTransition } from "react";
 
-import { aggiungiAlCarrello } from "@/lib/cart";
-import type { Variante } from "@/lib/types";
+import { useCarrello } from "@/components/cart/CartProvider";
+import type { Prodotto, Variante } from "@/lib/types";
 
 interface AddToCartProps {
+  /** Prodotto a cui appartengono le varianti (per la riga ottimistica). */
+  prodotto: Prodotto;
   /** Tutte le varianti del prodotto (incluse quelle esaurite, mostrate ma non selezionabili). */
   varianti: Variante[];
 }
@@ -23,9 +25,8 @@ function etichettaVariante(v: Variante): string {
   return v.sku;
 }
 
-type Esito = { tipo: "ok" } | { tipo: "errore"; messaggio: string } | null;
-
-export default function AddToCart({ varianti }: AddToCartProps) {
+export default function AddToCart({ prodotto, varianti }: AddToCartProps) {
+  const { aggiungi } = useCarrello();
   const disponibili = varianti.filter((v) => v.stock > 0);
 
   // Preseleziona la prima variante disponibile.
@@ -33,32 +34,25 @@ export default function AddToCart({ varianti }: AddToCartProps) {
     disponibili[0]?.id ?? "",
   );
   const [quantita, setQuantita] = useState<number>(1);
-  const [esito, setEsito] = useState<Esito>(null);
+  const [errore, setErrore] = useState<string | null>(null);
   const [inCorso, startTransition] = useTransition();
 
   const varianteScelta = varianti.find((v) => v.id === varianteId) ?? null;
   const stockMax = varianteScelta?.stock ?? 0;
+  const stockBasso = stockMax > 0 && stockMax <= 3;
   const puoAggiungere = !!varianteScelta && stockMax > 0 && quantita >= 1;
 
   function handleAggiungi() {
     if (!varianteScelta) {
-      setEsito({ tipo: "errore", messaggio: "Seleziona una taglia." });
+      setErrore("Seleziona una taglia.");
       return;
     }
-    setEsito(null);
+    setErrore(null);
 
     const qta = Math.min(Math.max(1, quantita), stockMax);
 
     startTransition(async () => {
-      try {
-        await aggiungiAlCarrello(varianteScelta.id, qta);
-        setEsito({ tipo: "ok" });
-      } catch {
-        setEsito({
-          tipo: "errore",
-          messaggio: "Impossibile aggiungere al carrello. Riprova.",
-        });
-      }
+      await aggiungi({ prodotto, variante: varianteScelta, quantita: qta });
     });
   }
 
@@ -82,7 +76,7 @@ export default function AddToCart({ varianti }: AddToCartProps) {
                 onClick={() => {
                   setVarianteId(v.id);
                   setQuantita(1);
-                  setEsito(null);
+                  setErrore(null);
                 }}
                 className={[
                   "h-[50px] min-w-[50px] rounded-xl px-3 font-display font-bold transition-all",
@@ -146,7 +140,11 @@ export default function AddToCart({ varianti }: AddToCartProps) {
           </button>
         </div>
         {varianteScelta && (
-          <p className="mt-2 text-xs text-muted">{stockMax} disponibili</p>
+          <p
+            className={`mt-2 text-xs ${stockBasso ? "font-semibold text-coral" : "text-muted"}`}
+          >
+            {stockBasso ? `Solo ${stockMax} rimasti` : `${stockMax} disponibili`}
+          </p>
         )}
       </div>
 
@@ -174,21 +172,10 @@ export default function AddToCart({ varianti }: AddToCartProps) {
         {inCorso ? "Aggiunta in corso..." : "Aggiungi al carrello"}
       </button>
 
-      {/* Feedback */}
-      {esito?.tipo === "ok" && (
-        <p role="status" className="text-sm font-semibold text-sea">
-          Aggiunto al carrello.{" "}
-          <a
-            href="/carrello"
-            className="text-lagoon underline underline-offset-2"
-          >
-            Vai al carrello
-          </a>
-        </p>
-      )}
-      {esito?.tipo === "errore" && (
+      {/* Errore di validazione (es. taglia non scelta) */}
+      {errore && (
         <p role="alert" className="text-sm font-semibold text-coral">
-          {esito.messaggio}
+          {errore}
         </p>
       )}
     </div>

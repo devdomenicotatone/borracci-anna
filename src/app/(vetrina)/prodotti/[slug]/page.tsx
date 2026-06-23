@@ -214,7 +214,7 @@ export default async function PaginaProdotto({ params }: PdpProps) {
                 Prodotto esaurito.
               </p>
             ) : (
-              <AddToCart varianti={prodotto.varianti} />
+              <AddToCart prodotto={prodotto} varianti={prodotto.varianti} />
             )}
           </div>
 
