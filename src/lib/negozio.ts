@@ -4,9 +4,9 @@
 // e obbligatoria.
 
 export const NEGOZIO = {
-  /** Insegna commerciale. */
-  insegna: "Borracci Anna",
-  /** Ragione sociale / titolare (impresa individuale). */
+  /** Insegna commerciale (marchio del negozio, da visura). */
+  insegna: "Anna Shop",
+  /** Ragione sociale / titolare (impresa individuale), per footer e legale. */
   ragioneSociale: "Borracci Anna",
   formaGiuridica: "Impresa individuale",
 

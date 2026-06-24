@@ -1,4 +1,4 @@
-// Wordmark "Borracci Anna" — concept "Onda Sole".
+// Wordmark "Anna Shop" — concept "Onda Sole".
 // Sigillo balneare (sole + raggi + onda) accanto al lockup bicolore.
 // Componente unico e puramente presentazionale (server-compatible), riusato in
 // header/footer/area gestore/login/empty-state. Lo stile vive in globals.css
@@ -62,8 +62,8 @@ export default function Wordmark({
     <span className={classi}>
       <SigilloOndaSole />
       <span className="wm-text">
-        <span className="wm-lead">Borracci</span>
         <span className="wm-accent">Anna</span>
+        <span className="wm-lead">Shop</span>
       </span>
       {suffix != null ? (
         <span className={suffixClassName}>{suffix}</span>

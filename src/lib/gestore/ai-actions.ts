@@ -102,7 +102,7 @@ const SCHEMA_SCHEDA = {
   additionalProperties: false,
 };
 
-const SYSTEM = `Sei l'assistente di catalogo di "Borracci Anna", una boutique dal gusto mediterraneo, fresco e curato. Importante: i capi sono pensati per la vita di tutti i giorni; il mare e l'origine dello stile, non l'unico contesto d'uso.
+const SYSTEM = `Sei l'assistente di catalogo di "Anna Shop", una boutique dal gusto mediterraneo, fresco e curato. Importante: i capi sono pensati per la vita di tutti i giorni; il mare e l'origine dello stile, non l'unico contesto d'uso.
 Ricevi foto di un capo (eventualmente in piu colori) e, separatamente, foto della sua etichetta.
 Compila una scheda prodotto in ITALIANO chiamando lo strumento compila_scheda.
 Regole:

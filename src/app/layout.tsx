@@ -17,9 +17,9 @@ const poppins = Poppins({
   display: "swap",
 });
 
-const TITOLO = "Borracci Anna — moda fresca sul lungomare di Rimini";
+const TITOLO = "Anna Shop — abbigliamento mare a Rimini";
 const DESCRIZIONE =
-  "Borracci Anna: abbigliamento fresco e leggero, scelto uno a uno. Vieni a trovarci sul lungomare di Rimini o ricevi i capi comodamente a casa.";
+  "Anna Shop: abbigliamento fresco e leggero, scelto uno a uno. Vieni a trovarci sul lungomare di Rimini o ricevi i capi comodamente a casa.";
 
 export const metadata: Metadata = {
   // metadataBase risolve gli URL relativi di OpenGraph/canonical. In assenza di
@@ -27,15 +27,15 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   ),
-  // Le pagine figlie con titolo proprio diventano "Titolo · Borracci Anna".
-  title: { default: TITOLO, template: "%s · Borracci Anna" },
+  // Le pagine figlie con titolo proprio diventano "Titolo · Anna Shop".
+  title: { default: TITOLO, template: "%s · Anna Shop" },
   description: DESCRIZIONE,
   openGraph: {
     title: TITOLO,
     description: DESCRIZIONE,
     type: "website",
     locale: "it_IT",
-    siteName: "Borracci Anna",
+    siteName: "Anna Shop",
   },
   twitter: {
     card: "summary_large_image",

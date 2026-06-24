@@ -7,7 +7,7 @@
 import CarrelloContenuto from "@/components/cart/CarrelloContenuto";
 
 export const metadata = {
-  title: "Carrello · Borracci Anna",
+  title: "Carrello · Anna Shop",
 };
 
 export default function CarrelloPage() {

@@ -5,7 +5,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Pagamento annullato · Borracci Anna",
+  title: "Pagamento annullato · Anna Shop",
 };
 
 export default function CheckoutAnnullatoPage() {

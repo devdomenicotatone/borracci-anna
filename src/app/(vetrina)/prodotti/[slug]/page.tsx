@@ -166,13 +166,13 @@ export async function generateMetadata({
 
   const descrizione =
     (prodotto.descrizione ?? "").replace(/\s+/g, " ").trim().slice(0, 160) ||
-    `${prodotto.nome} — Borracci Anna, moda fresca sul lungomare di Rimini.`;
+    `${prodotto.nome} — Anna Shop, moda fresca sul lungomare di Rimini.`;
 
   return {
     title: prodotto.nome, // -> "<nome> · Borracci Anna" via template del root
     description: descrizione,
     openGraph: {
-      title: `${prodotto.nome} · Borracci Anna`,
+      title: `${prodotto.nome} · Anna Shop`,
       description: descrizione,
       type: "website",
       images: prodotto.immagine_url ? [{ url: prodotto.immagine_url }] : [],
@@ -214,7 +214,7 @@ export default async function PaginaProdotto({ params }: PdpProps) {
               href="/"
               className="font-medium text-sea transition-colors hover:text-lagoon"
             >
-              Borracci Anna
+              Anna Shop
             </Link>
             <span aria-hidden="true" className="text-line">
               /

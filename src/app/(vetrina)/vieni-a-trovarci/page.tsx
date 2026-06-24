@@ -9,9 +9,9 @@ import MappaNegozio from "@/components/MappaNegozio";
 import { MAPPA, NEGOZIO } from "@/lib/negozio";
 
 export const metadata = {
-  title: "Vieni a trovarci · Borracci Anna",
+  title: "Vieni a trovarci · Anna Shop",
   description:
-    "Il negozio Borracci Anna sul lungomare di Rimini, a Rivazzurra: Viale Regina Margherita 169/C. Mappa interattiva, orari e indicazioni stradali.",
+    "Il negozio Anna Shop sul lungomare di Rimini, a Rivazzurra: Viale Regina Margherita 169/C. Mappa interattiva, orari e indicazioni stradali.",
 };
 
 export default function VieniATrovarciPage() {

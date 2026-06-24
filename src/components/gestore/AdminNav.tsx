@@ -102,7 +102,7 @@ export default function AdminNav({
     <>
       {/* HEADER mobile */}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-white/85 px-4 backdrop-blur md:hidden">
-        <Link href="/gestore/prodotti" aria-label="Area gestore Borracci Anna">
+        <Link href="/gestore/prodotti" aria-label="Area gestore Anna Shop">
           <Wordmark
             className="text-xl"
             suffix="· gestore"
@@ -128,7 +128,7 @@ export default function AdminNav({
               sotto come sotto-titolo — pattern da pannello admin. */}
           <Link
             href="/gestore/prodotti"
-            aria-label="Area gestore Borracci Anna"
+            aria-label="Area gestore Anna Shop"
             className="block"
           >
             <Wordmark onDark className="text-xl" />

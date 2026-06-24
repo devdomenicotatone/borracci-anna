@@ -91,8 +91,8 @@ export async function confermaOrdineAction(id: string): Promise<EsitoOrdine> {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
       await inviaEmail({
         to: ordine.email,
-        subject: "La tua richiesta è disponibile — completa l'ordine · Borracci Anna",
-        text: `Ciao ${ordine.nome ?? ""},\n\nbuone notizie: gli articoli della tua richiesta sono disponibili! Completa il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nBorracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        subject: "La tua richiesta è disponibile — completa l'ordine · Anna Shop",
+        text: `Ciao ${ordine.nome ?? ""},\n\nbuone notizie: gli articoli della tua richiesta sono disponibili! Completa il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
     }
     return { ok: true };

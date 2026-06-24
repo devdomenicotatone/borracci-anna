@@ -141,13 +141,13 @@ export async function inviaRichiestaAction(
         to: NEGOZIO.email,
         replyTo: email,
         subject: `Nuova richiesta da ${nome}`,
-        text: `Nuova richiesta d'ordine su Borracci Anna.\n\nCliente: ${nome}\nEmail: ${email}${telefono ? `\nTelefono: ${telefono}` : ""}\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}${note ? `\n\nNote: ${note}` : ""}\n\nGestisci la richiesta: ${siteUrl}/gestore/ordini`,
+        text: `Nuova richiesta d'ordine su Anna Shop.\n\nCliente: ${nome}\nEmail: ${email}${telefono ? `\nTelefono: ${telefono}` : ""}\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}${note ? `\n\nNote: ${note}` : ""}\n\nGestisci la richiesta: ${siteUrl}/gestore/ordini`,
       }),
       // 2) Conferma di ricezione al cliente, col link alla pagina ordine.
       inviaEmail({
         to: email,
-        subject: "Abbiamo ricevuto la tua richiesta — Borracci Anna",
-        text: `Ciao ${nome},\n\ngrazie! Abbiamo ricevuto la tua richiesta. Verifichiamo la disponibilità di tutti gli articoli e ti ricontattiamo a breve: appena confermiamo potrai pagare in sicurezza da questa pagina.\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}\n\nSegui la tua richiesta qui:\n${siteUrl}/ordine/${token}\n\nA presto,\nBorracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        subject: "Abbiamo ricevuto la tua richiesta — Anna Shop",
+        text: `Ciao ${nome},\n\ngrazie! Abbiamo ricevuto la tua richiesta. Verifichiamo la disponibilità di tutti gli articoli e ti ricontattiamo a breve: appena confermiamo potrai pagare in sicurezza da questa pagina.\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}\n\nSegui la tua richiesta qui:\n${siteUrl}/ordine/${token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       }),
     ]);
 

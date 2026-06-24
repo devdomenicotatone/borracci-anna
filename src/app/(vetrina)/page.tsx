@@ -130,7 +130,7 @@ export default async function Home() {
             id="hero-title"
             className="mt-4 max-w-[14ch] font-display text-[clamp(2.3rem,9vw,4.4rem)] font-extrabold leading-[1.05] [text-shadow:0_6px_24px_rgba(0,57,99,.35)]"
           >
-            L&apos;estate si veste da Borracci Anna.
+            L&apos;estate si veste da Anna Shop.
           </h1>
           <p className="mt-3.5 max-w-[46ch] text-base text-white/95 sm:text-lg">
             Capi freschi e leggeri, scelti uno a uno. Vieni a trovarci sul

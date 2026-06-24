@@ -45,7 +45,7 @@ export async function inviaEmail(input: EmailInput): Promise<boolean> {
   });
   try {
     await transporter.sendMail({
-      from: `Borracci Anna <${user}>`,
+      from: `Anna Shop <${user}>`,
       to: input.to,
       replyTo: input.replyTo,
       subject: input.subject,

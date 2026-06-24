@@ -1,4 +1,4 @@
-// Header del sito: wordmark "Borracci Anna", navigazione minimale e link al carrello.
+// Header del sito: wordmark "Anna Shop", navigazione minimale e link al carrello.
 // Server component: il badge contatore (CartBadge) e un figlio client che legge
 // il CartProvider e si aggiorna in tempo reale a ogni add/rimuovi.
 
@@ -11,9 +11,9 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-        {/* Wordmark "Onda Sole": sigillo + "Borracci" blu / "Anna" corallo.
+        {/* Wordmark "Onda Sole": sigillo + "Anna" corallo / "Shop" blu.
             Il sole "sorge" all'hover grazie a .group su questo Link. */}
-        <Link href="/" aria-label="Borracci Anna — vai alla home" className="group">
+        <Link href="/" aria-label="Anna Shop — vai alla home" className="group">
           <Wordmark className="text-2xl" />
         </Link>
 

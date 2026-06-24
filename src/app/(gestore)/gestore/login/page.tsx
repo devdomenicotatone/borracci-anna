@@ -4,7 +4,7 @@ import FormLogin from "@/components/gestore/FormLogin";
 import Wordmark from "@/components/Wordmark";
 
 export const metadata: Metadata = {
-  title: "Accesso gestore — Borracci Anna",
+  title: "Accesso gestore — Anna Shop",
 };
 
 // Pagina di login del gestore. Sta FUORI dalla shell autenticata (il sotto-group

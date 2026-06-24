@@ -1,7 +1,7 @@
 "use client";
 
 // Mappa interattiva del negozio (Leaflet + tile OpenStreetMap).
-// Rispetto all'embed iframe: pin BRANDIZZATO "Borracci Anna" (corallo, icona shopping)
+// Rispetto all'embed iframe: pin BRANDIZZATO con l'insegna (corallo, icona shopping)
 // posizionato esattamente sul civico 169/C, con etichetta. Niente API key, niente
 // cookie di tracciamento. Leaflet usa `window`, quindi e import dinamico in effetto
 // (client-only) e il marker e un divIcon HTML (nessun asset immagine da bundlare).
