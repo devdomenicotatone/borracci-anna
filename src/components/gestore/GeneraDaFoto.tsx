@@ -93,12 +93,12 @@ export default function GeneraDaFoto({
   const categorieRaggruppate = useMemo(() => {
     const radici = categorie
       .filter((c) => !c.parent_id)
-      .sort((a, b) => a.ordine - b.ordine);
+      .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id));
     return radici.map((radice) => ({
       radice,
       figli: categorie
         .filter((c) => c.parent_id === radice.id)
-        .sort((a, b) => a.ordine - b.ordine),
+        .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id)),
     }));
   }, [categorie]);
 

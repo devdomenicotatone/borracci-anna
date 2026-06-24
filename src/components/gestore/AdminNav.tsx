@@ -63,6 +63,25 @@ function IconaOrdini({ className }: { className?: string }) {
   );
 }
 
+function IconaCategorie({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 2 2 7l10 5 10-5-10-5z" />
+      <path d="m2 17 10 5 10-5" />
+      <path d="m2 12 10 5 10-5" />
+    </svg>
+  );
+}
+
 export default function AdminNav({
   nome,
   ruolo,
@@ -73,6 +92,7 @@ export default function AdminNav({
   const pathname = usePathname();
   const suNuovo = pathname.startsWith("/gestore/prodotti/nuovo");
   const suProdotti = pathname.startsWith("/gestore/prodotti") && !suNuovo;
+  const suCategorie = pathname.startsWith("/gestore/categorie");
   const suOrdini = pathname.startsWith("/gestore/ordini");
   // Sulle pagine di form (nuovo / modifica) la save-bar prende il fondo:
   // nascondiamo la bottom-nav mobile per non sovrapporle.
@@ -122,6 +142,10 @@ export default function AdminNav({
             <IconaProdotti className="h-5 w-5" />
             Prodotti
           </Link>
+          <Link href="/gestore/categorie" className={voceSidebar(suCategorie)}>
+            <IconaCategorie className="h-5 w-5" />
+            Categorie
+          </Link>
           <Link href="/gestore/ordini" className={voceSidebar(suOrdini)}>
             <IconaOrdini className="h-5 w-5" />
             Ordini
@@ -159,10 +183,14 @@ export default function AdminNav({
 
       {/* BOTTOM-NAV mobile (nascosta sulle pagine di form) */}
       {!suFormProdotto && (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <Link href="/gestore/prodotti" className={voceBottom(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             <span>Prodotti</span>
+          </Link>
+          <Link href="/gestore/categorie" className={voceBottom(suCategorie)}>
+            <IconaCategorie className="h-5 w-5" />
+            <span>Categorie</span>
           </Link>
           <Link href="/gestore/ordini" className={voceBottom(suOrdini)}>
             <IconaOrdini className="h-5 w-5" />

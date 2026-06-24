@@ -16,6 +16,9 @@ export async function caricaCategorie(
   const { data } = await supabase
     .from("categorie")
     .select("id, slug, nome, parent_id, ordine")
-    .order("ordine", { ascending: true });
+    .order("ordine", { ascending: true })
+    // Tie-break per id: ordine stabile anche con `ordine` duplicati (coerente
+    // col pannello gestore e con gli altri consumatori).
+    .order("id", { ascending: true });
   return (data as Categoria[] | null) ?? [];
 }
