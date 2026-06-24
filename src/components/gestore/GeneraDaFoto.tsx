@@ -449,6 +449,11 @@ function ZonaUpload({
   inputRef: React.RefObject<HTMLInputElement | null>;
   preparando: boolean;
 }) {
+  // Input dedicato alla fotocamera: `capture` la forza (un solo scatto per
+  // volta, `multiple` viene ignorato). Tenuto separato dall'input galleria,
+  // perche su molti device un singolo input `image/*` apre dritto alla galleria
+  // senza offrire la fotocamera.
+  const cameraRef = useRef<HTMLInputElement>(null);
   return (
     <section>
       <h2 className="font-display text-base font-extrabold text-foreground">
@@ -460,6 +465,14 @@ function ZonaUpload({
         type="file"
         accept="image/*"
         multiple
+        onChange={onAggiungi}
+        className="hidden"
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
         onChange={onAggiungi}
         className="hidden"
       />
@@ -485,13 +498,28 @@ function ZonaUpload({
         ))}
         <button
           type="button"
-          onClick={() => inputRef.current?.click()}
+          onClick={() => cameraRef.current?.click()}
           disabled={preparando}
-          className="grid h-20 w-20 place-items-center rounded-xl bg-surface text-sea ring-1 ring-dashed ring-line transition-colors hover:bg-surface-2 disabled:opacity-50"
+          className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl bg-surface text-sea ring-1 ring-dashed ring-line transition-colors hover:bg-surface-2 disabled:opacity-50"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
+            <circle cx="12" cy="13" r="3.2" />
           </svg>
+          <span className="text-[10px] font-bold leading-none">Scatta</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={preparando}
+          className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl bg-surface text-sea ring-1 ring-dashed ring-line transition-colors hover:bg-surface-2 disabled:opacity-50"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2.5" />
+            <circle cx="8.5" cy="8.5" r="1.6" />
+            <path d="m21 15-5-5L5 21" />
+          </svg>
+          <span className="text-[10px] font-bold leading-none">Galleria</span>
         </button>
       </div>
     </section>
