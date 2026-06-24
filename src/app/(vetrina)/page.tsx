@@ -9,6 +9,7 @@ import type { Prodotto } from "@/lib/types";
 import { createServerSupabase } from "@/lib/supabase/server";
 import ProductCard from "@/components/ProductCard";
 import Wordmark from "@/components/Wordmark";
+import { NEGOZIO } from "@/lib/negozio";
 
 // I dati arrivano dal DB in base alla richiesta: niente prerender statico.
 export const dynamic = "force-dynamic";
@@ -88,8 +89,42 @@ async function caricaProdotti(): Promise<Prodotto[]> {
 export default async function Home() {
   const prodotti = await caricaProdotti();
 
+  // Dati strutturati (schema.org): aiuta Google a capire che è un negozio di
+  // abbigliamento a Rimini, con indirizzo, contatti e orari.
+  const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const datiStrutturati = {
+    "@context": "https://schema.org",
+    "@type": "ClothingStore",
+    name: "Anna Shop",
+    legalName: NEGOZIO.ragioneSociale,
+    ...(SITE ? { "@id": SITE, url: SITE } : {}),
+    telephone: NEGOZIO.telefono,
+    email: NEGOZIO.email,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: NEGOZIO.indirizzo.via,
+      addressLocality: NEGOZIO.indirizzo.citta,
+      postalCode: NEGOZIO.indirizzo.cap,
+      addressRegion: NEGOZIO.indirizzo.provincia,
+      addressCountry: "IT",
+    },
+    geo: {
+      "@type": "GeoCoordinates",
+      latitude: NEGOZIO.coordinate.lat,
+      longitude: NEGOZIO.coordinate.lng,
+    },
+    openingHours: "Mo-Su 09:00-24:00",
+    vatID: NEGOZIO.partitaIva,
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(datiStrutturati).replace(/</g, "\\u003c"),
+        }}
+      />
       {/* ===== HERO "Pop mare": banda full-bleed mare con onda in fondo ===== */}
       <section
         aria-labelledby="hero-title"

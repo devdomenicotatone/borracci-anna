@@ -169,13 +169,13 @@ export async function generateMetadata({
     `${prodotto.nome} — Anna Shop, moda fresca sul lungomare di Rimini.`;
 
   return {
-    title: prodotto.nome, // -> "<nome> · Borracci Anna" via template del root
+    title: prodotto.nome, // -> "<nome> · Anna Shop" via template del root
     description: descrizione,
     openGraph: {
       title: `${prodotto.nome} · Anna Shop`,
       description: descrizione,
       type: "website",
-      images: prodotto.immagine_url ? [{ url: prodotto.immagine_url }] : [],
+      // L'immagine OG la genera opengraph-image.tsx (card foto + nome + prezzo).
     },
   };
 }
@@ -190,8 +190,33 @@ export default async function PaginaProdotto({ params }: PdpProps) {
 
   const { foto, percorso, ...prodottoBase } = prodotto;
 
+  // Dati strutturati (schema.org Product): su Google il prodotto puo mostrare
+  // prezzo e disponibilita nei risultati.
+  const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const datiStrutturati = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: prodotto.nome,
+    description: prodotto.descrizione ?? undefined,
+    image: prodotto.immagine_url ? [prodotto.immagine_url] : undefined,
+    brand: { "@type": "Brand", name: "Anna Shop" },
+    offers: {
+      "@type": "Offer",
+      price: (prodotto.prezzo_cents / 100).toFixed(2),
+      priceCurrency: prodotto.valuta ?? "EUR",
+      availability: "https://schema.org/InStock",
+      ...(SITE ? { url: `${SITE}/prodotti/${prodotto.slug}` } : {}),
+    },
+  };
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(datiStrutturati).replace(/</g, "\\u003c"),
+        }}
+      />
       <nav
         className="mb-8 flex flex-wrap items-center gap-2 text-sm text-muted"
         aria-label="Percorso di navigazione"
