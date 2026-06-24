@@ -4,9 +4,9 @@
 // 1) generaSchedaDaFotoAction: manda le foto (prodotto + etichetta) a Claude e
 //    riceve una bozza strutturata (nome, descrizione, composizione, lavaggio,
 //    prezzo, colori con gli indici delle foto). NON salva nulla.
-// 2) creaSchedaDaFotoAction: dalla bozza (eventualmente corretta dal gestore) +
-//    le foto prodotto, crea un PRODOTTO BOZZA (attivo=false) con varianti colore
-//    (stock 1) e galleria foto taggata per colore. Il gestore poi rivede/pubblica.
+// 2) creaSchedaDaFotoAction: dalla bozza (eventualmente corretta dal gestore)
+//    crea un PRODOTTO BOZZA (attivo=false) con varianti colore (stock 1). Le foto
+//    le carica poi il client una a una (master nitidi). Il gestore rivede/pubblica.
 
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -276,38 +276,23 @@ export interface EsitoCrea {
 }
 
 /**
- * Crea un prodotto BOZZA (attivo=false) dalla scheda: varianti colore (stock 1)
- * + galleria foto taggata per colore. Il `formData` porta `dati` (JSON) e le
- * foto prodotto in campo "prodotto", nello stesso ordine degli indici.
+ * Crea un prodotto BOZZA (attivo=false) dalla scheda: prodotto + varianti colore
+ * (stock 1). Le FOTO non passano di qui: il client le carica una a una con
+ * aggiungiFotoGalleriaAction (master nitidi, niente limite body), taggandole per
+ * `colore` — che e il riferimento foto->colore, non variante_id (vedi schema).
  */
 export async function creaSchedaDaFotoAction(
-  formData: FormData,
+  dati: DatiCreaScheda,
 ): Promise<EsitoCrea> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
   const { supabase } = sessione;
-
-  let dati: DatiCreaScheda;
-  try {
-    dati = JSON.parse(String(formData.get("dati") ?? "")) as DatiCreaScheda;
-  } catch {
-    return { ok: false, error: "Dati della scheda non validi." };
-  }
 
   const nome = (dati.nome ?? "").trim();
   if (!nome) return { ok: false, error: "Il nome e obbligatorio." };
   if (!Number.isInteger(dati.prezzo_cents) || dati.prezzo_cents <= 0) {
     return { ok: false, error: "Inserisci un prezzo valido maggiore di zero." };
   }
-  const files = formData
-    .getAll("prodotto")
-    .filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) return { ok: false, error: "Nessuna foto prodotto." };
-
-  // Blur LQIP allineati per indice ai file "prodotto" (vedi GeneraDaFoto).
-  const blurs = formData
-    .getAll("blur")
-    .map((b) => (typeof b === "string" ? b : ""));
 
   const slugBase = slugify(dati.slug || nome) || "prodotto";
 
@@ -343,9 +328,8 @@ export async function creaSchedaDaFotoAction(
       return { ok: false, error: "Slug gia in uso: rinomina il prodotto." };
     }
 
-    // 2. Varianti colore (stock 1) + mappa indice-foto -> variante.
-    const fotoToVariante = new Map<number, string>();
-    const fotoToColore = new Map<number, string>();
+    // 2. Varianti colore (stock 1). Le foto le carica poi il client, taggate per
+    //    colore: qui creiamo solo le varianti, lo SKU univoco dallo slug.
     const skuUsati = new Set<string>();
     for (const c of dati.colori ?? []) {
       const nomeColore = (c.nome ?? "").trim();
@@ -356,62 +340,21 @@ export async function creaSchedaDaFotoAction(
       while (skuUsati.has(sku)) sku = `${slug}-${cs}-${n++}`;
       skuUsati.add(sku);
 
-      const { data: v, error } = await supabase
-        .from("varianti")
-        .insert({
-          prodotto_id: prodottoId,
-          taglia: null,
-          colore: nomeColore,
-          sku,
-          stock: 1,
-        })
-        .select("id")
-        .single();
-      if (error || !v) {
+      const { error } = await supabase.from("varianti").insert({
+        prodotto_id: prodottoId,
+        taglia: null,
+        colore: nomeColore,
+        sku,
+        stock: 1,
+      });
+      if (error) {
         return {
           ok: true,
           id: prodottoId,
-          error: `Prodotto creato come bozza, ma una variante non e stata salvata (${error?.message ?? "?"}). Completala dalla scheda.`,
+          error: `Prodotto creato come bozza, ma una variante non e stata salvata (${error.message}). Completala dalla scheda.`,
         };
       }
-      for (const idx of c.foto_indici ?? []) {
-        fotoToVariante.set(idx, v.id);
-        fotoToColore.set(idx, nomeColore);
-      }
     }
-
-    // 3. Carica le foto prodotto in galleria, taggate per colore.
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      if (f.type !== "image/webp") continue;
-      const path = `${prodottoId}/${crypto.randomUUID()}.webp`;
-      const { error: up } = await supabase.storage
-        .from("prodotti")
-        .upload(path, f, { upsert: false, contentType: "image/webp" });
-      if (up) continue; // salta la singola foto fallita, non bloccare
-      const { data: pub } = supabase.storage.from("prodotti").getPublicUrl(path);
-      const url = `${pub.publicUrl}?v=${Date.now()}`;
-      await supabase.from("prodotto_foto").insert({
-        prodotto_id: prodottoId,
-        variante_id: fotoToVariante.get(i) ?? null,
-        colore: fotoToColore.get(i) ?? null,
-        url,
-        ordine: i,
-        blur_data_url: blurs[i]?.startsWith("data:image/") ? blurs[i] : null,
-      });
-    }
-
-    // 4. Copertina = prima foto della galleria.
-    const { data: foto } = await supabase
-      .from("prodotto_foto")
-      .select("url")
-      .eq("prodotto_id", prodottoId)
-      .order("ordine", { ascending: true })
-      .limit(1);
-    await supabase
-      .from("prodotti")
-      .update({ immagine_url: foto?.[0]?.url ?? null })
-      .eq("id", prodottoId);
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");

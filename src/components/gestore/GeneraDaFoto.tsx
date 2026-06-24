@@ -18,6 +18,7 @@ import {
   generaSchedaDaFotoAction,
   creaSchedaDaFotoAction,
 } from "@/lib/gestore/ai-actions";
+import { aggiungiFotoGalleriaAction } from "@/lib/gestore/actions";
 import { useToast } from "@/components/gestore/Toaster";
 import { slugify } from "@/lib/gestore/slug";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
@@ -35,18 +36,30 @@ interface ColoreBozza {
 const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
-// Soglie volutamente conservative: il modello non ha bisogno di immagini grandi,
-// e piu foto viaggiano insieme in una sola Server Action (limite body).
 const MAX_FOTO = 10;
 
-async function comprimi(file: File): Promise<File> {
-  // Queste foto diventano anche la GALLERIA del prodotto, non solo input per
-  // l'AI: quindi qualita alta (1600px, initialQuality 0.82). Il tetto a 1 MB
-  // tiene la richiesta entro il limite body della Server Action (<=10 foto).
+// MASTER nitido per le foto prodotto (diventano la GALLERIA): 2560px / q0.92,
+// come l'upload manuale. In creazione vengono caricate UNA A UNA (non in un unico
+// body), quindi non c'e piu il vincolo del limite della Server Action.
+async function preparaMaster(file: File): Promise<File> {
   return imageCompression(file, {
-    maxWidthOrHeight: 1600,
-    maxSizeMB: 1,
-    initialQuality: 0.82,
+    maxWidthOrHeight: 2560,
+    maxSizeMB: 8,
+    initialQuality: 0.92,
+    fileType: "image/webp",
+    useWebWorker: true,
+  });
+}
+
+// Copia LEGGERA per la vision di Claude: 1568px e il massimo utile (oltre, l'API
+// ridimensiona comunque), q0.8 basta a riconoscere capo e colori. Usata sia per
+// le foto prodotto (copia usa-e-getta: il master resta intatto) sia per le foto
+// etichetta (che non vengono mai salvate).
+async function perAI(file: File): Promise<File> {
+  return imageCompression(file, {
+    maxWidthOrHeight: 1568,
+    maxSizeMB: 0.8,
+    initialQuality: 0.8,
     fileType: "image/webp",
     useWebWorker: true,
   });
@@ -118,7 +131,10 @@ export default function GeneraDaFoto({
       const nuove: FotoLocale[] = [];
       for (const f of files) {
         if (!f.type.startsWith("image/")) continue;
-        const c = await comprimi(f);
+        // Foto prodotto -> master nitido (diventano la galleria). Etichette ->
+        // copia leggera: servono solo all'AI, non vengono mai salvate.
+        const c =
+          quale === "prodotto" ? await preparaMaster(f) : await perAI(f);
         nuove.push({ file: c, preview: URL.createObjectURL(c) });
       }
       if (quale === "prodotto") setFotoProdotto((p) => [...p, ...nuove]);
@@ -148,11 +164,17 @@ export default function GeneraDaFoto({
       mostra(`Massimo ${MAX_FOTO} foto per scheda: rimuovine qualcuna.`, "errore");
       return;
     }
-    const fd = new FormData();
-    fotoProdotto.forEach((f) => fd.append("prodotto", f.file, "p.webp"));
-    fotoEtichetta.forEach((f) => fd.append("etichetta", f.file, "e.webp"));
     startGenera(async () => {
       try {
+        // A Claude mandiamo COPIE leggere delle foto prodotto: i master restano
+        // intatti per la galleria. Le etichette sono gia in formato AI.
+        const fd = new FormData();
+        for (const f of fotoProdotto) {
+          fd.append("prodotto", await perAI(f.file), "p.webp");
+        }
+        for (const f of fotoEtichetta) {
+          fd.append("etichetta", f.file, "e.webp");
+        }
         const esito = await generaSchedaDaFotoAction(fd);
         if (!esito.ok || !esito.bozza) {
           mostra(esito.error ?? "Generazione non riuscita.", "errore");
@@ -197,24 +219,43 @@ export default function GeneraDaFoto({
     };
     startCrea(async () => {
       try {
-        const fd = new FormData();
-        fd.append("dati", JSON.stringify(dati));
-        // Blur LQIP generato lato client, in lockstep coi file "prodotto":
-        // l'indice di "blur" combacia con quello di "prodotto" (e con foto_indici).
-        for (const f of fotoProdotto) {
-          fd.append("prodotto", f.file, "p.webp");
-          fd.append("blur", (await generaBlurDataUrl(f.file)) ?? "");
-        }
-        const esito = await creaSchedaDaFotoAction(fd);
+        // 1) Crea prodotto + varianti (senza foto: niente piu limite body).
+        const esito = await creaSchedaDaFotoAction(dati);
         if (!esito.ok || !esito.id) {
           mostra(esito.error ?? "Creazione non riuscita.", "errore");
           return;
         }
+        const prodottoId = esito.id;
+
+        // 2) Carica i master UNO A UNO, taggati per colore (come la galleria).
+        //    Il colore per indice viene dalla mappa colore -> foto_indici.
+        const colorePerIndice = new Map<number, string>();
+        for (const c of dati.colori) {
+          for (const idx of c.foto_indici) colorePerIndice.set(idx, c.nome);
+        }
+        let erroriFoto = 0;
+        for (let i = 0; i < fotoProdotto.length; i++) {
+          const f = fotoProdotto[i];
+          const fd = new FormData();
+          fd.append("foto", f.file, "p.webp");
+          const blur = (await generaBlurDataUrl(f.file)) ?? "";
+          if (blur) fd.append("blur", blur);
+          const colore = colorePerIndice.get(i);
+          if (colore) fd.append("colore", colore);
+          const r = await aggiungiFotoGalleriaAction(prodottoId, fd);
+          if (!r.ok) erroriFoto++;
+        }
+
         if (esito.error) mostra(esito.error, "errore");
+        else if (erroriFoto > 0)
+          mostra(
+            `Bozza creata, ma ${erroriFoto} foto non caricate: aggiungile dalla scheda.`,
+            "errore",
+          );
         else mostra("Bozza creata. Rivedi e pubblica.", "ok");
-        router.push(`/gestore/prodotti/${esito.id}`);
+        router.push(`/gestore/prodotti/${prodottoId}`);
       } catch {
-        mostra("Creazione non riuscita: riprova con meno foto.", "errore");
+        mostra("Creazione non riuscita: riprova.", "errore");
       }
     });
   }

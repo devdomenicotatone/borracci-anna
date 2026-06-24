@@ -82,6 +82,26 @@ function IconaCategorie({ className }: { className?: string }) {
   );
 }
 
+function IconaMedia({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="7" y="3" width="14" height="14" rx="2" />
+      <circle cx="11.5" cy="7.5" r="1.4" />
+      <path d="m7 13 3.5-3.2L15 17" />
+      <path d="M3 7v12a2 2 0 0 0 2 2h12" />
+    </svg>
+  );
+}
+
 export default function AdminNav({
   nome,
   ruolo,
@@ -94,6 +114,7 @@ export default function AdminNav({
   const suProdotti = pathname.startsWith("/gestore/prodotti") && !suNuovo;
   const suCategorie = pathname.startsWith("/gestore/categorie");
   const suOrdini = pathname.startsWith("/gestore/ordini");
+  const suMedia = pathname.startsWith("/gestore/media");
   // Sulle pagine di form (nuovo / modifica) la save-bar prende il fondo:
   // nascondiamo la bottom-nav mobile per non sovrapporle.
   const suFormProdotto = /^\/gestore\/prodotti\/.+/.test(pathname);
@@ -150,6 +171,10 @@ export default function AdminNav({
             <IconaOrdini className="h-5 w-5" />
             Ordini
           </Link>
+          <Link href="/gestore/media" className={voceSidebar(suMedia)}>
+            <IconaMedia className="h-5 w-5" />
+            Media
+          </Link>
           <Link href="/gestore/prodotti/nuovo" className={voceSidebar(suNuovo)}>
             <IconaPiu className="h-5 w-5" />
             Nuovo prodotto
@@ -196,9 +221,9 @@ export default function AdminNav({
             <IconaOrdini className="h-5 w-5" />
             <span>Ordini</span>
           </Link>
-          <Link href="/gestore/prodotti/nuovo" className={voceBottom(suNuovo)}>
-            <IconaPiu className="h-5 w-5" />
-            <span>Nuovo</span>
+          <Link href="/gestore/media" className={voceBottom(suMedia)}>
+            <IconaMedia className="h-5 w-5" />
+            <span>Media</span>
           </Link>
         </nav>
       )}

@@ -9,6 +9,7 @@
 // Ogni azione ritorna lo stato canonico della galleria, con cui riallineiamo.
 
 import { useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import imageCompression from "browser-image-compression";
 
 import { generaBlurDataUrl } from "@/lib/blur";
@@ -24,6 +25,13 @@ import { useToast } from "@/components/gestore/Toaster";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import { coloreChiaro, coloreHex } from "@/lib/catalogo";
 
+// Editor immagini caricato in lazy: Filerobot + konva pesano solo quando si apre
+// l'editor, non su questa pagina. Client-only (usa il canvas del browser).
+const EditorImmagine = dynamic(
+  () => import("@/components/gestore/EditorImmagine"),
+  { ssr: false },
+);
+
 export default function GestoreGalleria({
   prodottoId,
   colori,
@@ -38,6 +46,7 @@ export default function GestoreGalleria({
   const [caricando, setCaricando] = useState(false);
   const [pending, startTransition] = useTransition();
   const [daEliminare, setDaEliminare] = useState<string | null>(null);
+  const [daModificare, setDaModificare] = useState<FotoGalleriaRow | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -55,12 +64,14 @@ export default function GestoreGalleria({
       }
       try {
         const compressa = await imageCompression(file, {
-          // Qualita alta: 1600px e il massimo che la PDP serve, e con initialQuality
-          // alto + tetto MB generoso la foto resta nitida (no quality buttata giu
-          // per centrare un file minuscolo).
-          maxWidthOrHeight: 1600,
-          maxSizeMB: 2.5,
-          initialQuality: 0.86,
+          // NORMALIZZA, non comprimere: l'unica perdita lossy del pipeline deve
+          // essere quella finale di next/image (AVIF/WebP al serve). Qui teniamo un
+          // MASTER nitido — 2560px (margine per ritagliare nell'editor; la vetrina
+          // serve comunque <=1600px) a qualita 0.92, con tetto MB alto cosi la
+          // qualita non viene abbassata per centrare una taglia.
+          maxWidthOrHeight: 2560,
+          maxSizeMB: 8,
+          initialQuality: 0.92,
           fileType: "image/webp",
           useWebWorker: true,
         });
@@ -302,10 +313,21 @@ export default function GestoreGalleria({
                     )}
                     <button
                       type="button"
+                      disabled={occupato}
+                      onClick={() => setDaModificare(f)}
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold text-sea transition-colors hover:bg-surface-2 disabled:opacity-50"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+                        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                      Modifica
+                    </button>
+                    <button
+                      type="button"
                       aria-label="Elimina foto"
                       disabled={occupato}
                       onClick={() => setDaEliminare(f.id)}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
                         <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
@@ -346,6 +368,16 @@ export default function GestoreGalleria({
         onConferma={eliminaConfermato}
         onAnnulla={() => setDaEliminare(null)}
       />
+
+      {daModificare && (
+        <EditorImmagine
+          url={daModificare.url}
+          prodottoId={prodottoId}
+          fotoId={daModificare.id}
+          onChiudi={() => setDaModificare(null)}
+          onSalvata={(foto) => setRighe(foto)}
+        />
+      )}
     </section>
   );
 }

@@ -389,6 +389,12 @@ export async function aggiungiFotoGalleriaAction(
       ? blurRaw
       : null;
 
+  // Colore opzionale: il flusso "Genera da foto" carica le foto gia taggate per
+  // colore. Dalla galleria manuale non viene inviato -> resta null.
+  const coloreRaw = formData.get("colore");
+  const colore =
+    typeof coloreRaw === "string" && coloreRaw.trim() ? coloreRaw.trim() : null;
+
   const path = `${prodottoId}/${crypto.randomUUID()}.webp`;
   try {
     const { error: up } = await supabase.storage
@@ -406,7 +412,7 @@ export async function aggiungiFotoGalleriaAction(
 
     const { error: ins } = await supabase
       .from("prodotto_foto")
-      .insert({ prodotto_id: prodottoId, variante_id: null, colore: null, url, ordine, blur_data_url: blur });
+      .insert({ prodotto_id: prodottoId, variante_id: null, colore, url, ordine, blur_data_url: blur });
     if (ins) {
       // rollback del file appena caricato per non lasciare orfani
       await supabase.storage.from("prodotti").remove([path]);
@@ -419,6 +425,79 @@ export async function aggiungiFotoGalleriaAction(
     return { ok: true, foto };
   } catch {
     return { ok: false, error: "Errore di rete durante il caricamento." };
+  }
+}
+
+/**
+ * Sostituisce il FILE di una foto mantenendo la riga (id/ordine/colore): carica
+ * il nuovo file, aggiorna `url` + `blur_data_url`, poi cancella il vecchio file.
+ * Usata dall'editor immagini. Niente sovrascrittura sullo stesso path -> nessuna
+ * cache CDN stantia (il nuovo url ha un nuovo `?v=`).
+ */
+export async function sostituisciFotoAction(
+  prodottoId: string,
+  fotoId: string,
+  formData: FormData,
+): Promise<EsitoGalleria> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+  const { supabase } = sessione;
+
+  const file = formData.get("foto");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Nessun file selezionato." };
+  }
+  if (file.type !== "image/webp") {
+    return { ok: false, error: "Formato non valido: l'immagine va convertita in WebP." };
+  }
+  // Blur rigenerato lato client dall'immagine modificata: se manca (generazione
+  // fallita) salviamo null, cosi non resta il placeholder della foto vecchia.
+  const blurRaw = formData.get("blur");
+  const blur =
+    typeof blurRaw === "string" && blurRaw.startsWith("data:image/")
+      ? blurRaw
+      : null;
+
+  try {
+    // Riga esistente: serve il vecchio path e conferma l'appartenenza al prodotto.
+    const { data: riga } = await supabase
+      .from("prodotto_foto")
+      .select("id, url")
+      .eq("id", fotoId)
+      .eq("prodotto_id", prodottoId)
+      .maybeSingle();
+    if (!riga) return { ok: false, error: "Foto non trovata." };
+
+    const path = `${prodottoId}/${crypto.randomUUID()}.webp`;
+    const { error: up } = await supabase.storage
+      .from("prodotti")
+      .upload(path, file, { upsert: false, contentType: "image/webp" });
+    if (up) return { ok: false, error: up.message };
+
+    const { data: pub } = supabase.storage.from("prodotti").getPublicUrl(path);
+    const url = `${pub.publicUrl}?v=${Date.now()}`;
+
+    const { error: upd } = await supabase
+      .from("prodotto_foto")
+      .update({ url, blur_data_url: blur })
+      .eq("id", fotoId)
+      .eq("prodotto_id", prodottoId);
+    if (upd) {
+      // rollback del nuovo file per non lasciare orfani
+      await supabase.storage.from("prodotti").remove([path]);
+      return { ok: false, error: upd.message };
+    }
+
+    // Cancella il vecchio file (best-effort: un orfano e innocuo, non blocca).
+    const vecchio = storagePathDaUrl(riga.url as string);
+    if (vecchio) await supabase.storage.from("prodotti").remove([vecchio]);
+
+    const foto = await leggiGalleria(supabase, prodottoId);
+    await sincronizzaCopertina(supabase, prodottoId, foto);
+    revalidaProdotto(prodottoId);
+    return { ok: true, foto };
+  } catch {
+    return { ok: false, error: "Errore di rete durante la modifica." };
   }
 }
 
