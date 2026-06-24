@@ -78,7 +78,10 @@ export default function EditorImmagine({
     try {
       const { removeBackground } = await import("@imgly/background-removal");
       const blob = await removeBackground(sorgente, {
-        model: "isnet_fp16", // buon compromesso qualita/peso per il web
+        // Modello pieno = massima qualita di ritaglio (download piu grande la
+        // prima volta, poi resta in cache). Utile sui capi difficili: azzurro su
+        // sfondo chiaro, manichino, sfondo del banco affollato.
+        model: "isnet",
         output: { format: "image/png" }, // PNG: conserva la trasparenza
         progress: (key, current, total) => {
           const fase = key.startsWith("fetch")
