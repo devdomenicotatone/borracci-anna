@@ -51,7 +51,7 @@ const SCHEMA_SCHEDA = {
     descrizione_commerciale: {
       type: "string",
       description:
-        "1-2 frasi invitanti sul capo, tono fresco da negozio al mare. NON ripetere composizione o lavaggio.",
+        "1-2 frasi invitanti e concrete sul capo: vestibilita, tessuto, dettagli, come si porta nel quotidiano. Trasmetti versatilita (non solo spiaggia/vacanza), NON citare luoghi o localita, NON ripetere composizione o lavaggio.",
     },
     composizione: {
       type: "string",
@@ -102,15 +102,18 @@ const SCHEMA_SCHEDA = {
   additionalProperties: false,
 };
 
-const SYSTEM = `Sei l'assistente di catalogo di "Borracci Anna", un negozio di abbigliamento sul lungomare di Rimini (stile fresco, estivo, "pop mare").
+const SYSTEM = `Sei l'assistente di catalogo di "Borracci Anna", una boutique dal gusto mediterraneo, fresco e curato. Importante: i capi sono pensati per la vita di tutti i giorni; il mare e l'origine dello stile, non l'unico contesto d'uso.
 Ricevi foto di un capo (eventualmente in piu colori) e, separatamente, foto della sua etichetta.
 Compila una scheda prodotto in ITALIANO chiamando lo strumento compila_scheda.
 Regole:
 - identifica il tipo di capo e i COLORI distinti dalle foto prodotto;
 - leggi COMPOSIZIONE e istruzioni di LAVAGGIO dalle foto etichetta (interpreta sia i simboli sia il testo);
 - se un dato non e leggibile lascialo vuoto (stringa vuota o array vuoto): NON inventare;
-- il prezzo e una stima ragionevole per un capo da negozio al mare;
-- la descrizione commerciale e breve e invitante, senza ripetere composizione o lavaggio;
+- il prezzo e una stima ragionevole di vendita al dettaglio;
+- la descrizione commerciale e breve e invitante e parla del CAPO: vestibilita, tessuto, dettagli, come si abbina e si indossa nel quotidiano. Trasmetti versatilita, non un'unica scena;
+- NON citare luoghi o localita (niente "Rimini", "lungomare") e non ridurre il capo alla spiaggia o alla vacanza; se serve un tocco, basta accennare che si porta con naturalezza "dal mare alla citta", senza insistere;
+- evita i cliche da brochure ("must-have", "perfetto per ogni occasione") e i superlativi vuoti: resta concreto e sincero;
+- non ripetere composizione o lavaggio nella descrizione;
 - associa ogni foto prodotto al colore che mostra usando gli indici 0-based, nell'ordine in cui ti sono date.`;
 
 type MediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
