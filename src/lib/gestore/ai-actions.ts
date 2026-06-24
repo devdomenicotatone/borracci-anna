@@ -301,6 +301,11 @@ export async function creaSchedaDaFotoAction(
     .filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { ok: false, error: "Nessuna foto prodotto." };
 
+  // Blur LQIP allineati per indice ai file "prodotto" (vedi GeneraDaFoto).
+  const blurs = formData
+    .getAll("blur")
+    .map((b) => (typeof b === "string" ? b : ""));
+
   const slugBase = slugify(dati.slug || nome) || "prodotto";
 
   // Fuori dal try: se un passo successivo lancia, il catch sa che la bozza e gia
@@ -389,6 +394,7 @@ export async function creaSchedaDaFotoAction(
         colore: fotoToColore.get(i) ?? null,
         url,
         ordine: i,
+        blur_data_url: blurs[i]?.startsWith("data:image/") ? blurs[i] : null,
       });
     }
 

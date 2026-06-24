@@ -87,6 +87,7 @@ export default function ProdottoDettaglio({
         id: f.id,
         url: f.url,
         etichetta: f.colore ?? `Foto ${i + 1}`,
+        blurDataUrl: f.blur_data_url,
       })),
     [foto],
   );

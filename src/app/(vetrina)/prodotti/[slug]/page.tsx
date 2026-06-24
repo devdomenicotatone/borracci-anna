@@ -85,7 +85,7 @@ const caricaProdotto = cache(async (
       supabase
         .from("prodotti")
         .select(
-          "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, varianti(id, prodotto_id, taglia, colore, sku, stock), prodotto_foto(id, prodotto_id, variante_id, colore, url, ordine)",
+          "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, varianti(id, prodotto_id, taglia, colore, sku, stock), prodotto_foto(id, prodotto_id, variante_id, colore, url, ordine, blur_data_url)",
         )
         .eq("slug", slug)
         .eq("attivo", true)

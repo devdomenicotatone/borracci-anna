@@ -323,6 +323,7 @@ export interface Database {
           colore: string | null;
           url: string;
           ordine: number;
+          blur_data_url: string | null;
           creato_il: string;
         };
         Insert: {
@@ -332,6 +333,7 @@ export interface Database {
           colore?: string | null;
           url: string;
           ordine?: number;
+          blur_data_url?: string | null;
           creato_il?: string;
         };
         Update: {
@@ -341,6 +343,7 @@ export interface Database {
           colore?: string | null;
           url?: string;
           ordine?: number;
+          blur_data_url?: string | null;
           creato_il?: string;
         };
         Relationships: [

@@ -11,6 +11,8 @@
 import { useRef, useState, useTransition } from "react";
 import imageCompression from "browser-image-compression";
 
+import { generaBlurDataUrl } from "@/lib/blur";
+
 import {
   aggiungiFotoGalleriaAction,
   rimuoviFotoGalleriaAction,
@@ -58,8 +60,10 @@ export default function GestoreGalleria({
           fileType: "image/webp",
           useWebWorker: true,
         });
+        const blur = await generaBlurDataUrl(compressa);
         const fd = new FormData();
         fd.append("foto", compressa, "foto.webp");
+        if (blur) fd.append("blur", blur);
         const esito = await aggiungiFotoGalleriaAction(prodottoId, fd);
         if (!esito.ok || !esito.foto) {
           errori++;

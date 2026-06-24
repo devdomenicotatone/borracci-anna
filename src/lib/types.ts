@@ -47,6 +47,8 @@ export interface ProdottoFoto {
   /** Colore rappresentato dalla foto (testo, dalla palette). null = generica. */
   colore: string | null;
   url: string;
+  /** LQIP (~16px) per placeholder="blur" di next/image. null = placeholder generico. */
+  blur_data_url: string | null;
   /** Ordinamento in galleria (ascendente). */
   ordine: number;
 }

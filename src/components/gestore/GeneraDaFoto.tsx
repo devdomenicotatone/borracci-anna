@@ -12,6 +12,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import imageCompression from "browser-image-compression";
 
+import { generaBlurDataUrl } from "@/lib/blur";
+
 import {
   generaSchedaDaFotoAction,
   creaSchedaDaFotoAction,
@@ -189,11 +191,16 @@ export default function GeneraDaFoto({
         .filter((c) => c.nome.trim())
         .map((c) => ({ nome: c.nome.trim(), foto_indici: c.foto_indici })),
     };
-    const fd = new FormData();
-    fd.append("dati", JSON.stringify(dati));
-    fotoProdotto.forEach((f) => fd.append("prodotto", f.file, "p.webp"));
     startCrea(async () => {
       try {
+        const fd = new FormData();
+        fd.append("dati", JSON.stringify(dati));
+        // Blur LQIP generato lato client, in lockstep coi file "prodotto":
+        // l'indice di "blur" combacia con quello di "prodotto" (e con foto_indici).
+        for (const f of fotoProdotto) {
+          fd.append("prodotto", f.file, "p.webp");
+          fd.append("blur", (await generaBlurDataUrl(f.file)) ?? "");
+        }
         const esito = await creaSchedaDaFotoAction(fd);
         if (!esito.ok || !esito.id) {
           mostra(esito.error ?? "Creazione non riuscita.", "errore");

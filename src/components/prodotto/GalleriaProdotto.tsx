@@ -12,7 +12,22 @@ export interface FotoGalleria {
   url: string;
   /** Etichetta leggibile (di solito il colore della variante). */
   etichetta: string;
+  /** LQIP (~16px data URL) per il blur-up di next/image. null/assente = generico. */
+  blurDataUrl?: string | null;
 }
+
+// Placeholder neutro per le foto senza un blur salvato (caricate prima della
+// feature): una sfumatura morbida nei toni del brand, meglio di un box vuoto.
+// E una costante (stessa stringa per tutte), quindi costo per-immagine nullo.
+const PLACEHOLDER_GENERICO = ("data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'>" +
+      "<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>" +
+      "<stop offset='0%' stop-color='#eef5f8'/>" +
+      "<stop offset='100%' stop-color='#d7e6ee'/>" +
+      "</linearGradient></defs>" +
+      "<rect width='40' height='40' fill='url(#g)'/></svg>",
+  )) as `data:image/${string}`;
 
 export default function GalleriaProdotto({
   foto,
@@ -31,6 +46,7 @@ export default function GalleriaProdotto({
   const idx = Math.min(Math.max(0, attivaIdx), Math.max(0, foto.length - 1));
   const principale = haGalleria ? foto[idx] : null;
   const urlPrincipale = principale?.url ?? fallbackUrl;
+  const blurPrincipale = principale?.blurDataUrl ?? null;
   const multipla = foto.length > 1;
 
   function vai(delta: number) {
@@ -50,7 +66,12 @@ export default function GalleriaProdotto({
             fill
             sizes="(max-width: 768px) 100vw, 50vw"
             className="object-cover"
-            priority
+            // Foto LCP della PDP: caricala subito e con priorita alta. In Next 16
+            // `priority` e deprecato -> loading="eager" + fetchPriority="high".
+            loading="eager"
+            fetchPriority="high"
+            placeholder={blurPrincipale ? "blur" : PLACEHOLDER_GENERICO}
+            blurDataURL={blurPrincipale ?? undefined}
           />
         ) : (
           <div className="tile-cyan dots-overlay flex h-full w-full items-center justify-center">
@@ -114,7 +135,15 @@ export default function GalleriaProdotto({
                     : "opacity-70 ring-1 ring-line hover:-translate-y-0.5 hover:opacity-100",
                 ].join(" ")}
               >
-                <Image src={f.url} alt={f.etichetta} fill sizes="80px" className="object-cover" />
+                <Image
+                  src={f.url}
+                  alt={f.etichetta}
+                  fill
+                  sizes="80px"
+                  className="object-cover"
+                  placeholder={f.blurDataUrl ? "blur" : PLACEHOLDER_GENERICO}
+                  blurDataURL={f.blurDataUrl ?? undefined}
+                />
               </button>
             );
           })}

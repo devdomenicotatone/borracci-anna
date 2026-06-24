@@ -382,6 +382,13 @@ export async function aggiungiFotoGalleriaAction(
     return { ok: false, error: "Formato non valido: l'immagine va convertita in WebP." };
   }
 
+  // LQIP generata lato client (facoltativa): accettata solo se e una data URL.
+  const blurRaw = formData.get("blur");
+  const blur =
+    typeof blurRaw === "string" && blurRaw.startsWith("data:image/")
+      ? blurRaw
+      : null;
+
   const path = `${prodottoId}/${crypto.randomUUID()}.webp`;
   try {
     const { error: up } = await supabase.storage
@@ -399,7 +406,7 @@ export async function aggiungiFotoGalleriaAction(
 
     const { error: ins } = await supabase
       .from("prodotto_foto")
-      .insert({ prodotto_id: prodottoId, variante_id: null, colore: null, url, ordine });
+      .insert({ prodotto_id: prodottoId, variante_id: null, colore: null, url, ordine, blur_data_url: blur });
     if (ins) {
       // rollback del file appena caricato per non lasciare orfani
       await supabase.storage.from("prodotti").remove([path]);
