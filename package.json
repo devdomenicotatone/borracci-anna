@@ -26,6 +26,9 @@
     "stripe": "^22.2.2",
     "styled-components": "^6.4.2"
   },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
