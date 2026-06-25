@@ -35,15 +35,26 @@ export default function ProdottoDettaglio({
   const varianti = prodotto.varianti;
 
   // Dimensioni disponibili, ricavate dalle varianti.
-  const colori = useMemo(
-    () =>
-      [
-        ...new Set(
-          varianti.map((v) => v.colore).filter((c): c is string => !!c),
-        ),
-      ].sort((a, b) => ordineColore(a) - ordineColore(b)),
-    [varianti],
-  );
+  // ORDINE COLORI = ordine in cui i colori compaiono nella GALLERIA (posizione
+  // della loro prima foto). Cosi i campioni seguono sempre le foto: se cambi la
+  // copertina o riordini la galleria, l'ordine dei colori si aggiorna da solo,
+  // senza dover toccare nulla. I colori senza foto finiscono in fondo, ordinati
+  // per palette (tie-break stabile).
+  const colori = useMemo(() => {
+    const distinti = [
+      ...new Set(varianti.map((v) => v.colore).filter((c): c is string => !!c)),
+    ];
+    const posFoto = new Map<string, number>();
+    foto.forEach((f, i) => {
+      if (f.colore && !posFoto.has(f.colore)) posFoto.set(f.colore, i);
+    });
+    const SENZA_FOTO = Number.MAX_SAFE_INTEGER;
+    return distinti.sort(
+      (a, b) =>
+        (posFoto.get(a) ?? SENZA_FOTO) - (posFoto.get(b) ?? SENZA_FOTO) ||
+        ordineColore(a) - ordineColore(b),
+    );
+  }, [varianti, foto]);
   const taglie = useMemo(
     () =>
       ordinaTaglie(
