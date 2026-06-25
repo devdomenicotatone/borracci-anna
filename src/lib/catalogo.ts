@@ -121,6 +121,51 @@ export function coloreHex(nome: string | null | undefined): string {
   return HEX_FALLBACK;
 }
 
+// Forme a testo libero (generi maschili/femminili, composti, sfumature) che NON
+// sono voci di palette ma vanno ricondotte a quella giusta. Serve a normalizzare
+// l'output della feature AI: "Azzurra" -> "Azzurro", "Blu navy" -> "Navy".
+const NOME_CANONICO: Record<string, string> = {
+  bianco: "Bianca",
+  grigio: "Grigia",
+  nera: "Nero",
+  rossa: "Rosso",
+  gialla: "Giallo",
+  azzurra: "Azzurro",
+  arancio: "Arancione",
+  arancia: "Arancione",
+  "blu navy": "Navy",
+  "blu notte": "Navy",
+  "blu marino": "Navy",
+  "blu scuro": "Navy",
+  "blu elettrico": "Blu",
+  "verde acqua": "Menta",
+  "grigio chiaro": "Grigia",
+  "grigio melange": "Grigia",
+  "grigio scuro": "Antracite",
+};
+
+const COLORE_NOME = new Map(COLORI.map((c) => [c.nome.toLowerCase(), c.nome]));
+
+/**
+ * Riporta un nome di colore (anche a testo libero, es. dalla AI) al nome esatto
+ * della palette. Prova: match in palette/sinonimi, poi scansione per parola
+ * (l'ultima riconosciuta vince, es. "Blu navy" -> "Navy"). Se proprio fuori
+ * palette tiene il testo originale ripulito (niente perdita di dato).
+ */
+export function coloreCanonico(nome: string | null | undefined): string {
+  const raw = (nome ?? "").trim();
+  if (!raw) return "";
+  const k = raw.toLowerCase();
+  const diretto = COLORE_NOME.get(k) ?? NOME_CANONICO[k];
+  if (diretto) return diretto;
+  const parole = k.split(/[\s/-]+/).filter(Boolean);
+  for (let i = parole.length - 1; i >= 0; i--) {
+    const p = COLORE_NOME.get(parole[i]) ?? NOME_CANONICO[parole[i]];
+    if (p) return p;
+  }
+  return raw;
+}
+
 /**
  * Vero se il campione e molto chiaro: il chip allora vuole un bordo/contrasto
  * scuro per restare visibile sul bianco. Luminanza percettiva (Rec. 709).

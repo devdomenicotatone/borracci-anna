@@ -12,9 +12,15 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
+import { COLORI, coloreCanonico } from "@/lib/catalogo";
 import { revalidatePath } from "next/cache";
 
 const MODELLO = "claude-sonnet-4-6";
+
+// Palette colori del negozio: l'AI DEVE scegliere tra questi nomi. Cosi i tag
+// colore combaciano con i chip dell'editor e non si creano "Blu navy"/"Azzurra"
+// fuori palette. Unica fonte di verita: src/lib/catalogo.ts.
+const NOMI_COLORI = COLORI.map((c) => c.nome);
 
 // --- Tipi della bozza --------------------------------------------------------
 export interface BozzaColore {
@@ -51,7 +57,7 @@ const SCHEMA_SCHEDA = {
     descrizione_commerciale: {
       type: "string",
       description:
-        "1-2 frasi invitanti e concrete sul capo: vestibilita, tessuto, dettagli, come si porta nel quotidiano. Trasmetti versatilita (non solo spiaggia/vacanza), NON citare luoghi o localita, NON ripetere composizione o lavaggio.",
+        "1-2 frasi invitanti e concrete SOLO sul capo: tipo di capo, tessuto e mano, vestibilita, dettagli costruttivi (colletto, chiusura, inserti, cuciture) e colore. NON suggerire abbinamenti (niente 'con un jeans/chino') ne occasioni o contesti d'uso (niente 'per una serata/pranzo', 'dal mare alla citta'), NON citare luoghi o localita, NON ripetere composizione o lavaggio.",
     },
     composizione: {
       type: "string",
@@ -77,7 +83,9 @@ const SCHEMA_SCHEDA = {
         properties: {
           nome: {
             type: "string",
-            description: "Nome del colore in italiano (es. Blu, Bianca, Bluette).",
+            enum: NOMI_COLORI,
+            description:
+              "Nome del colore scelto ESCLUSIVAMENTE dalla palette del negozio (uno tra i valori ammessi). Scegli il piu vicino al colore reale del capo; NON inventare nomi nuovi e NON cambiare genere/ortografia (es. usa 'Navy' non 'Blu navy', 'Azzurro' non 'Azzurra').",
           },
           foto_prodotto_indici: {
             type: "array",
@@ -102,16 +110,17 @@ const SCHEMA_SCHEDA = {
   additionalProperties: false,
 };
 
-const SYSTEM = `Sei l'assistente di catalogo di "Anna Shop", una boutique dal gusto mediterraneo, fresco e curato. Importante: i capi sono pensati per la vita di tutti i giorni; il mare e l'origine dello stile, non l'unico contesto d'uso.
+const SYSTEM = `Sei l'assistente di catalogo di "Anna Shop", una boutique dal gusto mediterraneo, fresco e curato.
 Ricevi foto di un capo (eventualmente in piu colori) e, separatamente, foto della sua etichetta.
 Compila una scheda prodotto in ITALIANO chiamando lo strumento compila_scheda.
 Regole:
 - identifica il tipo di capo e i COLORI distinti dalle foto prodotto;
+- per ogni colore usa ESCLUSIVAMENTE uno di questi nomi di palette, scegliendo il piu vicino a cio che vedi (NON inventare nomi, NON aggiungere sfumature, NON cambiare genere/ortografia): ${NOMI_COLORI.join(", ")};
 - leggi COMPOSIZIONE e istruzioni di LAVAGGIO dalle foto etichetta (interpreta sia i simboli sia il testo);
 - se un dato non e leggibile lascialo vuoto (stringa vuota o array vuoto): NON inventare;
 - il prezzo e una stima ragionevole di vendita al dettaglio;
-- la descrizione commerciale e breve e invitante e parla del CAPO: vestibilita, tessuto, dettagli, come si abbina e si indossa nel quotidiano. Trasmetti versatilita, non un'unica scena;
-- NON citare luoghi o localita (niente "Rimini", "lungomare") e non ridurre il capo alla spiaggia o alla vacanza; se serve un tocco, basta accennare che si porta con naturalezza "dal mare alla citta", senza insistere;
+- la descrizione commerciale e breve (1-2 frasi) e invitante e parla SOLO del CAPO: tipo di capo, tessuto e mano, vestibilita, dettagli costruttivi (colletto, chiusura, inserti, cuciture) e colore;
+- NON suggerire abbinamenti (niente "con un jeans", "con un chino") ne occasioni o contesti d'uso (niente "per una serata", "per un pranzo", "dal mare alla citta"); NON citare luoghi o localita (niente "Rimini", "lungomare");
 - evita i cliche da brochure ("must-have", "perfetto per ogni occasione") e i superlativi vuoti: resta concreto e sincero;
 - non ripetere composizione o lavaggio nella descrizione;
 - associa ogni foto prodotto al colore che mostra usando gli indici 0-based, nell'ordine in cui ti sono date.`;
@@ -232,7 +241,7 @@ export async function generaSchedaDaFotoAction(
     const colori: BozzaColore[] = (raw.colori ?? [])
       .filter((c) => c && c.nome && c.nome.trim())
       .map((c) => ({
-        nome: (c.nome ?? "").trim(),
+        nome: coloreCanonico(c.nome),
         foto_indici: (c.foto_prodotto_indici ?? []).filter(
           (n) => Number.isInteger(n) && n >= 0 && n < prodotto.length,
         ),
@@ -332,7 +341,7 @@ export async function creaSchedaDaFotoAction(
     //    colore: qui creiamo solo le varianti, lo SKU univoco dallo slug.
     const skuUsati = new Set<string>();
     for (const c of dati.colori ?? []) {
-      const nomeColore = (c.nome ?? "").trim();
+      const nomeColore = coloreCanonico(c.nome);
       if (!nomeColore) continue;
       const cs = slugify(nomeColore) || "colore";
       let sku = `${slug}-${cs}`;
