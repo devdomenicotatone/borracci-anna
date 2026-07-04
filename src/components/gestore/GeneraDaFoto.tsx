@@ -263,7 +263,9 @@ export default function GeneraDaFoto({
   // ---- FASE UPLOAD ----------------------------------------------------------
   if (fase === "upload") {
     return (
-      <div className="mx-auto max-w-xl pb-28">
+      // A lg le due zone (prodotto/etichetta) stanno affiancate; la barra fissa
+      // e fuori flusso, quindi non entra nel grid.
+      <div className="mx-auto max-w-xl pb-28 lg:grid lg:max-w-4xl lg:grid-cols-2 lg:items-start lg:gap-8">
         <ZonaUpload
           titolo="Foto del prodotto"
           sottotitolo="Una o piu foto del capo, anche in piu colori. Diventeranno la galleria."
@@ -273,7 +275,7 @@ export default function GeneraDaFoto({
           inputRef={inputProdRef}
           preparando={preparando}
         />
-        <div className="h-5" />
+        <div className="h-5 lg:hidden" />
         <ZonaUpload
           titolo="Foto dell'etichetta"
           sottotitolo="Composizione e lavaggio. Non finisce in galleria, serve solo all'AI."
@@ -285,7 +287,7 @@ export default function GeneraDaFoto({
         />
 
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur md:left-60">
-          <div className="mx-auto flex max-w-xl items-center justify-end">
+          <div className="mx-auto flex max-w-xl items-center justify-end lg:max-w-4xl">
             <button
               type="button"
               onClick={genera}
@@ -302,8 +304,10 @@ export default function GeneraDaFoto({
 
   // ---- FASE REVISIONE -------------------------------------------------------
   return (
-    <div className="mx-auto max-w-xl pb-28">
-      <div className="flex flex-col gap-5">
+    <div className="mx-auto max-w-xl pb-28 lg:max-w-4xl">
+      {/* A lg i campi si accoppiano su due colonne (ordine DOM invariato);
+          descrizione e colori occupano tutta la riga. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:gap-x-8">
         <Campo label="Nome" htmlFor="g-nome">
           <input
             id="g-nome"
@@ -330,15 +334,18 @@ export default function GeneraDaFoto({
           />
         </Campo>
 
-        <Campo label="Descrizione" htmlFor="g-desc">
-          <textarea
-            id="g-desc"
-            value={descrizione}
-            onChange={(e) => setDescrizione(e.target.value)}
-            rows={7}
-            className="min-h-40 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none"
-          />
-        </Campo>
+        {/* Wrapper neutro sotto lg: serve solo allo span su due colonne. */}
+        <div className="lg:col-span-2">
+          <Campo label="Descrizione" htmlFor="g-desc">
+            <textarea
+              id="g-desc"
+              value={descrizione}
+              onChange={(e) => setDescrizione(e.target.value)}
+              rows={7}
+              className="min-h-40 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none"
+            />
+          </Campo>
+        </div>
 
         <Campo label="Categoria" htmlFor="g-cat">
           <select
@@ -392,7 +399,7 @@ export default function GeneraDaFoto({
         </Campo>
 
         {/* Colori (varianti) */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 lg:col-span-2">
           <span className="font-display text-sm font-bold text-foreground">
             Colori (diventano varianti, 1 pezzo ciascuno)
           </span>
@@ -454,7 +461,7 @@ export default function GeneraDaFoto({
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur md:left-60">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-3 lg:max-w-4xl">
           <button
             type="button"
             onClick={() => setFase("upload")}

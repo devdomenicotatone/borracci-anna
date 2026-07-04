@@ -54,7 +54,7 @@ export default async function ModificaProdottoPage({
 
   return (
     <div className="pb-28">
-      <h1 className="mx-auto mb-5 max-w-xl text-xl font-semibold text-foreground">
+      <h1 className="mx-auto mb-5 max-w-xl text-xl font-semibold text-foreground lg:max-w-5xl">
         Modifica prodotto
       </h1>
       <FormProdotto

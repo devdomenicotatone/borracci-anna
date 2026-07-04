@@ -48,7 +48,7 @@ export default function ListaProdotti({
   }, [prodotti, query, filtro]);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
           <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
@@ -90,8 +90,8 @@ export default function ListaProdotti({
       </div>
 
       {/* Toolbar: ricerca + filtro */}
-      <div className="sticky top-14 z-10 -mx-4 mb-4 flex flex-col gap-2.5 bg-background/95 px-4 py-2 backdrop-blur md:top-0 md:mx-0 md:px-0">
-        <div className="relative">
+      <div className="sticky top-14 z-10 -mx-4 mb-4 flex flex-col gap-2.5 bg-background/95 px-4 py-2 backdrop-blur md:top-0 md:mx-0 md:px-0 lg:flex-row lg:items-center">
+        <div className="relative lg:flex-1">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -114,7 +114,7 @@ export default function ListaProdotti({
             className="h-12 w-full rounded-full bg-white pl-11 pr-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
           />
         </div>
-        <div className="flex gap-1 rounded-full bg-surface-2 p-1 text-sm">
+        <div className="flex gap-1 rounded-full bg-surface-2 p-1 text-sm lg:w-auto">
           {(["tutti", "attivi", "nascosti"] as Filtro[]).map((f) => (
             <button
               key={f}
@@ -122,7 +122,7 @@ export default function ListaProdotti({
               aria-pressed={filtro === f}
               onClick={() => setFiltro(f)}
               className={[
-                "flex-1 rounded-full py-2 font-display font-bold capitalize transition-all",
+                "flex-1 rounded-full py-2 font-display font-bold capitalize transition-all lg:flex-none lg:px-5",
                 filtro === f
                   ? "bg-sea text-white shadow-sea"
                   : "text-muted hover:text-foreground",
@@ -137,50 +137,70 @@ export default function ListaProdotti({
       {visibili.length === 0 ? (
         <StatoVuoto haProdotti={prodotti.length > 0} />
       ) : (
-        <ul className="flex flex-col gap-2.5">
-          {visibili.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line transition-all hover:-translate-y-0.5 hover:shadow-sea"
-            >
-              <Link
-                href={`/gestore/prodotti/${p.id}`}
-                className="flex min-w-0 flex-1 items-center gap-3"
+        // A lg la lista diventa una "tabella in card": sotto restano le card di sempre.
+        <div className="lg:overflow-hidden lg:rounded-2xl lg:bg-white lg:shadow-soft lg:ring-1 lg:ring-line">
+          <div className="hidden border-b border-line px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-muted lg:grid lg:grid-cols-[minmax(0,1fr)_7rem_11rem_9rem] lg:items-center lg:gap-3">
+            <span>Prodotto</span>
+            <span className="text-right">Prezzo</span>
+            <span>Disponibilità</span>
+            <span className="text-right">In vendita</span>
+          </div>
+          <ul className="flex flex-col gap-2.5 lg:gap-0 lg:divide-y lg:divide-line">
+            {visibili.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line transition-all hover:-translate-y-0.5 hover:shadow-sea lg:grid lg:grid-cols-[minmax(0,1fr)_7rem_11rem_9rem] lg:rounded-none lg:px-4 lg:py-2.5 lg:shadow-none lg:ring-0 lg:hover:translate-y-0 lg:hover:bg-surface lg:hover:shadow-none"
               >
-                <Miniatura url={p.immagine_url} nome={p.nome} />
-                <div className="min-w-0">
-                  <p className="truncate font-display text-sm font-bold text-foreground">
-                    {p.nome}
-                  </p>
-                  <p className="truncate font-mono text-xs text-muted">
-                    /{p.slug}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-bold tabular-nums text-sea">
-                      {formatPrezzo(p.prezzo_cents, p.valuta)}
-                    </span>
-                    <BadgeStock
-                      stock={p.stockTotale}
-                      numVarianti={p.numVarianti}
-                      suRichiesta={p.suRichiesta}
-                    />
-                  </div>
-                </div>
-              </Link>
-              <div className="flex flex-col items-end gap-2">
-                <span
-                  className={[
-                    "font-display text-xs font-bold",
-                    p.attivo ? "text-sea" : "text-muted",
-                  ].join(" ")}
+                <Link
+                  href={`/gestore/prodotti/${p.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  {p.attivo ? "In vendita" : "Nascosto"}
+                  <Miniatura url={p.immagine_url} nome={p.nome} />
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-sm font-bold text-foreground">
+                      {p.nome}
+                    </p>
+                    <p className="truncate font-mono text-xs text-muted">
+                      /{p.slug}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 lg:hidden">
+                      <span className="text-sm font-bold tabular-nums text-sea">
+                        {formatPrezzo(p.prezzo_cents, p.valuta)}
+                      </span>
+                      <BadgeStock
+                        stock={p.stockTotale}
+                        numVarianti={p.numVarianti}
+                        suRichiesta={p.suRichiesta}
+                      />
+                    </div>
+                  </div>
+                </Link>
+                {/* Celle prezzo/disponibilità: duplicate solo per il desktop. */}
+                <span className="hidden text-right text-sm font-bold tabular-nums text-sea lg:block">
+                  {formatPrezzo(p.prezzo_cents, p.valuta)}
                 </span>
-                <ToggleAttivo id={p.id} attivo={p.attivo} />
-              </div>
-            </li>
-          ))}
-        </ul>
+                <div className="hidden min-w-0 lg:flex">
+                  <BadgeStock
+                    stock={p.stockTotale}
+                    numVarianti={p.numVarianti}
+                    suRichiesta={p.suRichiesta}
+                  />
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span
+                    className={[
+                      "font-display text-xs font-bold lg:hidden",
+                      p.attivo ? "text-sea" : "text-muted",
+                    ].join(" ")}
+                  >
+                    {p.attivo ? "In vendita" : "Nascosto"}
+                  </span>
+                  <ToggleAttivo id={p.id} attivo={p.attivo} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -188,7 +208,7 @@ export default function ListaProdotti({
 
 function Miniatura({ url, nome }: { url: string | null; nome: string }) {
   return (
-    <div className="relative aspect-[3/3.4] w-14 shrink-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line">
+    <div className="relative aspect-[3/3.4] w-14 shrink-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line lg:w-12">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- url da Storage con cache-bust
         <img

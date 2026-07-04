@@ -155,7 +155,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <div className="mb-5">
         <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
           <svg
@@ -179,7 +179,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
       </div>
 
       {/* Filtri */}
-      <div className="mb-4 flex flex-wrap gap-1 rounded-full bg-surface-2 p-1 text-sm">
+      <div className="mb-4 flex flex-wrap gap-1 rounded-full bg-surface-2 p-1 text-sm lg:w-fit">
         {FILTRI.map((f) => (
           <button
             key={f.key}
@@ -187,7 +187,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
             aria-pressed={filtro === f.key}
             onClick={() => setFiltro(f.key)}
             className={[
-              "flex-1 whitespace-nowrap rounded-full px-3 py-2 font-display font-bold transition-all",
+              "flex-1 whitespace-nowrap rounded-full px-3 py-2 font-display font-bold transition-all lg:flex-none lg:px-5",
               filtro === f.key
                 ? "bg-sea text-white shadow-sea"
                 : "text-muted hover:text-foreground",
@@ -215,62 +215,73 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
             return (
               <li
                 key={o.id}
-                className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-line"
+                className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-line lg:grid lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-6"
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-display text-sm font-bold text-foreground">
-                      {o.nome ?? "Cliente"}
-                    </p>
-                    <p className="truncate text-xs text-muted">
-                      {o.email}
-                      {o.telefono ? ` · ${o.telefono}` : ""}
-                    </p>
-                    <p className="text-xs text-muted">{dataIt(o.creato_il)}</p>
+                {/* Zona sinistra: cliente, righe articoli, nota */}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-display text-sm font-bold text-foreground">
+                        {o.nome ?? "Cliente"}
+                      </p>
+                      <p className="truncate text-xs text-muted">
+                        {o.email}
+                        {o.telefono ? ` · ${o.telefono}` : ""}
+                      </p>
+                      <p className="text-xs text-muted">{dataIt(o.creato_il)}</p>
+                    </div>
+                    {/* Chip duplicato: qui sotto lg, nel rail a destra da lg in su */}
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-bold lg:hidden ${chip.cls}`}
+                    >
+                      {chip.label}
+                    </span>
                   </div>
+
+                  <ul className="mt-3 space-y-1 border-t border-line pt-3">
+                    {righe.map((r, i) => {
+                      const det = [
+                        r.colore,
+                        r.taglia ? `T. ${r.taglia}` : null,
+                      ].filter(Boolean);
+                      return (
+                        <li
+                          key={i}
+                          className="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span className="min-w-0 truncate text-foreground">
+                            {r.quantita}× {r.nome_prodotto}
+                            {det.length > 0 && (
+                              <span className="text-muted">
+                                {" "}
+                                ({det.join(", ")})
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted">
+                            {formatPrezzo(r.prezzo_cents * r.quantita)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {o.note && (
+                    <p className="mt-2 rounded-xl bg-surface px-3 py-2 text-xs text-muted">
+                      Nota: {o.note}
+                    </p>
+                  )}
+                </div>
+
+                {/* Footer mobile; da lg diventa il rail destro (chip, totale, azioni in basso) */}
+                <div className="mt-3 flex items-center justify-between lg:mt-0 lg:flex-col lg:items-end lg:gap-3">
                   <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${chip.cls}`}
+                    className={`hidden rounded-full px-2.5 py-1 text-xs font-bold lg:inline-flex ${chip.cls}`}
                   >
                     {chip.label}
                   </span>
-                </div>
 
-                <ul className="mt-3 space-y-1 border-t border-line pt-3">
-                  {righe.map((r, i) => {
-                    const det = [
-                      r.colore,
-                      r.taglia ? `T. ${r.taglia}` : null,
-                    ].filter(Boolean);
-                    return (
-                      <li
-                        key={i}
-                        className="flex items-center justify-between gap-3 text-sm"
-                      >
-                        <span className="min-w-0 truncate text-foreground">
-                          {r.quantita}× {r.nome_prodotto}
-                          {det.length > 0 && (
-                            <span className="text-muted">
-                              {" "}
-                              ({det.join(", ")})
-                            </span>
-                          )}
-                        </span>
-                        <span className="shrink-0 tabular-nums text-muted">
-                          {formatPrezzo(r.prezzo_cents * r.quantita)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                {o.note && (
-                  <p className="mt-2 rounded-xl bg-surface px-3 py-2 text-xs text-muted">
-                    Nota: {o.note}
-                  </p>
-                )}
-
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex flex-col">
+                  <div className="flex flex-col lg:items-end lg:text-right">
                     <span className="font-display text-sm font-bold tabular-nums text-sea">
                       {formatPrezzo(o.totale_cents)}
                     </span>
@@ -283,10 +294,10 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2 lg:mt-auto lg:w-full lg:flex-col lg:items-end">
                     {o.stato === "in_attesa" && (
                       <>
-                        <label className="inline-flex items-center gap-1.5 text-xs font-bold text-muted">
+                        <label className="inline-flex items-center gap-1.5 text-xs font-bold text-muted lg:w-full lg:justify-between">
                           Spedizione €
                           <input
                             type="text"
@@ -319,7 +330,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                           type="button"
                           disabled={pending}
                           onClick={() => confermaConSpedizione(o)}
-                          className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                          className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50 lg:w-full"
                         >
                           Conferma disponibilità
                         </button>
@@ -332,7 +343,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                           <button
                             type="button"
                             onClick={() => copiaLink(o.token as string)}
-                            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold text-sea ring-1 ring-line transition-colors hover:bg-surface"
+                            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold text-sea ring-1 ring-line transition-colors hover:bg-surface lg:w-full lg:justify-center"
                           >
                             <svg
                               viewBox="0 0 24 24"
@@ -361,7 +372,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                               "Segnato come pagato.",
                             )
                           }
-                          className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                          className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50 lg:w-full"
                         >
                           Segna pagato
                         </button>

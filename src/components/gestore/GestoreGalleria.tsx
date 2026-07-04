@@ -162,7 +162,7 @@ export default function GestoreGalleria({
   const occupato = caricando || pending;
 
   return (
-    <section className="mx-auto mt-8 max-w-xl">
+    <section className="mx-auto mt-8 max-w-xl lg:max-w-5xl">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
@@ -221,6 +221,9 @@ export default function GestoreGalleria({
         </button>
       ) : (
         <>
+          {/* Lista ordinabile con frecce su/giu: resta a colonna singola anche
+              a lg (le frecce devono corrispondere al movimento visivo); la
+              riga usa la larghezza disponendosi in orizzontale. */}
           <ul className="flex flex-col gap-3">
             {righe.map((f, i) => (
               <li
@@ -237,8 +240,8 @@ export default function GestoreGalleria({
                   )}
                 </div>
 
-                <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
-                  <label className="flex flex-col gap-1">
+                <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 lg:flex-row lg:items-center lg:gap-6">
+                  <label className="flex flex-col gap-1 lg:w-80 lg:flex-none">
                     <span className="font-display text-xs font-bold uppercase tracking-wide text-muted">
                       Colore
                     </span>
@@ -344,7 +347,7 @@ export default function GestoreGalleria({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={occupato}
-            className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-5 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+            className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-5 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 lg:mx-auto lg:w-fit lg:px-8"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
               <path d="M12 16V4m0 0L8 8m4-4 4 4M4 20h16" />

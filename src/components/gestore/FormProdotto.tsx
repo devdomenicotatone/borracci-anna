@@ -8,6 +8,9 @@
 // - prezzo inserito in euro, convertito in centesimi (hidden) con anteprima;
 // - dirty-tracking: "Salva" disabilitato senza modifiche valide;
 // - save-bar sticky in basso (sopra la safe-area su mobile).
+// A lg+ il form diventa due colonne (contenuti + rail sticky con categoria e
+// stato): categoria e toggle sono duplicati mobile/rail per non toccare il
+// layout mobile; condividono lo stesso stato React.
 
 import {
   startTransition,
@@ -261,7 +264,7 @@ export default function FormProdotto({
         e.preventDefault();
         salva();
       }}
-      className="mx-auto max-w-xl"
+      className="mx-auto max-w-xl lg:max-w-5xl"
     >
       {modifica && <input type="hidden" name="id" value={prodotto.id} />}
       <input type="hidden" name="prezzo_cents" value={prezzoCents ?? ""} />
@@ -279,245 +282,195 @@ export default function FormProdotto({
         />
       )}
 
-      <div className="flex flex-col gap-5 pb-28">
-        <Campo label="Nome" htmlFor="nome" errore={errori.nome}>
-          <input
-            id="nome"
-            name="nome"
-            value={nome}
-            onChange={(e) => onNome(e.target.value)}
-            required
-            className={inputCls}
-          />
-        </Campo>
-
-        <Campo
-          label="Slug (indirizzo)"
-          htmlFor="slug"
-          errore={errori.slug}
-          hint={`Indirizzo pubblico: /prodotti/${slug || "…"}`}
-        >
-          <input
-            id="slug"
-            name="slug"
-            value={slug}
-            onChange={(e) => {
-              setSlug(e.target.value);
-              setSlugDirty(true);
-              setErroriVisibili(false);
-            }}
-            required
-            spellCheck={false}
-            autoCapitalize="none"
-            className={`${inputCls} font-mono text-sm`}
-          />
-        </Campo>
-
-        <Campo
-          label="Codice (SKU)"
-          htmlFor="codice"
-          errore={errori.codice}
-          hint={
-            !codice.trim()
-              ? "Facoltativo. Vuoto = lo SKU usa lo slug. Es. ABC123"
-              : skuBase
-                ? `SKU varianti: ${skuBase}-colore-taglia`
-                : "Codice non valido: usa lettere o numeri."
-          }
-        >
-          <input
-            id="codice"
-            name="codice"
-            value={codice}
-            onChange={(e) => {
-              setCodice(e.target.value);
-              setErroriVisibili(false);
-            }}
-            spellCheck={false}
-            autoCapitalize="none"
-            placeholder="Es. ABC123 (facoltativo)"
-            className={`${inputCls} font-mono text-sm`}
-          />
-        </Campo>
-
-        <Campo label="Descrizione" htmlFor="descrizione">
-          <textarea
-            id="descrizione"
-            name="descrizione"
-            value={descrizione}
-            onChange={(e) => setDescrizione(e.target.value)}
-            rows={4}
-            className="min-h-24 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
-          />
-        </Campo>
-
-        <Campo label="Categoria" htmlFor="categoria_id">
-          <div className="relative">
-            <select
-              id="categoria_id"
-              name="categoria_id"
-              value={categoriaId}
-              onChange={(e) => setCategoriaId(e.target.value)}
-              className={`${inputCls} appearance-none pr-9`}
-            >
-              <option value="">Nessuna categoria</option>
-              {categorieRaggruppate.map(({ radice, figli }) =>
-                figli.length === 0 ? (
-                  <option key={radice.id} value={radice.id}>
-                    {radice.nome}
-                  </option>
-                ) : (
-                  <optgroup key={radice.id} label={radice.nome}>
-                    <option value={radice.id}>{radice.nome} (tutto)</option>
-                    {figli.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.nome}
-                      </option>
-                    ))}
-                  </optgroup>
-                ),
-              )}
-            </select>
-            <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-                aria-hidden="true"
-              >
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </span>
-          </div>
-        </Campo>
-
-        <Campo
-          label="Prezzo"
-          htmlFor="prezzo"
-          errore={errori.prezzo}
-          hint={
-            prezzoCents !== null && prezzoCents > 0
-              ? `= ${formatPrezzo(prezzoCents)}`
-              : "Es. 29,99"
-          }
-        >
-          <div className="relative">
+      {/* A lg: due colonne — contenuti a sinistra, rail sticky a destra. */}
+      <div className="pb-28 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8">
+        <div className="flex flex-col gap-5">
+          <Campo label="Nome" htmlFor="nome" errore={errori.nome}>
             <input
-              id="prezzo"
-              value={prezzoInput}
+              id="nome"
+              name="nome"
+              value={nome}
+              onChange={(e) => onNome(e.target.value)}
+              required
+              className={inputCls}
+            />
+          </Campo>
+
+          <Campo
+            label="Slug (indirizzo)"
+            htmlFor="slug"
+            errore={errori.slug}
+            hint={`Indirizzo pubblico: /prodotti/${slug || "…"}`}
+          >
+            <input
+              id="slug"
+              name="slug"
+              value={slug}
               onChange={(e) => {
-                setPrezzoInput(e.target.value);
+                setSlug(e.target.value);
+                setSlugDirty(true);
                 setErroriVisibili(false);
               }}
-              inputMode="decimal"
-              placeholder="0,00"
-              className={`${inputCls} pr-9`}
+              required
+              spellCheck={false}
+              autoCapitalize="none"
+              className={`${inputCls} font-mono text-sm`}
             />
-            <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
-              €
-            </span>
-          </div>
-        </Campo>
+          </Campo>
 
-        <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 shadow-soft ring-1 ring-line">
-          <div className="pr-4">
-            <p className="font-display text-sm font-bold text-foreground">
-              In vendita
-            </p>
-            <p className="text-xs text-muted">
-              Se disattivo, il prodotto non compare in vetrina.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={attivo}
-            aria-label="In vendita"
-            onClick={() => setAttivo((a) => !a)}
-            className={[
-              "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
-              attivo ? "bg-sea" : "bg-line",
-            ].join(" ")}
+          <Campo
+            label="Codice (SKU)"
+            htmlFor="codice"
+            errore={errori.codice}
+            hint={
+              !codice.trim()
+                ? "Facoltativo. Vuoto = lo SKU usa lo slug. Es. ABC123"
+                : skuBase
+                  ? `SKU varianti: ${skuBase}-colore-taglia`
+                  : "Codice non valido: usa lettere o numeri."
+            }
           >
-            <span
-              className={[
-                "inline-block h-5 w-5 transform rounded-full bg-white shadow-soft transition-transform",
-                attivo ? "translate-x-6" : "translate-x-1",
-              ].join(" ")}
+            <input
+              id="codice"
+              name="codice"
+              value={codice}
+              onChange={(e) => {
+                setCodice(e.target.value);
+                setErroriVisibili(false);
+              }}
+              spellCheck={false}
+              autoCapitalize="none"
+              placeholder="Es. ABC123 (facoltativo)"
+              className={`${inputCls} font-mono text-sm`}
             />
-          </button>
-        </div>
+          </Campo>
 
-        <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 shadow-soft ring-1 ring-line">
-          <div className="pr-4">
-            <p className="font-display text-sm font-bold text-foreground">
-              Scrivici per la disponibilità
-            </p>
-            <p className="text-xs text-muted">
-              Il cliente sceglie colore e taglia e ti contatta: nessun pagamento
-              online e nessun conteggio del magazzino.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={suRichiesta}
-            aria-label="Scrivici per la disponibilità"
-            onClick={() => setSuRichiesta((v) => !v)}
-            className={[
-              "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
-              suRichiesta ? "bg-sea" : "bg-line",
-            ].join(" ")}
-          >
-            <span
-              className={[
-                "inline-block h-5 w-5 transform rounded-full bg-white shadow-soft transition-transform",
-                suRichiesta ? "translate-x-6" : "translate-x-1",
-              ].join(" ")}
+          <Campo label="Descrizione" htmlFor="descrizione">
+            <textarea
+              id="descrizione"
+              name="descrizione"
+              value={descrizione}
+              onChange={(e) => setDescrizione(e.target.value)}
+              rows={4}
+              className="min-h-24 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none transition-shadow lg:min-h-40"
             />
-          </button>
-        </div>
+          </Campo>
 
-        {/* Varianti: solo in modifica (in creazione il prodotto non ha ancora
-            un id a cui agganciarle; si aggiungono dopo il primo salvataggio). */}
-        {modifica && (
-          <EditorVarianti
-            colori={colori}
-            taglie={taglie}
-            nCombo={combos.length}
-            onToggleColore={toggleColore}
-            onToggleTaglia={toggleTaglia}
-            onSetTaglie={(t) => setTaglie(ordinaTaglie(t))}
-            suRichiesta={suRichiesta}
+          {/* Il name vive SOLO su questa istanza (sempre nel DOM anche quando
+              nascosta a lg): il FormData non deve avere campi doppi. */}
+          <CampoCategoria
+            id="categoria_id"
+            name="categoria_id"
+            className="lg:hidden"
+            value={categoriaId}
+            onChange={setCategoriaId}
+            gruppi={categorieRaggruppate}
           />
-        )}
 
-        {stato.errors?.generale && (
-          <p
-            role="alert"
-            className="rounded-2xl bg-coral/10 px-4 py-3 text-sm font-bold text-coral-ink"
+          <Campo
+            label="Prezzo"
+            htmlFor="prezzo"
+            errore={errori.prezzo}
+            hint={
+              prezzoCents !== null && prezzoCents > 0
+                ? `= ${formatPrezzo(prezzoCents)}`
+                : "Es. 29,99"
+            }
           >
-            {stato.errors.generale}
-          </p>
-        )}
-        {stato.ok && stato.message && (
-          <p
-            role="status"
-            className="rounded-2xl bg-surface-2 px-4 py-3 text-sm font-bold text-sea"
-          >
-            {stato.message}
-            {stato.avviso ? ` ${stato.avviso}` : ""}
-          </p>
-        )}
+            <div className="relative">
+              <input
+                id="prezzo"
+                value={prezzoInput}
+                onChange={(e) => {
+                  setPrezzoInput(e.target.value);
+                  setErroriVisibili(false);
+                }}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={`${inputCls} pr-9`}
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
+                €
+              </span>
+            </div>
+          </Campo>
+
+          <CardToggle
+            className="lg:hidden"
+            titolo="In vendita"
+            descrizione="Se disattivo, il prodotto non compare in vetrina."
+            acceso={attivo}
+            onToggle={() => setAttivo((a) => !a)}
+          />
+
+          <CardToggle
+            className="lg:hidden"
+            titolo="Scrivici per la disponibilità"
+            descrizione="Il cliente sceglie colore e taglia e ti contatta: nessun pagamento online e nessun conteggio del magazzino."
+            acceso={suRichiesta}
+            onToggle={() => setSuRichiesta((v) => !v)}
+          />
+
+          {/* Varianti: solo in modifica (in creazione il prodotto non ha ancora
+              un id a cui agganciarle; si aggiungono dopo il primo salvataggio). */}
+          {modifica && (
+            <EditorVarianti
+              colori={colori}
+              taglie={taglie}
+              nCombo={combos.length}
+              onToggleColore={toggleColore}
+              onToggleTaglia={toggleTaglia}
+              onSetTaglie={(t) => setTaglie(ordinaTaglie(t))}
+              suRichiesta={suRichiesta}
+            />
+          )}
+
+          {stato.errors?.generale && (
+            <p
+              role="alert"
+              className="rounded-2xl bg-coral/10 px-4 py-3 text-sm font-bold text-coral-ink"
+            >
+              {stato.errors.generale}
+            </p>
+          )}
+          {stato.ok && stato.message && (
+            <p
+              role="status"
+              className="rounded-2xl bg-surface-2 px-4 py-3 text-sm font-bold text-sea"
+            >
+              {stato.message}
+              {stato.avviso ? ` ${stato.avviso}` : ""}
+            </p>
+          )}
+        </div>
+
+        {/* Rail destro (solo lg): categoria e stato, come nei pannelli
+            e-commerce. Duplicati dei campi mobile, stesso stato React. */}
+        <div className="hidden lg:sticky lg:top-8 lg:flex lg:flex-col lg:gap-5">
+          <CampoCategoria
+            id="categoria_id_desktop"
+            value={categoriaId}
+            onChange={setCategoriaId}
+            gruppi={categorieRaggruppate}
+          />
+          <CardToggle
+            titolo="In vendita"
+            descrizione="Se disattivo, il prodotto non compare in vetrina."
+            acceso={attivo}
+            onToggle={() => setAttivo((a) => !a)}
+          />
+          <CardToggle
+            titolo="Scrivici per la disponibilità"
+            descrizione="Il cliente sceglie colore e taglia e ti contatta: nessun pagamento online e nessun conteggio del magazzino."
+            acceso={suRichiesta}
+            onToggle={() => setSuRichiesta((v) => !v)}
+          />
+        </div>
       </div>
 
       {/* Save-bar sticky in basso */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur md:left-60">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-3 lg:max-w-5xl">
           <Link
             href="/gestore/prodotti"
             className="flex h-12 items-center rounded-full px-4 font-display text-sm font-bold text-muted transition-colors hover:text-foreground"
@@ -579,6 +532,122 @@ function Campo({
       ) : hint ? (
         <p className="text-xs text-muted">{hint}</p>
       ) : null}
+    </div>
+  );
+}
+
+/** Campo Categoria (select gerarchico). Reso due volte, mobile e rail lg. */
+function CampoCategoria({
+  id,
+  name,
+  className,
+  value,
+  onChange,
+  gruppi,
+}: {
+  id: string;
+  name?: string;
+  className?: string;
+  value: string;
+  onChange: (v: string) => void;
+  gruppi: { radice: Categoria; figli: Categoria[] }[];
+}) {
+  return (
+    <div className={className}>
+      <Campo label="Categoria" htmlFor={id}>
+        <div className="relative">
+          <select
+            id={id}
+            name={name}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className={`${inputCls} appearance-none pr-9`}
+          >
+            <option value="">Nessuna categoria</option>
+            {gruppi.map(({ radice, figli }) =>
+              figli.length === 0 ? (
+                <option key={radice.id} value={radice.id}>
+                  {radice.nome}
+                </option>
+              ) : (
+                <optgroup key={radice.id} label={radice.nome}>
+                  <option value={radice.id}>{radice.nome} (tutto)</option>
+                  {figli.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </optgroup>
+              ),
+            )}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
+        </div>
+      </Campo>
+    </div>
+  );
+}
+
+/** Card con interruttore (In vendita / Scrivici). Resa due volte, mobile e rail. */
+function CardToggle({
+  titolo,
+  descrizione,
+  acceso,
+  onToggle,
+  className,
+}: {
+  titolo: string;
+  descrizione: string;
+  acceso: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={[
+        "flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 shadow-soft ring-1 ring-line",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="pr-4">
+        <p className="font-display text-sm font-bold text-foreground">
+          {titolo}
+        </p>
+        <p className="text-xs text-muted">{descrizione}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={acceso}
+        aria-label={titolo}
+        onClick={onToggle}
+        className={[
+          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
+          acceso ? "bg-sea" : "bg-line",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "inline-block h-5 w-5 transform rounded-full bg-white shadow-soft transition-transform",
+            acceso ? "translate-x-6" : "translate-x-1",
+          ].join(" ")}
+        />
+      </button>
     </div>
   );
 }

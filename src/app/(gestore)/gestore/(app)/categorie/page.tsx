@@ -25,7 +25,7 @@ export default async function CategoriePage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl pb-24">
+    <div className="mx-auto max-w-xl pb-24 lg:max-w-4xl">
       <h1 className="mb-1 text-xl font-semibold text-foreground">Categorie</h1>
       <p className="mb-6 text-sm text-muted">
         Organizza il catalogo: categorie principali e sottocategorie (2 livelli).

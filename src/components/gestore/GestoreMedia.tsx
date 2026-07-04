@@ -97,7 +97,7 @@ export default function GestoreMedia({
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 md:px-8">
+    <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 lg:max-w-6xl">
       <header className="mb-6">
         <h1 className="font-display text-2xl font-extrabold text-foreground">
           Media
@@ -140,7 +140,7 @@ export default function GestoreMedia({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {g.foto.map((f) => (
                 <div
                   key={f.id}

@@ -144,13 +144,15 @@ export default function GestoreCategorie({
 
   return (
     <div>
+      {/* A lg l'input non si stira a tutta larghezza (lg:w-80): il form resta
+          in flusso, compatto sotto l'header. */}
       <form onSubmit={creaRadice} className="mb-6 flex items-center gap-2">
         <input
           value={nuovaRadice}
           onChange={(e) => setNuovaRadice(e.target.value)}
           placeholder="Nuova categoria principale (es. Bambino)"
           disabled={occupato}
-          className={inputCls}
+          className={`${inputCls} lg:w-80`}
         />
         <button
           type="submit"
@@ -338,6 +340,32 @@ function RigaCategoria({
     else setBozza(categoria.nome);
   }
 
+  // Stesso elemento riusato in due punti: riga compatta (solo lg) e seconda
+  // riga (solo sotto lg); ne e visibile sempre uno solo.
+  const selectSposta = (
+    <select
+      value={categoria.parent_id ?? ""}
+      onChange={(e) => onSposta(categoria.id, e.target.value || null)}
+      disabled={spostaDisabilitato}
+      aria-label={`Sposta ${categoria.nome} sotto una categoria principale`}
+      title={
+        isRadice && haFigli
+          ? "Sposta o promuovi prima le sottocategorie"
+          : "Sposta sotto una categoria principale"
+      }
+      className="h-9 max-w-[9rem] rounded-lg bg-white px-2 text-xs font-semibold text-foreground ring-1 ring-line outline-none disabled:opacity-40"
+    >
+      <option value="">Principale</option>
+      {radici
+        .filter((r) => r.id !== categoria.id)
+        .map((r) => (
+          <option key={r.id} value={r.id}>
+            ↳ {r.nome}
+          </option>
+        ))}
+    </select>
+  );
+
   return (
     <div
       className={[
@@ -372,7 +400,7 @@ function RigaCategoria({
           </svg>
         </button>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 lg:flex lg:items-center lg:gap-2">
           {modifica ? (
             <input
               ref={inputRef}
@@ -396,7 +424,7 @@ function RigaCategoria({
               type="button"
               onClick={apriModifica}
               disabled={occupato}
-              className="block max-w-full truncate rounded-lg px-1 py-1 text-left transition-colors hover:bg-surface disabled:opacity-50"
+              className="block max-w-full truncate rounded-lg px-1 py-1 text-left transition-colors hover:bg-surface disabled:opacity-50 lg:min-w-0"
               title="Tocca per rinominare"
             >
               <span
@@ -409,7 +437,26 @@ function RigaCategoria({
               </span>
             </button>
           )}
+          {/* Riga compatta a lg: i badge affiancano il nome (sotto lg vivono
+              nella seconda riga). */}
+          {conteggioProdotti > 0 && (
+            <span className="hidden flex-none whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold text-sea lg:inline-flex">
+              {conteggioProdotti} {conteggioProdotti === 1 ? "prodotto" : "prodotti"}
+            </span>
+          )}
+          {isRadice && haFigli && (
+            <span className="hidden flex-none whitespace-nowrap rounded-full bg-surface px-2 py-0.5 text-[11px] font-bold text-muted ring-1 ring-line lg:inline-flex">
+              {numFigli} sottocat.
+            </span>
+          )}
         </div>
+
+        <label className="hidden flex-none items-center gap-1.5 lg:flex">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
+            Sposta
+          </span>
+          {selectSposta}
+        </label>
 
         <button
           type="button"
@@ -446,7 +493,7 @@ function RigaCategoria({
         </button>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-8">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-8 lg:hidden">
         {conteggioProdotti > 0 && (
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold text-sea">
             {conteggioProdotti} {conteggioProdotti === 1 ? "prodotto" : "prodotti"}
@@ -461,27 +508,7 @@ function RigaCategoria({
           <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
             Sposta
           </span>
-          <select
-            value={categoria.parent_id ?? ""}
-            onChange={(e) => onSposta(categoria.id, e.target.value || null)}
-            disabled={spostaDisabilitato}
-            aria-label={`Sposta ${categoria.nome} sotto una categoria principale`}
-            title={
-              isRadice && haFigli
-                ? "Sposta o promuovi prima le sottocategorie"
-                : "Sposta sotto una categoria principale"
-            }
-            className="h-9 max-w-[9rem] rounded-lg bg-white px-2 text-xs font-semibold text-foreground ring-1 ring-line outline-none disabled:opacity-40"
-          >
-            <option value="">Principale</option>
-            {radici
-              .filter((r) => r.id !== categoria.id)
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  ↳ {r.nome}
-                </option>
-              ))}
-          </select>
+          {selectSposta}
         </label>
       </div>
     </div>

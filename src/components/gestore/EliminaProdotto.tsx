@@ -42,7 +42,7 @@ export default function EliminaProdotto({
   }
 
   return (
-    <section className="mx-auto mt-10 max-w-xl border-t border-line pt-6">
+    <section className="mx-auto mt-10 max-w-xl border-t border-line pt-6 lg:max-w-5xl">
       <button
         type="button"
         onClick={() => setApri(true)}
