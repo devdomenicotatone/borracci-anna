@@ -180,17 +180,18 @@ export function coloreChiaro(hex: string): boolean {
 }
 
 // ===========================================================================
-// SKU — generato da slug prodotto + colore + taglia (parti vuote saltate).
-//   coreana + Blu + M  -> "coreana-blu-m"
-//   coreana + Blu      -> "coreana-blu"
+// SKU — generato da una base (codice prodotto o, in mancanza, slug) + colore +
+// taglia (parti vuote saltate).
+//   ABC123 + Blu + M  -> "abc123-blu-m"
+//   coreana + Blu     -> "coreana-blu"
 // ===========================================================================
 
 export function skuVariante(
-  slugProdotto: string,
+  base: string,
   colore: string | null | undefined,
   taglia: string | null | undefined,
 ): string {
   return slugify(
-    [slugProdotto, colore ?? "", taglia ?? ""].filter(Boolean).join("-"),
+    [base, colore ?? "", taglia ?? ""].filter(Boolean).join("-"),
   );
 }

@@ -3,7 +3,8 @@
 // Editor varianti per colore × taglia.
 // Il gestore SCEGLIE i colori (palette a campioni) e le taglie (scala S–6XL):
 // la griglia di varianti (colore × taglia) viene generata in automatico, con
-// SKU dedotto da slug+colore+taglia. Il salvataggio fa il diff lato server,
+// SKU dedotto da baseSku (codice prodotto o slug) + colore + taglia. Il
+// salvataggio fa il diff lato server,
 // preservando id e giacenze delle combinazioni gia esistenti.
 // In modalita "Scrivici per la disponibilita" le giacenze non si gestiscono
 // (magazzino non in tempo reale): si configurano solo le opzioni disponibili.
@@ -38,12 +39,12 @@ interface Esistente {
 
 export default function EditorVarianti({
   prodottoId,
-  slugProdotto,
+  baseSku,
   varianti,
   suRichiesta,
 }: {
   prodottoId: string;
-  slugProdotto: string;
+  baseSku: string;
   varianti: VarianteSalvata[];
   suRichiesta: boolean;
 }) {
@@ -98,7 +99,7 @@ export default function EditorVarianti({
         id: ex?.id,
         colore,
         taglia,
-        sku: skuVariante(slugProdotto, colore, taglia),
+        sku: skuVariante(baseSku, colore, taglia),
         stock: ex?.stock ?? 0,
       };
     });

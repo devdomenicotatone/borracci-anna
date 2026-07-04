@@ -28,6 +28,7 @@ export interface Database {
           attivo: boolean;
           disponibilita_su_richiesta: boolean;
           categoria_id: string | null;
+          codice: string | null;
           creato_il: string;
         };
         Insert: {
@@ -41,6 +42,7 @@ export interface Database {
           attivo?: boolean;
           disponibilita_su_richiesta?: boolean;
           categoria_id?: string | null;
+          codice?: string | null;
           creato_il?: string;
         };
         Update: {
@@ -54,6 +56,7 @@ export interface Database {
           attivo?: boolean;
           disponibilita_su_richiesta?: boolean;
           categoria_id?: string | null;
+          codice?: string | null;
           creato_il?: string;
         };
         Relationships: [

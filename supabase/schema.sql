@@ -19,6 +19,9 @@ create extension if not exists pgcrypto;
 create table if not exists public.prodotti (
   id            uuid primary key default gen_random_uuid(),
   slug          text not null unique,
+  -- Codice opzionale (es. "ABC123"): base degli SKU delle varianti al posto
+  -- dello slug. NULL => gli SKU derivano dallo slug. Vedi migration 20260704120000.
+  codice        text,
   nome          text not null,
   descrizione   text,
   prezzo_cents  integer not null check (prezzo_cents >= 0),
@@ -33,6 +36,9 @@ create table if not exists public.prodotti (
 -- Idempotente per i DB gia creati (la create-table sopra non aggiunge colonne).
 alter table public.prodotti
   add column if not exists disponibilita_su_richiesta boolean not null default true;
+alter table public.prodotti
+  add column if not exists codice text;
+create unique index if not exists prodotti_codice_key on public.prodotti (codice);
 
 create index if not exists idx_prodotti_attivo on public.prodotti (attivo);
 

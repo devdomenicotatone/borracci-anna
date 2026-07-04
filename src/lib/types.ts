@@ -18,6 +18,12 @@ export interface Prodotto {
   id: string;
   /** Slug url-friendly, univoco, in italiano (es. "t-shirt-bianca-basic"). */
   slug: string;
+  /**
+   * Codice prodotto opzionale (es. "ABC123"): base degli SKU delle varianti al
+   * posto dello slug. null => gli SKU derivano dallo slug. Vedi migration
+   * 20260704120000.
+   */
+  codice?: string | null;
   nome: string;
   descrizione: string | null;
   /** Prezzo in centesimi di euro (es. 2999 = 29,99 €). */

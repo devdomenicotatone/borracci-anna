@@ -18,6 +18,7 @@ export interface ProdottoForm {
   id: string;
   nome: string;
   slug: string;
+  codice: string | null;
   descrizione: string | null;
   prezzo_cents: number;
   valuta: string;
@@ -45,6 +46,7 @@ export default function FormProdotto({
   const [nome, setNome] = useState(prodotto?.nome ?? "");
   const [slug, setSlug] = useState(prodotto?.slug ?? "");
   const [slugDirty, setSlugDirty] = useState(modifica);
+  const [codice, setCodice] = useState(prodotto?.codice ?? "");
   const [descrizione, setDescrizione] = useState(prodotto?.descrizione ?? "");
   const [categoriaId, setCategoriaId] = useState(prodotto?.categoria_id ?? "");
   const [prezzoInput, setPrezzoInput] = useState(
@@ -90,15 +92,21 @@ export default function FormProdotto({
     if (!slugDirty) setSlug(slugify(v));
   }
 
+  // SKU base delle varianti: dal codice (se valido) o, in mancanza, dallo slug.
+  const skuBase = codice.trim() ? slugify(codice) : "";
+  const codiceValido = codice.trim() === "" || skuBase !== "";
+
   const valido =
     nome.trim() !== "" &&
     /^[a-z0-9-]+$/.test(slug) &&
+    codiceValido &&
     prezzoCents !== null &&
     prezzoCents > 0;
 
   const dirty = modifica
     ? nome !== prodotto.nome ||
       slug !== prodotto.slug ||
+      codice !== (prodotto.codice ?? "") ||
       (descrizione ?? "") !== (prodotto.descrizione ?? "") ||
       categoriaId !== (prodotto.categoria_id ?? "") ||
       prezzoCents !== prodotto.prezzo_cents ||
@@ -149,6 +157,33 @@ export default function FormProdotto({
             required
             spellCheck={false}
             autoCapitalize="none"
+            className={`${inputCls} font-mono text-sm`}
+          />
+        </Campo>
+
+        <Campo
+          label="Codice (SKU)"
+          htmlFor="codice"
+          errore={errori.codice}
+          hint={
+            !codice.trim()
+              ? "Facoltativo. Vuoto = lo SKU usa lo slug. Es. ABC123"
+              : skuBase
+                ? `SKU varianti: ${skuBase}-colore-taglia`
+                : "Codice non valido: usa lettere o numeri."
+          }
+        >
+          <input
+            id="codice"
+            name="codice"
+            value={codice}
+            onChange={(e) => {
+              setCodice(e.target.value);
+              setErroriVisibili(false);
+            }}
+            spellCheck={false}
+            autoCapitalize="none"
+            placeholder="Es. ABC123 (facoltativo)"
             className={`${inputCls} font-mono text-sm`}
           />
         </Campo>

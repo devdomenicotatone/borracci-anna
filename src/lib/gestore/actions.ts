@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { verifySession } from "@/lib/gestore/auth";
+import { slugify } from "@/lib/gestore/slug";
 import type { VarianteInput } from "@/lib/types";
 
 /** Esito generico di un'azione che non redirige. */
@@ -52,6 +53,7 @@ export interface StatoForm {
   errors?: {
     nome?: string;
     slug?: string;
+    codice?: string;
     prezzo?: string;
     generale?: string;
   };
@@ -62,8 +64,14 @@ function mappaErroreProdotto(error: {
   code?: string;
   message: string;
 }): StatoForm {
-  // 23505 = unique_violation: qui puo solo essere lo slug (unico vincolo unique).
+  // 23505 = unique_violation: puo essere lo slug o il codice (i due vincoli
+  // unique su prodotti). Il nome del vincolo nel messaggio distingue quale.
   if (error.code === "23505") {
+    if (error.message.includes("codice")) {
+      return {
+        errors: { codice: "Questo codice e gia in uso da un altro prodotto." },
+      };
+    }
     return { errors: { slug: "Questo slug e gia in uso da un altro prodotto." } };
   }
   // 23503 = foreign_key_violation: categoria_id che non esiste piu (es. categoria
@@ -93,6 +101,7 @@ export async function salvaProdottoAction(
   const id = String(formData.get("id") ?? "").trim();
   const nome = String(formData.get("nome") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim();
+  const codice = String(formData.get("codice") ?? "").trim();
   const descrizione = String(formData.get("descrizione") ?? "").trim();
   const categoriaIdRaw = String(formData.get("categoria_id") ?? "").trim();
   const categoriaId = categoriaIdRaw || null;
@@ -109,6 +118,9 @@ export async function salvaProdottoAction(
   if (!/^[a-z0-9-]+$/.test(slug)) {
     errors.slug = "Solo minuscole, numeri e trattini.";
   }
+  if (codice && slugify(codice) === "") {
+    errors.codice = "Codice non valido: usa lettere o numeri.";
+  }
   if (!Number.isInteger(prezzoCents) || prezzoCents <= 0) {
     errors.prezzo = "Inserisci un prezzo valido maggiore di zero.";
   }
@@ -117,6 +129,7 @@ export async function salvaProdottoAction(
   const valori = {
     nome,
     slug,
+    codice: codice || null,
     descrizione: descrizione || null,
     categoria_id: categoriaId,
     prezzo_cents: prezzoCents,

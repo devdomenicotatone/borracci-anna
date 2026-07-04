@@ -25,7 +25,7 @@ export default async function ModificaProdottoPage({
   const { data } = await supabase
     .from("prodotti")
     .select(
-      "id, nome, slug, descrizione, categoria_id, prezzo_cents, valuta, attivo, disponibilita_su_richiesta, immagine_url",
+      "id, nome, slug, codice, descrizione, categoria_id, prezzo_cents, valuta, attivo, disponibilita_su_richiesta, immagine_url",
     )
     .eq("id", id)
     .maybeSingle();
@@ -61,7 +61,7 @@ export default async function ModificaProdottoPage({
       <FormProdotto prodotto={prodotto} categorie={categorie} />
       <EditorVarianti
         prodottoId={prodotto.id}
-        slugProdotto={prodotto.slug}
+        baseSku={prodotto.codice ?? prodotto.slug}
         varianti={varianti}
         suRichiesta={prodotto.disponibilita_su_richiesta}
       />
