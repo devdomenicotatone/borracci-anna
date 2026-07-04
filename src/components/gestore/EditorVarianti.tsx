@@ -1,171 +1,35 @@
 "use client";
 
-// Editor varianti per colore × taglia.
+// Selettore colori × taglie (presentazionale, controllato dal FormProdotto).
 // Il gestore SCEGLIE i colori (palette a campioni) e le taglie (scala S–6XL):
-// la griglia di varianti (colore × taglia) viene generata in automatico, con
-// SKU dedotto da baseSku (codice prodotto o slug) + colore + taglia. Il
-// salvataggio fa il diff lato server,
-// preservando id e giacenze delle combinazioni gia esistenti.
+// la selezione e tenuta dal componente padre, che genera le varianti
+// (colore × taglia) con SKU dedotto da baseSku (codice prodotto o slug) e le
+// salva INSIEME al resto del prodotto con un unico "Salva modifiche".
 // In modalita "Scrivici per la disponibilita" le giacenze non si gestiscono
 // (magazzino non in tempo reale): si configurano solo le opzioni disponibili.
 
-import { useMemo, useState, useTransition } from "react";
-
-import {
-  salvaVariantiAction,
-  type VarianteSalvata,
-} from "@/lib/gestore/actions";
-import { useToast } from "@/components/gestore/Toaster";
-import ConfermaDialog from "@/components/gestore/ConfermaDialog";
-import {
-  COLORI,
-  TAGLIE,
-  coloreChiaro,
-  coloreHex,
-  ordinaTaglie,
-  skuVariante,
-} from "@/lib/catalogo";
-import type { VarianteInput } from "@/lib/types";
-
-/** Chiave stabile di una combinazione colore|taglia (vuoto = null). */
-function comboKey(colore: string | null, taglia: string | null): string {
-  return `${colore ?? ""}|${taglia ?? ""}`;
-}
-
-interface Esistente {
-  id: string;
-  stock: number;
-}
+import { COLORI, TAGLIE, coloreChiaro, coloreHex } from "@/lib/catalogo";
 
 export default function EditorVarianti({
-  prodottoId,
-  baseSku,
-  varianti,
+  colori,
+  taglie,
+  nCombo,
+  onToggleColore,
+  onToggleTaglia,
+  onSetTaglie,
   suRichiesta,
 }: {
-  prodottoId: string;
-  baseSku: string;
-  varianti: VarianteSalvata[];
+  colori: string[];
+  taglie: string[];
+  /** Numero di varianti che la selezione generera (calcolato dal padre). */
+  nCombo: number;
+  onToggleColore: (nome: string) => void;
+  onToggleTaglia: (t: string) => void;
+  onSetTaglie: (taglie: string[]) => void;
   suRichiesta: boolean;
 }) {
-  const { mostra } = useToast();
-  const [pending, startTransition] = useTransition();
-
-  // Stato selezione, derivato dalle varianti gia a DB.
-  const [colori, setColori] = useState<string[]>(() => [
-    ...new Set(varianti.map((v) => v.colore).filter((c): c is string => !!c)),
-  ]);
-  const [taglie, setTaglie] = useState<string[]>(() =>
-    ordinaTaglie(varianti.map((v) => v.taglia).filter((t): t is string => !!t)),
-  );
-  // combo -> { id, stock } delle varianti gia a DB, per preservarle nel diff.
-  const [esistenti, setEsistenti] = useState<Map<string, Esistente>>(
-    () =>
-      new Map(
-        varianti.map((v) => [
-          comboKey(v.colore, v.taglia),
-          { id: v.id, stock: v.stock },
-        ]),
-      ),
-  );
-  const [confermaApri, setConfermaApri] = useState(false);
-
-  function toggleColore(nome: string) {
-    setColori((cs) =>
-      cs.includes(nome) ? cs.filter((c) => c !== nome) : [...cs, nome],
-    );
-  }
-  function toggleTaglia(t: string) {
-    setTaglie((ts) =>
-      ts.includes(t) ? ts.filter((x) => x !== t) : ordinaTaglie([...ts, t]),
-    );
-  }
-
-  // Combinazioni desiderate. Solo colori -> taglia null; solo taglie -> colore
-  // null; entrambi -> matrice; nessuno -> nessuna variante.
-  const combos = useMemo(() => {
-    if (colori.length === 0 && taglie.length === 0) return [];
-    const cs: (string | null)[] = colori.length ? colori : [null];
-    const ts: (string | null)[] = taglie.length ? taglie : [null];
-    const out: { colore: string | null; taglia: string | null }[] = [];
-    for (const c of cs) for (const t of ts) out.push({ colore: c, taglia: t });
-    return out;
-  }, [colori, taglie]);
-
-  function payload(): VarianteInput[] {
-    return combos.map(({ colore, taglia }) => {
-      const ex = esistenti.get(comboKey(colore, taglia));
-      return {
-        id: ex?.id,
-        colore,
-        taglia,
-        sku: skuVariante(baseSku, colore, taglia),
-        stock: ex?.stock ?? 0,
-      };
-    });
-  }
-
-  // Varianti gia salvate che la nuova selezione NON copre piu -> da eliminare.
-  function idsDaEliminare(): string[] {
-    const tenuti = new Set(
-      combos
-        .map(({ colore, taglia }) => esistenti.get(comboKey(colore, taglia))?.id)
-        .filter((id): id is string => !!id),
-    );
-    return [...esistenti.values()]
-      .map((e) => e.id)
-      .filter((id) => !tenuti.has(id));
-  }
-
-  function salva() {
-    // Eliminare varianti gia salvate e distruttivo (CASCADE carrelli): conferma.
-    if (idsDaEliminare().length > 0) {
-      setConfermaApri(true);
-      return;
-    }
-    eseguiSalva();
-  }
-
-  function eseguiSalva() {
-    setConfermaApri(false);
-    const dati = payload();
-    startTransition(async () => {
-      const esito = await salvaVariantiAction(prodottoId, dati);
-      if (!esito.ok) {
-        mostra(esito.error ?? "Impossibile salvare le varianti.", "errore");
-        return;
-      }
-      if (esito.varianti) {
-        setColori([
-          ...new Set(
-            esito.varianti.map((v) => v.colore).filter((c): c is string => !!c),
-          ),
-        ]);
-        setTaglie(
-          ordinaTaglie(
-            esito.varianti.map((v) => v.taglia).filter((t): t is string => !!t),
-          ),
-        );
-        setEsistenti(
-          new Map(
-            esito.varianti.map((v) => [
-              comboKey(v.colore, v.taglia),
-              { id: v.id, stock: v.stock },
-            ]),
-          ),
-        );
-      }
-      mostra(
-        esito.avviso ? `Varianti salvate. ${esito.avviso}` : "Varianti salvate.",
-        "ok",
-      );
-    });
-  }
-
-  const nCombo = combos.length;
-
   return (
-    <section className="mx-auto mt-8 max-w-xl">
+    <section>
       <div className="mb-3 flex items-center justify-between">
         <div>
           <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
@@ -205,7 +69,7 @@ export default function EditorVarianti({
                 key={c.nome}
                 type="button"
                 aria-pressed={sel}
-                onClick={() => toggleColore(c.nome)}
+                onClick={() => onToggleColore(c.nome)}
                 className={[
                   "inline-flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3 font-display text-sm font-bold transition-all",
                   sel
@@ -245,9 +109,7 @@ export default function EditorVarianti({
           {colori
             .filter(
               (c) =>
-                !COLORI.some(
-                  (p) => p.nome.toLowerCase() === c.toLowerCase(),
-                ),
+                !COLORI.some((p) => p.nome.toLowerCase() === c.toLowerCase()),
             )
             .map((c) => {
               const hex = coloreHex(c);
@@ -256,7 +118,7 @@ export default function EditorVarianti({
                   key={`extra-${c}`}
                   type="button"
                   aria-pressed={true}
-                  onClick={() => toggleColore(c)}
+                  onClick={() => onToggleColore(c)}
                   title={`${c} (fuori palette)`}
                   className="inline-flex items-center gap-2 rounded-full bg-sea py-1.5 pl-1.5 pr-3 font-display text-sm font-bold text-white shadow-sea transition-all"
                 >
@@ -296,14 +158,14 @@ export default function EditorVarianti({
           <div className="flex gap-3 text-xs font-bold">
             <button
               type="button"
-              onClick={() => setTaglie([...TAGLIE])}
+              onClick={() => onSetTaglie([...TAGLIE])}
               className="text-sea transition-colors hover:text-lagoon"
             >
               Tutte
             </button>
             <button
               type="button"
-              onClick={() => setTaglie([])}
+              onClick={() => onSetTaglie([])}
               className="text-muted transition-colors hover:text-foreground"
             >
               Nessuna
@@ -318,7 +180,7 @@ export default function EditorVarianti({
                 key={t}
                 type="button"
                 aria-pressed={sel}
-                onClick={() => toggleTaglia(t)}
+                onClick={() => onToggleTaglia(t)}
                 className={[
                   "h-11 min-w-[3rem] rounded-xl px-3 font-display text-sm font-bold transition-all",
                   sel
@@ -337,7 +199,7 @@ export default function EditorVarianti({
         </p>
       </fieldset>
 
-      {/* Riepilogo + salva ------------------------------------------------- */}
+      {/* Riepilogo --------------------------------------------------------- */}
       <div className="mt-3 rounded-2xl bg-surface px-4 py-3 text-sm text-muted ring-1 ring-line">
         {nCombo === 0 ? (
           "Nessuna variante: scegli almeno un colore o una taglia."
@@ -354,27 +216,6 @@ export default function EditorVarianti({
           </>
         )}
       </div>
-
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={salva}
-          disabled={pending}
-          className="flex h-12 items-center justify-center rounded-full bg-sea px-6 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
-        >
-          {pending ? "Salvataggio…" : "Salva varianti"}
-        </button>
-      </div>
-
-      <ConfermaDialog
-        aperto={confermaApri}
-        titolo="Aggiornare le varianti?"
-        messaggio={`${idsDaEliminare().length} variante/i non piu coperta/e dalla selezione verra/nno eliminata/e. Se sono in carrelli di clienti, quelle righe verranno svuotate.`}
-        etichettaConferma="Salva"
-        inCorso={pending}
-        onConferma={eseguiSalva}
-        onAnnulla={() => setConfermaApri(false)}
-      />
     </section>
   );
 }

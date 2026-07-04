@@ -50,6 +50,8 @@ export async function toggleAttivoAction(
 export interface StatoForm {
   ok?: boolean;
   message?: string;
+  /** Avviso non bloccante (es. righe di carrello svuotate da una CASCADE). */
+  avviso?: string;
   errors?: {
     nome?: string;
     slug?: string;
@@ -113,6 +115,18 @@ export async function salvaProdottoAction(
   const disponibilitaSuRichiesta =
     formData.get("disponibilita_su_richiesta") === "true";
 
+  // Varianti serializzate dal form (JSON). Presenti solo in modifica: in
+  // creazione il prodotto non ha ancora un id a cui agganciarle.
+  let variantiInput: VarianteInput[] | null = null;
+  const variantiRaw = formData.get("varianti");
+  if (typeof variantiRaw === "string" && variantiRaw.trim()) {
+    try {
+      variantiInput = JSON.parse(variantiRaw) as VarianteInput[];
+    } catch {
+      return { errors: { generale: "Dati varianti non validi." } };
+    }
+  }
+
   const errors: NonNullable<StatoForm["errors"]> = {};
   if (!nome) errors.nome = "Il nome e obbligatorio.";
   if (!/^[a-z0-9-]+$/.test(slug)) {
@@ -138,6 +152,7 @@ export async function salvaProdottoAction(
   };
 
   let nuovoId = id;
+  let avviso: string | undefined;
   try {
     if (id) {
       const { error } = await sessione.supabase
@@ -154,11 +169,23 @@ export async function salvaProdottoAction(
       if (error) return mappaErroreProdotto(error);
       nuovoId = data.id;
     }
+    // Varianti applicate nello stesso salvataggio (solo in modifica). Il diff
+    // preserva id/giacenze; un conflitto SKU non tocca i dati gia salvati.
+    if (id && variantiInput) {
+      const esito = await applicaVarianti(
+        sessione.supabase,
+        id,
+        variantiInput,
+      );
+      if (!esito.ok) return { errors: { generale: esito.error } };
+      avviso = esito.avviso;
+    }
   } catch {
     return { errors: { generale: "Errore di rete. Riprova." } };
   }
 
   revalidatePath("/gestore/prodotti");
+  revalidatePath(`/gestore/prodotti/${nuovoId}`);
   revalidatePath("/");
   // PDP pubblica: rotta dinamica -> pattern + tipo 'page' (non la URL letterale).
   revalidatePath("/prodotti/[slug]", "page");
@@ -166,7 +193,7 @@ export async function salvaProdottoAction(
   // In creazione si va alla pagina di modifica (per foto/varianti).
   // redirect() lancia NEXT_REDIRECT: deve stare fuori dal try/catch.
   if (!id) redirect(`/gestore/prodotti/${nuovoId}`);
-  return { ok: true, message: "Modifiche salvate." };
+  return { ok: true, message: "Modifiche salvate.", avviso };
 }
 
 /** Una variante come persistita a DB (ritornata dopo il salvataggio). */
@@ -194,20 +221,22 @@ function mappaErroreSku(error: { code?: string; message: string }): string {
 }
 
 /**
- * Salva le varianti di un prodotto facendo il diff con lo stato a DB:
- * insert delle nuove, update delle esistenti, delete di quelle rimosse.
- * NON e atomico (il client JS non ha transazioni multi-statement): in caso di
- * errore interrompe e ritorna lo stato; il client poi riallinea col refetch.
- * Avvisa se l'eliminazione di una variante svuota righe di carrello (CASCADE).
+ * Applica il diff delle varianti di un prodotto (insert nuove, update esistenti,
+ * delete rimosse) preservando id e giacenze. Update e insert PRIMA delle delete:
+ * un conflitto SKU (23505) interrompe prima di qualunque delete distruttiva
+ * (CASCADE sui carrelli), evitando perdite silenziose. NON e atomico (il client
+ * JS non ha transazioni multi-statement). Ritorna lo stato canonico + un
+ * eventuale avviso (righe di carrello svuotate). Riusato da `salvaProdottoAction`
+ * (salvataggio unico) e da `salvaVariantiAction`.
  */
-export async function salvaVariantiAction(
+async function applicaVarianti(
+  supabase: SupabaseClient,
   prodottoId: string,
   righe: VarianteInput[],
-): Promise<EsitoVarianti> {
-  const sessione = await verifySession();
-  if (!sessione) return { ok: false, error: "Non autorizzato." };
-  const { supabase } = sessione;
-
+): Promise<
+  | { ok: true; avviso?: string; varianti: VarianteSalvata[] }
+  | { ok: false; error: string }
+> {
   // Validazione.
   for (const r of righe) {
     if (!r.sku || !r.sku.trim()) {
@@ -222,82 +251,96 @@ export async function salvaVariantiAction(
     return { ok: false, error: "Ci sono SKU duplicati tra le varianti." };
   }
 
-  try {
-    const { data: attuali, error: errLeggi } = await supabase
+  const { data: attuali, error: errLeggi } = await supabase
+    .from("varianti")
+    .select("id")
+    .eq("prodotto_id", prodottoId);
+  if (errLeggi) return { ok: false, error: errLeggi.message };
+
+  const idsAttuali = new Set((attuali ?? []).map((v) => v.id as string));
+  const idsForm = new Set(righe.filter((r) => r.id).map((r) => r.id as string));
+  const daEliminare = [...idsAttuali].filter((id) => !idsForm.has(id));
+
+  // Prima update e insert: un conflitto SKU (23505) interrompe QUI, prima di
+  // qualunque delete distruttiva (CASCADE sui carrelli), evitando perdite
+  // silenziose. `.eq("prodotto_id")` confina l'update al prodotto in editing.
+  for (const r of righe.filter((x) => x.id)) {
+    const { error } = await supabase
       .from("varianti")
-      .select("id")
-      .eq("prodotto_id", prodottoId);
-    if (errLeggi) return { ok: false, error: errLeggi.message };
-
-    const idsAttuali = new Set((attuali ?? []).map((v) => v.id as string));
-    const idsForm = new Set(
-      righe.filter((r) => r.id).map((r) => r.id as string),
-    );
-    const daEliminare = [...idsAttuali].filter((id) => !idsForm.has(id));
-
-    // Prima update e insert: un conflitto SKU (23505) interrompe QUI, prima di
-    // qualunque delete distruttiva (CASCADE sui carrelli), evitando perdite
-    // silenziose. `.eq("prodotto_id")` confina l'update al prodotto in editing.
-    for (const r of righe.filter((x) => x.id)) {
-      const { error } = await supabase
-        .from("varianti")
-        .update({
-          taglia: r.taglia,
-          colore: r.colore,
-          sku: r.sku.trim(),
-          stock: r.stock,
-        })
-        .eq("id", r.id as string)
-        .eq("prodotto_id", prodottoId);
-      if (error) return { ok: false, error: mappaErroreSku(error) };
-    }
-
-    const nuove = righe
-      .filter((x) => !x.id)
-      .map((r) => ({
-        prodotto_id: prodottoId,
+      .update({
         taglia: r.taglia,
         colore: r.colore,
         sku: r.sku.trim(),
         stock: r.stock,
-      }));
-    if (nuove.length > 0) {
-      const { error } = await supabase.from("varianti").insert(nuove);
-      if (error) return { ok: false, error: mappaErroreSku(error) };
-    }
+      })
+      .eq("id", r.id as string)
+      .eq("prodotto_id", prodottoId);
+    if (error) return { ok: false, error: mappaErroreSku(error) };
+  }
 
-    // Solo ora le delete (irreversibili: CASCADE su carrello_righe).
-    let avviso: string | undefined;
-    if (daEliminare.length > 0) {
-      const { count } = await supabase
-        .from("carrello_righe")
-        .select("id", { count: "exact", head: true })
-        .in("variante_id", daEliminare);
-      if ((count ?? 0) > 0) {
-        avviso = `${count} riga/he di carrello clienti rimossa/e con le varianti eliminate.`;
-      }
-      const { error: errDel } = await supabase
-        .from("varianti")
-        .delete()
-        .in("id", daEliminare);
-      if (errDel) return { ok: false, error: errDel.message };
-    }
+  const nuove = righe
+    .filter((x) => !x.id)
+    .map((r) => ({
+      prodotto_id: prodottoId,
+      taglia: r.taglia,
+      colore: r.colore,
+      sku: r.sku.trim(),
+      stock: r.stock,
+    }));
+  if (nuove.length > 0) {
+    const { error } = await supabase.from("varianti").insert(nuove);
+    if (error) return { ok: false, error: mappaErroreSku(error) };
+  }
 
-    const { data: finali } = await supabase
+  // Solo ora le delete (irreversibili: CASCADE su carrello_righe).
+  let avviso: string | undefined;
+  if (daEliminare.length > 0) {
+    const { count } = await supabase
+      .from("carrello_righe")
+      .select("id", { count: "exact", head: true })
+      .in("variante_id", daEliminare);
+    if ((count ?? 0) > 0) {
+      avviso = `${count} riga/he di carrello clienti rimossa/e con le varianti eliminate.`;
+    }
+    const { error: errDel } = await supabase
       .from("varianti")
-      .select("id, taglia, colore, sku, stock")
-      .eq("prodotto_id", prodottoId)
-      .order("creato_il", { ascending: true });
+      .delete()
+      .in("id", daEliminare);
+    if (errDel) return { ok: false, error: errDel.message };
+  }
+
+  const { data: finali } = await supabase
+    .from("varianti")
+    .select("id, taglia, colore, sku, stock")
+    .eq("prodotto_id", prodottoId)
+    .order("creato_il", { ascending: true });
+
+  return {
+    ok: true,
+    avviso,
+    varianti: (finali as VarianteSalvata[] | null) ?? [],
+  };
+}
+
+/**
+ * Salva SOLO le varianti (usata da flussi che non passano dal form prodotto).
+ * Il form di modifica prodotto le salva insieme al resto (salvaProdottoAction).
+ */
+export async function salvaVariantiAction(
+  prodottoId: string,
+  righe: VarianteInput[],
+): Promise<EsitoVarianti> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+
+  try {
+    const esito = await applicaVarianti(sessione.supabase, prodottoId, righe);
+    if (!esito.ok) return { ok: false, error: esito.error };
 
     revalidatePath("/gestore/prodotti");
     revalidatePath(`/gestore/prodotti/${prodottoId}`);
     revalidatePath("/");
-
-    return {
-      ok: true,
-      avviso,
-      varianti: (finali as VarianteSalvata[] | null) ?? [],
-    };
+    return { ok: true, avviso: esito.avviso, varianti: esito.varianti };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
   }

@@ -1,18 +1,34 @@
 "use client";
 
-// Form di creazione/modifica prodotto.
+// Form di creazione/modifica prodotto — UN SOLO salvataggio.
 // - slug auto-generato dal nome finche l'utente non lo tocca;
+// - "Codice (SKU)" opzionale: base degli SKU delle varianti (o lo slug);
+// - le varianti (colori × taglie) si scelgono qui e si applicano SOLO al
+//   "Salva modifiche", insieme ai campi prodotto (niente doppio salvataggio);
 // - prezzo inserito in euro, convertito in centesimi (hidden) con anteprima;
 // - dirty-tracking: "Salva" disabilitato senza modifiche valide;
 // - save-bar sticky in basso (sopra la safe-area su mobile).
 
-import { useActionState, useMemo, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 
-import { salvaProdottoAction, type StatoForm } from "@/lib/gestore/actions";
+import {
+  salvaProdottoAction,
+  type StatoForm,
+  type VarianteSalvata,
+} from "@/lib/gestore/actions";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import { slugify } from "@/lib/gestore/slug";
-import type { Categoria } from "@/lib/types";
+import { ordinaTaglie, skuVariante } from "@/lib/catalogo";
+import ConfermaDialog from "@/components/gestore/ConfermaDialog";
+import EditorVarianti from "@/components/gestore/EditorVarianti";
+import type { Categoria, VarianteInput } from "@/lib/types";
 
 export interface ProdottoForm {
   id: string;
@@ -27,15 +43,27 @@ export interface ProdottoForm {
   disponibilita_su_richiesta: boolean;
 }
 
+/** Chiave stabile di una combinazione colore|taglia (vuoto = null). */
+function comboKey(colore: string | null, taglia: string | null): string {
+  return `${colore ?? ""}|${taglia ?? ""}`;
+}
+
+/** Uguaglianza tra due insiemi di stringhe (ordine irrilevante). */
+function stessoSet(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
 const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 export default function FormProdotto({
   prodotto,
   categorie = [],
+  variantiIniziali = [],
 }: {
   prodotto?: ProdottoForm;
   categorie?: Categoria[];
+  variantiIniziali?: VarianteSalvata[];
 }) {
   const modifica = !!prodotto;
   const [stato, formAction, pending] = useActionState<StatoForm, FormData>(
@@ -56,6 +84,20 @@ export default function FormProdotto({
   const [suRichiesta, setSuRichiesta] = useState(
     prodotto?.disponibilita_su_richiesta ?? true,
   );
+
+  // ----- Varianti (colori × taglie): selezione tenuta qui, applicata al save.
+  const [colori, setColori] = useState<string[]>(() => [
+    ...new Set(
+      variantiIniziali.map((v) => v.colore).filter((c): c is string => !!c),
+    ),
+  ]);
+  const [taglie, setTaglie] = useState<string[]>(() =>
+    ordinaTaglie(
+      variantiIniziali.map((v) => v.taglia).filter((t): t is string => !!t),
+    ),
+  );
+  const [confermaApri, setConfermaApri] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Gli errori per-campo del server scompaiono appena l'utente ricomincia a
   // modificare (evita messaggi "fantasma" su un valore gia cambiato); tornano
@@ -92,9 +134,73 @@ export default function FormProdotto({
     if (!slugDirty) setSlug(slugify(v));
   }
 
+  function toggleColore(nome: string) {
+    setColori((cs) =>
+      cs.includes(nome) ? cs.filter((c) => c !== nome) : [...cs, nome],
+    );
+  }
+  function toggleTaglia(t: string) {
+    setTaglie((ts) =>
+      ts.includes(t) ? ts.filter((x) => x !== t) : ordinaTaglie([...ts, t]),
+    );
+  }
+
   // SKU base delle varianti: dal codice (se valido) o, in mancanza, dallo slug.
   const skuBase = codice.trim() ? slugify(codice) : "";
   const codiceValido = codice.trim() === "" || skuBase !== "";
+  const baseSku = codice.trim() || slug;
+
+  // Combinazioni desiderate. Solo colori -> taglia null; solo taglie -> colore
+  // null; entrambi -> matrice; nessuno -> nessuna variante.
+  const combos = useMemo(() => {
+    if (colori.length === 0 && taglie.length === 0) return [];
+    const cs: (string | null)[] = colori.length ? colori : [null];
+    const ts: (string | null)[] = taglie.length ? taglie : [null];
+    const out: { colore: string | null; taglia: string | null }[] = [];
+    for (const c of cs) for (const t of ts) out.push({ colore: c, taglia: t });
+    return out;
+  }, [colori, taglie]);
+
+  // combo -> { id, stock } delle varianti gia a DB, per preservarle nel diff.
+  const esistenti = useMemo(
+    () =>
+      new Map(
+        variantiIniziali.map((v) => [
+          comboKey(v.colore, v.taglia),
+          { id: v.id, stock: v.stock },
+        ]),
+      ),
+    [variantiIniziali],
+  );
+
+  // Payload varianti serializzato nel form (letto dalla server action).
+  const variantiPayload = useMemo<VarianteInput[]>(
+    () =>
+      combos.map(({ colore, taglia }) => {
+        const ex = esistenti.get(comboKey(colore, taglia));
+        return {
+          id: ex?.id,
+          colore,
+          taglia,
+          sku: skuVariante(baseSku, colore, taglia),
+          stock: ex?.stock ?? 0,
+        };
+      }),
+    [combos, esistenti, baseSku],
+  );
+
+  // Varianti gia salvate che la nuova selezione NON copre piu -> da eliminare
+  // (distruttivo: CASCADE sui carrelli -> conferma prima del salvataggio).
+  const idsDaEliminare = useMemo(() => {
+    const tenuti = new Set(
+      combos
+        .map(({ colore, taglia }) => esistenti.get(comboKey(colore, taglia))?.id)
+        .filter((id): id is string => !!id),
+    );
+    return [...esistenti.values()]
+      .map((e) => e.id)
+      .filter((id) => !tenuti.has(id));
+  }, [combos, esistenti]);
 
   const valido =
     nome.trim() !== "" &&
@@ -102,6 +208,19 @@ export default function FormProdotto({
     codiceValido &&
     prezzoCents !== null &&
     prezzoCents > 0;
+
+  // Baseline varianti (dai dati a DB) per il dirty-tracking.
+  const variantiCambiate = useMemo(() => {
+    const colBase = [
+      ...new Set(
+        variantiIniziali.map((v) => v.colore).filter((c): c is string => !!c),
+      ),
+    ];
+    const tagBase = ordinaTaglie(
+      variantiIniziali.map((v) => v.taglia).filter((t): t is string => !!t),
+    );
+    return !stessoSet(colori, colBase) || !stessoSet(taglie, tagBase);
+  }, [variantiIniziali, colori, taglie]);
 
   const dirty = modifica
     ? nome !== prodotto.nome ||
@@ -111,13 +230,39 @@ export default function FormProdotto({
       categoriaId !== (prodotto.categoria_id ?? "") ||
       prezzoCents !== prodotto.prezzo_cents ||
       attivo !== prodotto.attivo ||
-      suRichiesta !== prodotto.disponibilita_su_richiesta
+      suRichiesta !== prodotto.disponibilita_su_richiesta ||
+      variantiCambiate
     : true;
 
   const errori = erroriVisibili ? (stato.errors ?? {}) : {};
 
+  // Salvataggio unico. Se la selezione elimina varianti gia salvate (potenziale
+  // svuotamento di carrelli), chiede conferma; poi invia il form come FormData.
+  function salva() {
+    if (!valido || !dirty || pending) return;
+    if (modifica && idsDaEliminare.length > 0) {
+      setConfermaApri(true);
+      return;
+    }
+    esegui();
+  }
+  function esegui() {
+    setConfermaApri(false);
+    const el = formRef.current;
+    if (!el) return;
+    const fd = new FormData(el);
+    startTransition(() => formAction(fd));
+  }
+
   return (
-    <form action={formAction} className="mx-auto max-w-xl">
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        e.preventDefault();
+        salva();
+      }}
+      className="mx-auto max-w-xl"
+    >
       {modifica && <input type="hidden" name="id" value={prodotto.id} />}
       <input type="hidden" name="prezzo_cents" value={prezzoCents ?? ""} />
       <input type="hidden" name="attivo" value={attivo ? "true" : "false"} />
@@ -126,6 +271,13 @@ export default function FormProdotto({
         name="disponibilita_su_richiesta"
         value={suRichiesta ? "true" : "false"}
       />
+      {modifica && (
+        <input
+          type="hidden"
+          name="varianti"
+          value={JSON.stringify(variantiPayload)}
+        />
+      )}
 
       <div className="flex flex-col gap-5 pb-28">
         <Campo label="Nome" htmlFor="nome" errore={errori.nome}>
@@ -330,6 +482,20 @@ export default function FormProdotto({
           </button>
         </div>
 
+        {/* Varianti: solo in modifica (in creazione il prodotto non ha ancora
+            un id a cui agganciarle; si aggiungono dopo il primo salvataggio). */}
+        {modifica && (
+          <EditorVarianti
+            colori={colori}
+            taglie={taglie}
+            nCombo={combos.length}
+            onToggleColore={toggleColore}
+            onToggleTaglia={toggleTaglia}
+            onSetTaglie={(t) => setTaglie(ordinaTaglie(t))}
+            suRichiesta={suRichiesta}
+          />
+        )}
+
         {stato.errors?.generale && (
           <p
             role="alert"
@@ -344,6 +510,7 @@ export default function FormProdotto({
             className="rounded-2xl bg-surface-2 px-4 py-3 text-sm font-bold text-sea"
           >
             {stato.message}
+            {stato.avviso ? ` ${stato.avviso}` : ""}
           </p>
         )}
       </div>
@@ -358,7 +525,8 @@ export default function FormProdotto({
             Annulla
           </Link>
           <button
-            type="submit"
+            type="button"
+            onClick={salva}
             disabled={!valido || !dirty || pending}
             className="flex h-12 items-center rounded-full bg-sea px-7 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
           >
@@ -370,6 +538,16 @@ export default function FormProdotto({
           </button>
         </div>
       </div>
+
+      <ConfermaDialog
+        aperto={confermaApri}
+        titolo="Salvare le modifiche?"
+        messaggio={`${idsDaEliminare.length} variante/i non più coperta/e dalla selezione verrà/nno eliminata/e. Se sono in carrelli di clienti, quelle righe verranno svuotate.`}
+        etichettaConferma="Salva"
+        inCorso={pending}
+        onConferma={esegui}
+        onAnnulla={() => setConfermaApri(false)}
+      />
     </form>
   );
 }

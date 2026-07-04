@@ -4,7 +4,6 @@ import { requireGestore } from "@/lib/gestore/auth";
 import FormProdotto, {
   type ProdottoForm,
 } from "@/components/gestore/FormProdotto";
-import EditorVarianti from "@/components/gestore/EditorVarianti";
 import GestoreGalleria from "@/components/gestore/GestoreGalleria";
 import EliminaProdotto from "@/components/gestore/EliminaProdotto";
 import type {
@@ -58,12 +57,10 @@ export default async function ModificaProdottoPage({
       <h1 className="mx-auto mb-5 max-w-xl text-xl font-semibold text-foreground">
         Modifica prodotto
       </h1>
-      <FormProdotto prodotto={prodotto} categorie={categorie} />
-      <EditorVarianti
-        prodottoId={prodotto.id}
-        baseSku={prodotto.codice ?? prodotto.slug}
-        varianti={varianti}
-        suRichiesta={prodotto.disponibilita_su_richiesta}
+      <FormProdotto
+        prodotto={prodotto}
+        categorie={categorie}
+        variantiIniziali={varianti}
       />
       <GestoreGalleria
         prodottoId={prodotto.id}
