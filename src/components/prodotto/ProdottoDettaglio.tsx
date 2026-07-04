@@ -317,7 +317,7 @@ export default function ProdottoDettaglio({
         </div>
 
         <p className="mt-8 font-mono text-xs text-muted">
-          SKU prodotto: {prodotto.slug}
+          SKU prodotto: {prodotto.codice ?? prodotto.slug}
         </p>
       </div>
     </div>
