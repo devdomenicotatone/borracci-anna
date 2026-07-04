@@ -73,7 +73,13 @@ export default function ListaProdotti({
             Prodotti
           </h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link
+            href="/gestore/prodotti/importa"
+            className="inline-flex h-11 items-center gap-1.5 rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+          >
+            📦 Importa
+          </Link>
           <Link
             href="/gestore/prodotti/genera"
             className="inline-flex h-11 items-center gap-1.5 rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
