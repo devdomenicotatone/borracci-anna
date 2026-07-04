@@ -38,6 +38,7 @@ const TAGLIE_DEFAULT = ["S", "M", "L", "XL", "2XL"];
 // Set canonico ammesso senza riserve; oltre a queste si accettano taglie
 // "libere corte" (es. "6 anni", "Unica") fino a 12 caratteri.
 const TAGLIE_CANONICHE = new Set([
+  "XXS",
   "XS",
   "S",
   "M",

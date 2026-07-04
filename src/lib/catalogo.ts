@@ -5,10 +5,12 @@
 import { slugify } from "@/lib/gestore/slug";
 
 // ===========================================================================
-// TAGLIE — scala ordinata dalla S alla 6XL (oltre la XL si usa la forma "nXL").
+// TAGLIE — scala ordinata dalla XXS alla 6XL (oltre la XL si usa la forma "nXL").
 // ===========================================================================
 
 export const TAGLIE = [
+  "XXS",
+  "XS",
   "S",
   "M",
   "L",
@@ -28,7 +30,7 @@ export function ordineTaglia(t: string | null | undefined): number {
   return i === -1 ? TAGLIE.length : i;
 }
 
-/** Ordina una lista di taglie secondo la scala (S → 6XL), ignorando i duplicati. */
+/** Ordina una lista di taglie secondo la scala (XXS → 6XL), ignorando i duplicati. */
 export function ordinaTaglie(taglie: Iterable<string>): string[] {
   return [...new Set(taglie)].sort((a, b) => ordineTaglia(a) - ordineTaglia(b));
 }

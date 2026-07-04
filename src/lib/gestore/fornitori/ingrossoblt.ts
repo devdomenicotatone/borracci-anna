@@ -287,6 +287,7 @@ function estraiFoto(html: string): string[] {
 // Set canonico taglie adulto (scala del negozio: "2XL", mai "XXL"); le taglie
 // bimbo sono normalizzate come "N anni".
 const TAGLIE_CANONICHE = [
+  "XXS",
   "XS",
   "S",
   "M",
@@ -314,7 +315,7 @@ function normalizzaTaglia(grezza: string): string | null {
   return null;
 }
 
-/** Rango per ordinare le taglie: bimbo per eta, poi la scala adulto XS→6XL. */
+/** Rango per ordinare le taglie: bimbo per eta, poi la scala adulto XXS→6XL. */
 function rangoTaglia(t: string): number {
   const anni = t.match(/^(\d{1,2}) anni$/);
   if (anni) return parseInt(anni[1], 10);
