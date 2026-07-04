@@ -220,6 +220,9 @@ export interface Database {
           colore: string | null;
           prezzo_cents: number;
           quantita: number;
+          immagine_url: string | null;
+          rimossa_il: string | null;
+          rimossa_motivo: string | null;
         };
         Insert: {
           id?: string;
@@ -232,6 +235,9 @@ export interface Database {
           colore?: string | null;
           prezzo_cents: number;
           quantita: number;
+          immagine_url?: string | null;
+          rimossa_il?: string | null;
+          rimossa_motivo?: string | null;
         };
         Update: {
           id?: string;
@@ -244,6 +250,9 @@ export interface Database {
           colore?: string | null;
           prezzo_cents?: number;
           quantita?: number;
+          immagine_url?: string | null;
+          rimossa_il?: string | null;
+          rimossa_motivo?: string | null;
         };
         Relationships: [
           {

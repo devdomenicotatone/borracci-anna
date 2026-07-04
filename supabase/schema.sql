@@ -131,11 +131,22 @@ create table if not exists public.ordine_righe (
   taglia          text,
   colore          text,
   prezzo_cents    integer not null check (prezzo_cents >= 0),
-  quantita        integer not null check (quantita > 0)
+  quantita        integer not null check (quantita > 0),
+  -- Snapshot foto (colore scelto o copertina) + conferma parziale: rimossa_il
+  -- NULL = riga attiva, valorizzata = non disponibile (esclusa da totale,
+  -- pagamento e scarico stock), col motivo mostrato al cliente. Vedi migration
+  -- 20260704150000.
+  immagine_url    text,
+  rimossa_il      timestamptz,
+  rimossa_motivo  text
 );
 -- Idempotente per i DB gia creati. Vedi migration 20260623180000.
 alter table public.ordine_righe add column if not exists taglia text;
 alter table public.ordine_righe add column if not exists colore text;
+-- Idempotente per i DB gia creati. Vedi migration 20260704150000.
+alter table public.ordine_righe add column if not exists immagine_url text;
+alter table public.ordine_righe add column if not exists rimossa_il timestamptz;
+alter table public.ordine_righe add column if not exists rimossa_motivo text;
 
 create index if not exists idx_ordine_righe_ordine on public.ordine_righe (ordine_id);
 create index if not exists idx_ordine_righe_prodotto on public.ordine_righe (prodotto_id);
@@ -286,6 +297,7 @@ begin
   if v_ordine.stato not in ('in_attesa', 'confermato') then
     raise exception 'Transizione non consentita da % a pagato.', v_ordine.stato;
   end if;
+  -- Le righe rimosse in conferma parziale non scalano lo stock.
   if not v_ordine.stock_scalato then
     update public.varianti v
        set stock = greatest(0, v.stock - agg.qta)
@@ -293,6 +305,7 @@ begin
         select variante_id, sum(quantita)::int as qta
           from public.ordine_righe
          where ordine_id = p_ordine_id and variante_id is not null
+           and rimossa_il is null
          group by variante_id
       ) agg
      where agg.variante_id = v.id;

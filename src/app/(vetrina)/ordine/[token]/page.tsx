@@ -20,11 +20,15 @@ export const metadata: Metadata = {
 };
 
 interface RigaOrdine {
+  id: string;
   nome_prodotto: string;
   taglia: string | null;
   colore: string | null;
   prezzo_cents: number;
   quantita: number;
+  immagine_url: string | null;
+  rimossa_il: string | null;
+  rimossa_motivo: string | null;
 }
 interface OrdineDettaglio {
   id: string;
@@ -43,7 +47,7 @@ async function caricaOrdine(token: string): Promise<OrdineDettaglio | null> {
     const { data, error } = await admin
       .from("ordini")
       .select(
-        "id, stato, totale_cents, costo_spedizione_cents, nome, email, creato_il, ordine_righe(nome_prodotto, taglia, colore, prezzo_cents, quantita)",
+        "id, stato, totale_cents, costo_spedizione_cents, nome, email, creato_il, ordine_righe(id, nome_prodotto, taglia, colore, prezzo_cents, quantita, immagine_url, rimossa_il, rimossa_motivo)",
       )
       .eq("token", token)
       .maybeSingle();
@@ -114,13 +118,20 @@ export default async function PaginaOrdine({
   const ui = STATO_UI[ordine.stato];
   // Reduce dal pagamento Stripe: il webhook potrebbe non aver ancora aggiornato.
   const inElaborazione = pagato === "1" && ordine.stato !== "pagato";
-  // Breakdown: merce (somma righe) + spedizione (concordata dal gestore in
-  // conferma; null finche in attesa) = totale. Etichetta "stimato" finche non
-  // confermato.
+  // Breakdown: merce (somma delle sole righe attive: le rimosse in conferma
+  // parziale restano visibili ma escluse) + spedizione (concordata dal gestore
+  // in conferma; null finche in attesa) = totale. Etichetta "stimato" finche
+  // non confermato.
   const merceCents = ordine.righe.reduce(
-    (acc, r) => acc + r.prezzo_cents * r.quantita,
+    (acc, r) => (r.rimossa_il ? acc : acc + r.prezzo_cents * r.quantita),
     0,
   );
+  const numRimosse = ordine.righe.filter((r) => r.rimossa_il != null).length;
+  // Banner solo a ordine confermato/pagato: con l'annullato il messaggio di
+  // stato basta da solo.
+  const mostraBannerParziale =
+    numRimosse > 0 &&
+    (ordine.stato === "confermato" || ordine.stato === "pagato");
   const spedizioneCents = ordine.costo_spedizione_cents;
   const totaleStimato = ordine.stato === "in_attesa";
 
@@ -155,32 +166,54 @@ export default async function PaginaOrdine({
         </div>
       )}
 
+      {/* Conferma parziale: avviso sopra gli articoli, i dettagli sono sbarrati in lista. */}
+      {mostraBannerParziale && (
+        <p className="mt-8 rounded-2xl bg-surface-2 px-4 py-3 text-sm text-foreground ring-1 ring-line">
+          {numRimosse === 1
+            ? "1 articolo non era disponibile: è sbarrato qui sotto e non è incluso nel totale."
+            : `${numRimosse} articoli non erano disponibili: sono sbarrati qui sotto e non sono inclusi nel totale.`}
+        </p>
+      )}
+
       {/* Articoli */}
       <section className="mt-8 rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line">
         <h2 className="font-display text-base font-extrabold text-foreground">
           Articoli richiesti
         </h2>
         <ul className="mt-4 divide-y divide-line">
-          {ordine.righe.map((r, i) => {
+          {ordine.righe.map((r) => {
             const dettagli = [
               r.colore,
               r.taglia ? `Taglia ${r.taglia}` : null,
             ].filter(Boolean);
+            const rimossa = r.rimossa_il != null;
             return (
-              <li
-                key={i}
-                className="flex items-start justify-between gap-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-display text-sm font-bold text-foreground">
+              <li key={r.id} className="flex items-start gap-4 py-3">
+                <MiniaturaRiga url={r.immagine_url} />
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`font-display text-sm font-bold text-foreground ${rimossa ? "line-through opacity-60" : ""}`}
+                  >
                     {r.nome_prodotto}
                   </p>
                   {dettagli.length > 0 && (
                     <p className="text-xs text-muted">{dettagli.join(" · ")}</p>
                   )}
                   <p className="text-xs text-muted">Quantità: {r.quantita}</p>
+                  {rimossa && (
+                    <>
+                      <span className="mt-1 inline-flex rounded-full bg-coral/10 px-2 py-0.5 text-xs font-bold text-coral-ink">
+                        Non disponibile
+                      </span>
+                      <p className="mt-1 text-xs text-coral-ink">
+                        {r.rimossa_motivo ?? "Non disponibile"}
+                      </p>
+                    </>
+                  )}
                 </div>
-                <span className="shrink-0 font-display text-sm font-bold tabular-nums text-foreground">
+                <span
+                  className={`shrink-0 font-display text-sm font-bold tabular-nums text-foreground ${rimossa ? "line-through opacity-60" : ""}`}
+                >
                   {formatPrezzo(r.prezzo_cents * r.quantita)}
                 </span>
               </li>
@@ -230,5 +263,34 @@ export default async function PaginaOrdine({
         </Link>
       </div>
     </main>
+  );
+}
+
+// Miniatura della riga: snapshot foto salvato sull'ordine, fallback tile con
+// l'icona maglietta (stessa di ListaProdotti).
+function MiniaturaRiga({ url }: { url: string | null }) {
+  return (
+    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-line">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- url da Storage con cache-bust
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <div className="tile-cyan grid h-full w-full place-items-center text-white">
+          <svg
+            viewBox="0 0 100 100"
+            fill="currentColor"
+            aria-hidden="true"
+            className="w-1/2 drop-shadow-[0_4px_8px_rgba(0,40,70,0.25)]"
+          >
+            <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+          </svg>
+        </div>
+      )}
+    </div>
   );
 }

@@ -12,16 +12,21 @@ import {
   segnaPagatoOrdineAction,
   type EsitoOrdine,
 } from "@/lib/gestore/ordini-actions";
+import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo } from "@/lib/format";
 import type { StatoOrdine } from "@/lib/types";
 
 interface RigaOrdine {
+  id: string;
   nome_prodotto: string;
   taglia: string | null;
   colore: string | null;
   prezzo_cents: number;
   quantita: number;
+  immagine_url: string | null;
+  rimossa_il: string | null;
+  rimossa_motivo: string | null;
 }
 
 export interface OrdineGestore {
@@ -44,6 +49,26 @@ function euroToCents(raw: string): number | null {
   const n = Number.parseFloat(raw.replace(",", ".").trim());
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100);
+}
+
+// Motivi preset per una riga non disponibile (contratto condiviso).
+const MOTIVI_PRESET = [
+  "Taglia esaurita",
+  "Colore esaurito",
+  "Prodotto esaurito",
+  "Altro",
+] as const;
+
+/** Bozza client-side di rimozione riga: preset scelto + testo libero se "Altro". */
+interface RimozioneDraft {
+  preset: string;
+  altro: string;
+}
+
+/** Motivo effettivo da inviare: preset, o testo libero (cap 200), mai vuoto. */
+function motivoDaDraft(d: RimozioneDraft): string {
+  const testo = d.preset === "Altro" ? d.altro.trim().slice(0, 200) : d.preset;
+  return testo || "Non disponibile";
 }
 
 type Filtro = "in_attesa" | "confermato" | "pagato" | "annullato" | "tutti";
@@ -81,6 +106,13 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   // 5,90 = tariffa Italia continentale; il gestore lo regola caso per caso.
   const [sped, setSped] = useState<Record<string, string>>({});
   const valoreSped = (id: string) => sped[id] ?? "5,90";
+  // Rimozioni in bozza per la conferma parziale: solo client-side fino al
+  // submit, indicizzate per ordine e poi per riga.
+  const [rimozioni, setRimozioni] = useState<
+    Record<string, Record<string, RimozioneDraft>>
+  >({});
+  // Ordine per cui è aperto il dialog di conferma parziale.
+  const [dialogoId, setDialogoId] = useState<string | null>(null);
 
   const conteggi = useMemo(() => {
     const c: Record<string, number> = {};
@@ -112,20 +144,72 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
     });
   }
 
-  function confermaConSpedizione(o: OrdineGestore) {
+  /** Attiva/disattiva la rimozione di una riga (bozza locale). */
+  function toggleRimozione(ordineId: string, rigaId: string) {
+    setRimozioni((s) => {
+      const perOrdine = { ...(s[ordineId] ?? {}) };
+      if (perOrdine[rigaId]) delete perOrdine[rigaId];
+      else perOrdine[rigaId] = { preset: MOTIVI_PRESET[0], altro: "" };
+      return { ...s, [ordineId]: perOrdine };
+    });
+  }
+
+  function aggiornaRimozione(
+    ordineId: string,
+    rigaId: string,
+    patch: Partial<RimozioneDraft>,
+  ) {
+    setRimozioni((s) => {
+      const bozza = s[ordineId]?.[rigaId];
+      if (!bozza) return s;
+      return {
+        ...s,
+        [ordineId]: { ...s[ordineId], [rigaId]: { ...bozza, ...patch } },
+      };
+    });
+  }
+
+  /** Valida la spedizione e, se ci sono rimozioni, chiede conferma via dialog. */
+  function avviaConferma(o: OrdineGestore) {
     const cents = euroToCents(valoreSped(o.id));
     if (cents === null || cents > 10_000) {
       mostra("Inserisci un costo di spedizione valido (0–100 €).", "errore");
       return;
     }
+    const bozze = rimozioni[o.id] ?? {};
+    const righe = o.ordine_righe ?? [];
+    const numRimosse = righe.filter((r) => bozze[r.id]).length;
+    // Tutte rimosse: il bottone è già disabilitato, guardia difensiva.
+    if (righe.length > 0 && numRimosse === righe.length) return;
+    if (numRimosse > 0) {
+      setDialogoId(o.id);
+      return;
+    }
+    inviaConferma(o);
+  }
+
+  function inviaConferma(o: OrdineGestore) {
+    const cents = euroToCents(valoreSped(o.id));
+    if (cents === null || cents > 10_000) {
+      mostra("Inserisci un costo di spedizione valido (0–100 €).", "errore");
+      return;
+    }
+    const bozze = rimozioni[o.id] ?? {};
+    const righe = o.ordine_righe ?? [];
+    const daRimuovere = righe
+      .filter((r) => bozze[r.id])
+      .map((r) => ({ rigaId: r.id, motivo: motivoDaDraft(bozze[r.id]) }));
     startTransition(async () => {
-      const esito = await confermaOrdineAction(o.id, cents);
+      const esito = await confermaOrdineAction(o.id, cents, daRimuovere);
       if (!esito.ok) {
         mostra(esito.error ?? "Operazione non riuscita.", "errore");
         return;
       }
-      const merce = (o.ordine_righe ?? []).reduce(
-        (acc, r) => acc + r.prezzo_cents * r.quantita,
+      const motivi = new Map(daRimuovere.map((p) => [p.rigaId, p.motivo]));
+      const adesso = new Date().toISOString();
+      const merce = righe.reduce(
+        (acc, r) =>
+          motivi.has(r.id) ? acc : acc + r.prezzo_cents * r.quantita,
         0,
       );
       setLista((l) =>
@@ -136,13 +220,41 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                 stato: "confermato",
                 costo_spedizione_cents: cents,
                 totale_cents: merce + cents,
+                ordine_righe: (x.ordine_righe ?? []).map((r) =>
+                  motivi.has(r.id)
+                    ? {
+                        ...r,
+                        rimossa_il: adesso,
+                        rimossa_motivo: motivi.get(r.id) ?? "Non disponibile",
+                      }
+                    : r,
+                ),
               }
             : x,
         ),
       );
-      mostra("Disponibilità confermata.", "ok");
+      setRimozioni((s) => {
+        const copia = { ...s };
+        delete copia[o.id];
+        return copia;
+      });
+      setDialogoId(null);
+      mostra(
+        daRimuovere.length > 0
+          ? "Disponibilità confermata (parziale)."
+          : "Disponibilità confermata.",
+        "ok",
+      );
     });
   }
+
+  // Ordine target del dialog di conferma parziale e conteggio rimozioni.
+  const ordineDialogo = lista.find((x) => x.id === dialogoId) ?? null;
+  const numRimosseDialogo = ordineDialogo
+    ? (ordineDialogo.ordine_righe ?? []).filter(
+        (r) => (rimozioni[ordineDialogo.id] ?? {})[r.id],
+      ).length
+    : 0;
 
   async function copiaLink(token: string) {
     const url = `${window.location.origin}/ordine/${token}`;
@@ -212,6 +324,20 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
           {visibili.map((o) => {
             const righe = o.ordine_righe ?? [];
             const chip = CHIP[o.stato];
+            // Bozze di rimozione (solo per ordini in attesa) e totale live.
+            const bozze = o.stato === "in_attesa" ? (rimozioni[o.id] ?? {}) : {};
+            const numRimosse = righe.filter((r) => bozze[r.id]).length;
+            const numAttive = righe.length - numRimosse;
+            const tutteRimosse = righe.length > 0 && numAttive === 0;
+            const parziale = numRimosse > 0 && !tutteRimosse;
+            const totaleMostrato =
+              o.stato === "in_attesa"
+                ? righe.reduce(
+                    (acc, r) =>
+                      bozze[r.id] ? acc : acc + r.prezzo_cents * r.quantita,
+                    0,
+                  ) + (euroToCents(valoreSped(o.id)) ?? 0)
+                : o.totale_cents;
             return (
               <li
                 key={o.id}
@@ -238,29 +364,110 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                     </span>
                   </div>
 
-                  <ul className="mt-3 space-y-1 border-t border-line pt-3">
-                    {righe.map((r, i) => {
+                  <ul className="mt-3 space-y-2 border-t border-line pt-3">
+                    {righe.map((r) => {
                       const det = [
                         r.colore,
                         r.taglia ? `T. ${r.taglia}` : null,
                       ].filter(Boolean);
+                      // In attesa la rimozione è la bozza locale; negli altri
+                      // stati fa fede lo snapshot a DB (sola lettura).
+                      const bozza = bozze[r.id];
+                      const rimossa =
+                        o.stato === "in_attesa" ? Boolean(bozza) : r.rimossa_il != null;
                       return (
-                        <li
-                          key={i}
-                          className="flex items-center justify-between gap-3 text-sm"
-                        >
-                          <span className="min-w-0 truncate text-foreground">
-                            {r.quantita}× {r.nome_prodotto}
-                            {det.length > 0 && (
-                              <span className="text-muted">
-                                {" "}
-                                ({det.join(", ")})
+                        <li key={r.id} className="flex items-center gap-3 text-sm">
+                          <MiniaturaRiga url={r.immagine_url} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-3">
+                              <span
+                                className={[
+                                  "min-w-0 truncate text-foreground",
+                                  rimossa ? "line-through opacity-60" : "",
+                                ].join(" ")}
+                              >
+                                {r.quantita}× {r.nome_prodotto}
+                                {det.length > 0 && (
+                                  <span className="text-muted">
+                                    {" "}
+                                    ({det.join(", ")})
+                                  </span>
+                                )}
                               </span>
+                              <span
+                                className={[
+                                  "shrink-0 tabular-nums text-muted",
+                                  rimossa ? "line-through opacity-60" : "",
+                                ].join(" ")}
+                              >
+                                {formatPrezzo(r.prezzo_cents * r.quantita)}
+                              </span>
+                            </div>
+
+                            {/* Motivo a DB, sola lettura (confermato/pagato/annullato) */}
+                            {o.stato !== "in_attesa" && rimossa && (
+                              <p className="text-xs text-coral-ink">
+                                {r.rimossa_motivo ?? "Non disponibile"}
+                              </p>
                             )}
-                          </span>
-                          <span className="shrink-0 tabular-nums text-muted">
-                            {formatPrezzo(r.prezzo_cents * r.quantita)}
-                          </span>
+
+                            {/* Conferma parziale: toggle + motivo (bozza locale) */}
+                            {o.stato === "in_attesa" &&
+                              (bozza ? (
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={bozza.preset}
+                                    onChange={(e) =>
+                                      aggiornaRimozione(o.id, r.id, {
+                                        preset: e.target.value,
+                                      })
+                                    }
+                                    disabled={pending}
+                                    aria-label="Motivo non disponibilità"
+                                    className="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-foreground focus:border-sea focus:outline-none disabled:opacity-50"
+                                  >
+                                    {MOTIVI_PRESET.map((m) => (
+                                      <option key={m} value={m}>
+                                        {m}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {bozza.preset === "Altro" && (
+                                    <input
+                                      type="text"
+                                      value={bozza.altro}
+                                      maxLength={200}
+                                      placeholder="Motivo"
+                                      onChange={(e) =>
+                                        aggiornaRimozione(o.id, r.id, {
+                                          altro: e.target.value,
+                                        })
+                                      }
+                                      disabled={pending}
+                                      aria-label="Motivo personalizzato"
+                                      className="w-36 rounded-full border border-line bg-white px-2.5 py-1 text-xs text-foreground focus:border-sea focus:outline-none disabled:opacity-50"
+                                    />
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={pending}
+                                    onClick={() => toggleRimozione(o.id, r.id)}
+                                    className="rounded-full px-2 py-1 text-xs font-bold text-sea transition-colors hover:bg-sea/10 disabled:opacity-50"
+                                  >
+                                    Ripristina
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={pending}
+                                  onClick={() => toggleRimozione(o.id, r.id)}
+                                  className="-ml-2 rounded-full px-2 py-1 text-xs font-bold text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
+                                >
+                                  Non disponibile
+                                </button>
+                              ))}
+                          </div>
                         </li>
                       );
                     })}
@@ -283,8 +490,13 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
 
                   <div className="flex flex-col lg:items-end lg:text-right">
                     <span className="font-display text-sm font-bold tabular-nums text-sea">
-                      {formatPrezzo(o.totale_cents)}
+                      {formatPrezzo(totaleMostrato)}
                     </span>
+                    {parziale && (
+                      <span className="text-[11px] text-muted">
+                        {numAttive} di {righe.length} articoli
+                      </span>
+                    )}
                     {o.costo_spedizione_cents != null && (
                       <span className="text-[11px] text-muted">
                         {o.costo_spedizione_cents > 0
@@ -328,12 +540,19 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                         </button>
                         <button
                           type="button"
-                          disabled={pending}
-                          onClick={() => confermaConSpedizione(o)}
+                          disabled={pending || tutteRimosse}
+                          onClick={() => avviaConferma(o)}
                           className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50 lg:w-full"
                         >
-                          Conferma disponibilità
+                          {parziale
+                            ? `Conferma parziale (${numAttive} di ${righe.length})`
+                            : "Conferma disponibilità"}
                         </button>
+                        {tutteRimosse && (
+                          <p className="w-full text-right text-[11px] font-bold text-coral-ink">
+                            Nessun articolo disponibile: usa Rifiuta.
+                          </p>
+                        )}
                       </>
                     )}
 
@@ -385,6 +604,50 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
           })}
         </ul>
       )}
+
+      {/* Conferma parziale: dialog prima del submit con rimozioni */}
+      {ordineDialogo && (
+        <ConfermaDialog
+          aperto
+          titolo="Conferma parziale"
+          messaggio={
+            numRimosseDialogo === 1
+              ? "Confermi senza 1 articolo? Il cliente lo vedrà sbarrato col motivo e non lo pagherà."
+              : `Confermi senza ${numRimosseDialogo} articoli? Il cliente li vedrà sbarrati col motivo e non li pagherà.`
+          }
+          etichettaConferma="Conferma"
+          inCorso={pending}
+          onConferma={() => inviaConferma(ordineDialogo)}
+          onAnnulla={() => setDialogoId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Miniatura della riga d'ordine: snapshot foto o tile con icona maglietta. */
+function MiniaturaRiga({ url }: { url: string | null }) {
+  const cls =
+    "h-10 w-10 shrink-0 rounded-lg ring-1 ring-line lg:h-12 lg:w-12";
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- snapshot da Storage
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        className={`${cls} bg-surface object-cover`}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={`${cls} tile-cyan grid place-items-center text-white`}
+    >
+      <svg viewBox="0 0 100 100" fill="currentColor" className="w-1/2">
+        <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+      </svg>
+    </span>
   );
 }

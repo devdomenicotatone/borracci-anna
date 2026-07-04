@@ -103,6 +103,32 @@ export async function inviaRichiestaAction(
       return { error: "Impossibile creare la richiesta. Riprova." };
     }
 
+    // Snapshot della foto per riga: la prima foto del colore della variante,
+    // altrimenti la copertina del prodotto. Best effort: se la lettura delle
+    // foto fallisce si degrada alla copertina, mai bloccare l'ordine.
+    let foto: { prodotto_id: string; colore: string | null; url: string }[] = [];
+    try {
+      const prodottoIds = [...new Set(righe.map((r) => r.prodotto.id))];
+      const { data: dataFoto } = await admin
+        .from("prodotto_foto")
+        .select("prodotto_id, colore, url, ordine")
+        .in("prodotto_id", prodottoIds)
+        .order("ordine", { ascending: true });
+      foto = dataFoto ?? [];
+    } catch {
+      foto = [];
+    }
+    const fotoRiga = (r: (typeof righe)[number]): string | null => {
+      if (r.variante.colore) {
+        const match = foto.find(
+          (f) =>
+            f.prodotto_id === r.prodotto.id && f.colore === r.variante.colore,
+        );
+        if (match) return match.url;
+      }
+      return r.prodotto.immagine_url;
+    };
+
     const righeOrdine = righe.map((r) => ({
       ordine_id: ordine.id,
       prodotto_id: r.prodotto.id,
@@ -113,6 +139,7 @@ export async function inviaRichiestaAction(
       colore: r.variante.colore,
       prezzo_cents: r.prodotto.prezzo_cents,
       quantita: r.quantita,
+      immagine_url: fotoRiga(r),
     }));
     const { error: errRighe } = await admin
       .from("ordine_righe")
@@ -198,13 +225,22 @@ export async function creaCheckoutOrdineAction(
 
     const { data: righe } = await admin
       .from("ordine_righe")
-      .select("nome_prodotto, sku, taglia, colore, prezzo_cents, quantita")
+      .select(
+        "nome_prodotto, sku, taglia, colore, prezzo_cents, quantita, rimossa_il",
+      )
       .eq("ordine_id", ordine.id);
     if (!righe || righe.length === 0) {
       return { ok: false, error: "Ordine senza articoli." };
     }
 
-    const lineItems = righe.map((r) => ({
+    // Le righe rimosse in fase di conferma parziale NON vanno mai pagate:
+    // il cliente paga solo gli articoli disponibili.
+    const attive = righe.filter((r) => !r.rimossa_il);
+    if (attive.length === 0) {
+      return { ok: false, error: "Ordine senza articoli disponibili." };
+    }
+
+    const lineItems = attive.map((r) => ({
       quantity: r.quantita,
       price_data: {
         currency: "eur",

@@ -23,6 +23,15 @@ import type { Database } from "@/lib/supabase/database.types";
 /** Cap di sicurezza per il costo di spedizione inserito dal gestore (100 EUR). */
 const MAX_SPEDIZIONE_CENTS = 10_000;
 
+/** Cap di sicurezza sul numero di rimozioni per conferma parziale. */
+const MAX_RIMOZIONI = 100;
+
+/** Riga segnata "non disponibile" in fase di conferma parziale. */
+export interface RimozioneRiga {
+  rigaId: string;
+  motivo: string;
+}
+
 export interface EsitoOrdine {
   ok: boolean;
   error?: string;
@@ -63,20 +72,34 @@ async function aggiornaStato(
   }
 }
 
+/** Dettagli riga per l'email: "(Colore, Taglia M)" o stringa vuota. */
+function dettagliRiga(r: { colore: string | null; taglia: string | null }): string {
+  const det = [r.colore, r.taglia ? `Taglia ${r.taglia}` : null].filter(Boolean);
+  return det.length ? ` (${det.join(", ")})` : "";
+}
+
 /**
  * Conferma la disponibilita: l'ordine passa a "confermato" e diventa pagabile.
  * Solo da "in_attesa" (un ordine gia pagato/annullato non si ri-conferma, cosi
  * non puo tornare pagabile dopo il pagamento).
  *
  * In questo flusso "su richiesta" la spedizione e CONCORDATA: il gestore fissa
- * qui `costoSpedizioneCents` (0 = gratis). Il totale viene ricalcolato come
- * merce (somma delle righe d'ordine, fonte di verita) + spedizione, cosi un
- * doppio click o un valore vecchio non si sommano mai. Notifica il cliente con
+ * qui `costoSpedizioneCents` (0 = gratis). Con `rimozioni` la conferma e
+ * PARZIALE: le righe indicate vengono segnate non disponibili (rimossa_il +
+ * motivo) e restano fuori da totale e pagamento. Il totale viene ricalcolato
+ * come merce (somma delle righe attive, fonte di verita) + spedizione, cosi un
+ * doppio click o un valore vecchio non si sommano mai.
+ *
+ * La transizione di stato (update guardato, atomico) avviene PRIMA di toccare
+ * le righe: tra conferme concorrenti solo la vincente scrive le rimozioni, le
+ * altre escono senza toccare nulla. Le rimozioni vengono prima azzerate e poi
+ * riscritte, quindi anche un retry resta idempotente. Notifica il cliente con
  * l'importo finale (best effort).
  */
 export async function confermaOrdineAction(
   id: string,
   costoSpedizioneCents: number,
+  rimozioni: RimozioneRiga[] = [],
 ): Promise<EsitoOrdine> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
@@ -89,23 +112,73 @@ export async function confermaOrdineAction(
   ) {
     return { ok: false, error: "Costo di spedizione non valido (0–100 €)." };
   }
+  if (!Array.isArray(rimozioni) || rimozioni.length > MAX_RIMOZIONI) {
+    return { ok: false, error: "Righe non valide." };
+  }
+  // Motivi normalizzati (trim + cap) con fallback: mai stringa vuota a DB.
+  // La Map deduplica eventuali rigaId ripetuti (vince l'ultimo motivo).
+  const motivoPerRiga = new Map<string, string>();
+  for (const r of rimozioni) {
+    const rigaId = String(r?.rigaId ?? "");
+    const motivo =
+      String(r?.motivo ?? "").trim().slice(0, 200) || "Non disponibile";
+    if (!rigaId) return { ok: false, error: "Righe non valide." };
+    motivoPerRiga.set(rigaId, motivo);
+  }
 
   try {
     const admin = createAdminSupabase();
 
-    // Merce = somma delle righe (snapshot): il totale non dipende dal valore
-    // gia presente su `ordini`, quindi e ricalcolabile in modo idempotente.
+    // Guardia anticipata (best effort): evita lavoro inutile su un ordine gia
+    // confermato/pagato/annullato. La barriera vera resta l'update condizionato.
+    // I valori pre-conferma servono al ripristino se le rimozioni falliscono.
+    const { data: corrente, error: errStato } = await admin
+      .from("ordini")
+      .select("stato, costo_spedizione_cents, totale_cents")
+      .eq("id", id)
+      .maybeSingle();
+    if (errStato) return { ok: false, error: errStato.message };
+    if (!corrente || corrente.stato !== "in_attesa") {
+      return {
+        ok: false,
+        error: "Solo una richiesta in attesa puo essere confermata.",
+      };
+    }
+
+    // Righe dell'ordine (snapshot): servono per validare le rimozioni e per
+    // ricalcolare la merce. Il totale non dipende dal valore gia presente su
+    // `ordini`, quindi e ricalcolabile in modo idempotente.
     const { data: righe, error: errRighe } = await admin
       .from("ordine_righe")
-      .select("prezzo_cents, quantita")
+      .select("id, nome_prodotto, taglia, colore, prezzo_cents, quantita")
       .eq("ordine_id", id);
     if (errRighe) return { ok: false, error: errRighe.message };
-    const merceCents = (righe ?? []).reduce(
+    const tutte = righe ?? [];
+
+    // Ogni rigaId deve appartenere all'ordine: id estranei = richiesta corrotta.
+    const idRighe = new Set(tutte.map((r) => r.id));
+    for (const rigaId of motivoPerRiga.keys()) {
+      if (!idRighe.has(rigaId)) return { ok: false, error: "Righe non valide." };
+    }
+    // Nessuna riga superstite: non e una conferma, e un rifiuto.
+    if (tutte.length > 0 && motivoPerRiga.size === tutte.length) {
+      return { ok: false, error: "Nessun articolo disponibile: usa Rifiuta." };
+    }
+
+    // Merce = somma delle sole righe attive: le rimosse escono dal totale.
+    const attive = tutte.filter((r) => !motivoPerRiga.has(r.id));
+    const rimosse = tutte.filter((r) => motivoPerRiga.has(r.id));
+    const merceCents = attive.reduce(
       (acc, r) => acc + r.prezzo_cents * r.quantita,
       0,
     );
     const totaleCents = merceCents + costoSpedizioneCents;
 
+    // Transizione PRIMA di toccare le righe: l'update guardato e atomico, per
+    // cui tra conferme concorrenti solo una passa di qui e scrive le rimozioni;
+    // le altre escono subito. (Con l'ordine inverso una seconda conferma poteva
+    // azzerare le marcature della prima DOPO che questa aveva gia fissato stato
+    // e totale parziale: il cliente avrebbe pagato anche la riga rimossa.)
     const { data: ordine, error } = await admin
       .from("ordini")
       .update({
@@ -126,6 +199,52 @@ export async function confermaOrdineAction(
       };
     }
 
+    // Applica le rimozioni: prima azzera tutte le righe dell'ordine (un retry
+    // con un set diverso non lascia residui), poi setta quelle indicate.
+    // Nessuna conferma concorrente puo interferire: l'ordine e gia confermato.
+    const applicaRimozioni = async (): Promise<string | null> => {
+      if (tutte.length > 0) {
+        const { error: errAzzera } = await admin
+          .from("ordine_righe")
+          .update({ rimossa_il: null, rimossa_motivo: null })
+          .eq("ordine_id", id);
+        if (errAzzera) return errAzzera.message;
+      }
+      const rimossaIl = new Date().toISOString();
+      for (const [rigaId, motivo] of motivoPerRiga) {
+        const { error: errRim } = await admin
+          .from("ordine_righe")
+          .update({ rimossa_il: rimossaIl, rimossa_motivo: motivo })
+          .eq("ordine_id", id)
+          .eq("id", rigaId);
+        if (errRim) return errRim.message;
+      }
+      return null;
+    };
+    const erroreRighe = await applicaRimozioni();
+    if (erroreRighe) {
+      // Fallite a meta: ripristino best effort. Prima azzera le marcature
+      // (finche lo stato e "confermato" nessun'altra conferma puo scriverne),
+      // poi riporta l'ordine in attesa coi valori pre-conferma. Il revert e
+      // guardato su "confermato": mai regredire un ordine nel frattempo pagato.
+      // L'email non e ancora partita, quindi il gestore puo solo riprovare.
+      await admin
+        .from("ordine_righe")
+        .update({ rimossa_il: null, rimossa_motivo: null })
+        .eq("ordine_id", id);
+      await admin
+        .from("ordini")
+        .update({
+          stato: "in_attesa",
+          confermato_il: null,
+          costo_spedizione_cents: corrente.costo_spedizione_cents,
+          totale_cents: corrente.totale_cents,
+        })
+        .eq("id", id)
+        .eq("stato", "confermato");
+      return { ok: false, error: erroreRighe };
+    }
+
     revalidatePath("/gestore/ordini");
 
     if (ordine.email && ordine.token) {
@@ -134,10 +253,29 @@ export async function confermaOrdineAction(
         costoSpedizioneCents > 0
           ? `Spedizione: ${formatPrezzo(costoSpedizioneCents)}`
           : "Spedizione: gratuita";
+      const intro =
+        rimosse.length > 0
+          ? "buone notizie: quasi tutti gli articoli della tua richiesta sono disponibili!"
+          : "buone notizie: gli articoli della tua richiesta sono disponibili!";
+      const elencoDisponibili = attive
+        .map(
+          (r) =>
+            `• ${r.quantita}× ${r.nome_prodotto}${dettagliRiga(r)} — ${formatPrezzo(r.prezzo_cents * r.quantita)}`,
+        )
+        .join("\n");
+      const sezioneRimosse =
+        rimosse.length > 0
+          ? `\n\nNon disponibili (rimossi dal totale):\n${rimosse
+              .map(
+                (r) =>
+                  `✗ ${r.quantita}× ${r.nome_prodotto}${dettagliRiga(r)} — ${motivoPerRiga.get(r.id)}`,
+              )
+              .join("\n")}`
+          : "";
       await inviaEmail({
         to: ordine.email,
         subject: "La tua richiesta è disponibile — completa l'ordine · Anna Shop",
-        text: `Ciao ${ordine.nome ?? ""},\n\nbuone notizie: gli articoli della tua richiesta sono disponibili!\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)}\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\nArticoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)}\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
     }
     return { ok: true };

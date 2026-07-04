@@ -142,6 +142,34 @@ export async function POST(): Promise<Response> {
           .single();
         if (error || !ordine) throw error ?? new Error("insert ordine vuoto");
 
+        // Snapshot foto per riga (stessa logica di inviaRichiestaAction): la
+        // prima foto del colore della variante, fallback copertina prodotto.
+        // Best effort: senza foto la riga resta valida (miniatura generica).
+        const prodottoIds = [...new Set(righe.map((r) => r.prodotto.id))];
+        let foto: { prodotto_id: string; colore: string | null; url: string }[] =
+          [];
+        try {
+          const { data: dataFoto } = await admin
+            .from("prodotto_foto")
+            .select("prodotto_id, colore, url, ordine")
+            .in("prodotto_id", prodottoIds)
+            .order("ordine", { ascending: true });
+          foto = dataFoto ?? [];
+        } catch {
+          foto = [];
+        }
+        const fotoRiga = (r: RigaCarrello): string | null => {
+          if (r.variante.colore) {
+            const match = foto.find(
+              (f) =>
+                f.prodotto_id === r.prodotto.id &&
+                f.colore === r.variante.colore,
+            );
+            if (match) return match.url;
+          }
+          return r.prodotto.immagine_url;
+        };
+
         const righeOrdine = righe.map((riga) => ({
           ordine_id: ordine.id,
           prodotto_id: riga.prodotto.id,
@@ -152,6 +180,7 @@ export async function POST(): Promise<Response> {
           colore: riga.variante.colore,
           prezzo_cents: riga.prodotto.prezzo_cents,
           quantita: riga.quantita,
+          immagine_url: fotoRiga(riga),
         }));
         const { error: errRighe } = await admin
           .from("ordine_righe")
