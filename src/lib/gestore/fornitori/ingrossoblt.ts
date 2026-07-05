@@ -546,7 +546,50 @@ export function parseListingBlt(html: string): ListingBlt {
 
 // --- Rete: login e download -----------------------------------------------------------------
 
-// Header da browser reale: il sito non ha anti-bot ma serve un UA credibile.
+/**
+ * Errore di download dal fornitore. `status` e lo status HTTP (se c'e stata
+ * una risposta); `throttled` segnala un blocco temporaneo — 403 del WAF quando
+ * arrivano troppe richieste, 429, o un 5xx passeggero — per cui ha senso
+ * rallentare e riprovare, invece di trattarlo come un errore definitivo del
+ * singolo prodotto. Il chiamante lo usa per mettere in cooldown il batch.
+ */
+export class ErroreFornitore extends Error {
+  readonly status?: number;
+  readonly throttled: boolean;
+  constructor(
+    messaggio: string,
+    opzioni?: { status?: number; throttled?: boolean },
+  ) {
+    super(messaggio);
+    this.name = "ErroreFornitore";
+    this.status = opzioni?.status;
+    this.throttled = opzioni?.throttled ?? false;
+  }
+}
+
+// Status per cui conviene rallentare e riprovare invece di arrendersi: il
+// fornitore ci sta frenando (403 dal WAF su troppe richieste ravvicinate, 429)
+// o ha un intoppo temporaneo (5xx, 408). Ogni altro status e un errore vero.
+const STATUS_THROTTLING = new Set([403, 408, 429, 500, 502, 503, 504]);
+
+/** Attesa (ms) prima del retry: rispetta Retry-After, altrimenti backoff+jitter. */
+function attesaRetry(res: Response, tentativo: number): number {
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) {
+    const sec = Number(retryAfter);
+    if (Number.isFinite(sec) && sec > 0) return Math.min(sec * 1000, 8_000);
+  }
+  const base = Math.min(600 * 2 ** tentativo, 4_000); // 600, 1200, 2400, 4000…
+  return base + Math.floor(Math.random() * 300); // jitter anti-sincronia
+}
+
+function dormi(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Header da browser reale: un UA credibile riduce i blocchi, ma il fornitore
+// puo comunque rispondere 403 quando le richieste arrivano troppo in fretta —
+// per quello c'e il retry con backoff (vedi STATUS_THROTTLING e fetchPaginaBlt).
 const HEADER_BROWSER: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -691,8 +734,16 @@ async function fetchPaginaBlt(
   const scadenza = Date.now() + 20_000;
   let urlCorrente = url;
   let res: Response | null = null;
-  for (let salto = 0; salto < 5; salto++) {
-    if (Date.now() >= scadenza) throw new Error("Il fornitore e troppo lento.");
+  let tentativiRetry = 0;
+  // Il loop copre sia i redirect sia i retry da throttling: il tetto un po'
+  // piu alto li lascia coesistere senza mai girare all'infinito (le schede
+  // reali hanno 0-1 redirect, i retry sono al massimo 3).
+  for (let salto = 0; salto < 9; salto++) {
+    if (Date.now() >= scadenza) {
+      throw new ErroreFornitore("Il fornitore e troppo lento.", {
+        throttled: true,
+      });
+    }
     const r = await fetch(urlCorrente, {
       headers: cookie ? { ...HEADER_BROWSER, Cookie: cookie } : HEADER_BROWSER,
       redirect: "manual",
@@ -703,19 +754,34 @@ async function fetchPaginaBlt(
     });
     if (r.status >= 300 && r.status < 400) {
       const destinazione = r.headers.get("location");
-      if (!destinazione) throw new Error("Redirect senza destinazione.");
+      if (!destinazione) throw new ErroreFornitore("Redirect senza destinazione.");
       urlCorrente = new URL(destinazione, urlCorrente).toString();
       if (!urlFornitoreValido(urlCorrente)) {
-        throw new Error("Redirect fuori dal sito del fornitore.");
+        throw new ErroreFornitore("Redirect fuori dal sito del fornitore.");
       }
       continue;
+    }
+    // Throttling (403/429/5xx): rallenta e riprova la STESSA risorsa finche c'e
+    // budget. Se il tempo residuo non copre l'attesa, si esce con l'errore
+    // parlante qui sotto (il chiamante lo riconosce e mette in cooldown).
+    if (STATUS_THROTTLING.has(r.status) && tentativiRetry < 3) {
+      await r.body?.cancel().catch(() => {});
+      const attesa = attesaRetry(r, tentativiRetry);
+      if (Date.now() + attesa < scadenza) {
+        tentativiRetry++;
+        await dormi(attesa);
+        continue;
+      }
     }
     res = r;
     break;
   }
-  if (!res) throw new Error("Troppi redirect dal fornitore.");
+  if (!res) throw new ErroreFornitore("Troppi redirect dal fornitore.");
   if (!res.ok) {
-    throw new Error(`Il fornitore ha risposto ${res.status}.`);
+    throw new ErroreFornitore(`Il fornitore ha risposto ${res.status}.`, {
+      status: res.status,
+      throttled: STATUS_THROTTLING.has(res.status),
+    });
   }
 
   // Lettura a pezzi con tetto: oltre `maxByte` si tronca (i dati utili ai

@@ -29,6 +29,7 @@ import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
 import { skuVariante } from "@/lib/catalogo";
 import {
+  ErroreFornitore,
   eSchedaProdottoBlt,
   fetchListingBlt,
   fetchProdottoBlt,
@@ -260,6 +261,8 @@ const MAX_PAGINE_LISTING = 40;
 export interface EsitoScansione {
   ok: boolean;
   error?: string;
+  /** True se l'errore e un blocco temporaneo del fornitore (403/429/5xx). */
+  throttled?: boolean;
   /** "prodotto" se l'URL incollato e una scheda singola (solo con pagina=1). */
   tipo?: "prodotto" | "listing";
   voci?: VoceListingBlt[];
@@ -304,6 +307,7 @@ export async function scansionaListingAction(
     return {
       ok: false,
       error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
+      throttled: e instanceof ErroreFornitore ? e.throttled : false,
     };
   }
 
@@ -380,7 +384,13 @@ export async function verificaCodiciAction(
 export async function analizzaUrlFornitoreAction(
   url: string,
   opzioni?: { riscriviAI?: boolean },
-): Promise<{ ok: boolean; error?: string; bozza?: BozzaImport }> {
+): Promise<{
+  ok: boolean;
+  error?: string;
+  /** True se l'errore e un blocco temporaneo del fornitore (403/429/5xx). */
+  throttled?: boolean;
+  bozza?: BozzaImport;
+}> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
 
@@ -404,6 +414,7 @@ export async function analizzaUrlFornitoreAction(
     return {
       ok: false,
       error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
+      throttled: e instanceof ErroreFornitore ? e.throttled : false,
     };
   }
 
@@ -546,14 +557,29 @@ export async function creaProdottoDaImportAction(input: {
     return { ok: false, error: "Troppe taglie: massimo 15." };
   }
 
+  // Slug candidati: prima il base, poi (se c'e) disambiguato col codice — che
+  // e unico, quindi risolve al primo colpo le collisioni tra prodotti dal nome
+  // quasi identico (es. tante "T-Shirt Maradona"); infine qualche contatore di
+  // scorta. Prima bastava base+"-2".."-6" e con 5+ nomi gemelli si esauriva.
+  const slugCodice = codice ? slugify(codice) : "";
+  const candidatiSlug: string[] = [slugBase];
+  if (slugCodice && slugCodice !== slugBase) {
+    candidatiSlug.push(`${slugBase}-${slugCodice}`);
+  }
+  for (let n = 2; candidatiSlug.length < 8; n++) {
+    candidatiSlug.push(
+      slugCodice ? `${slugBase}-${slugCodice}-${n}` : `${slugBase}-${n}`,
+    );
+  }
+
   let prodottoId: string | null = null;
   let slug = slugBase;
   try {
-    // Insert del prodotto bozza, ritentando lo slug su conflitto (23505),
-    // come creaSchedaDaFotoAction. Un conflitto sul CODICE invece non si
-    // risolve col retry: errore chiaro al gestore.
-    for (let tent = 0; tent < 6 && !prodottoId; tent++) {
-      const slugTry = tent === 0 ? slugBase : `${slugBase}-${tent + 1}`;
+    // Insert del prodotto bozza, ritentando lo slug sui candidati su conflitto
+    // (23505). Un conflitto sul CODICE invece non si risolve col retry: errore
+    // chiaro al gestore.
+    for (const slugTry of candidatiSlug) {
+      if (prodottoId) break;
       const { data, error } = await supabase
         .from("prodotti")
         .insert({

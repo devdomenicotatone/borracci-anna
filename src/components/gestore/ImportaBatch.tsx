@@ -88,6 +88,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Cooldown crescente quando il fornitore ci blocca (403/429/5xx): al primo
+// blocco 8s, poi 20s, poi 40s; dopo l'ultimo step il motore si mette in pausa
+// e lascia decidere al gestore, invece di trasformare il blocco in una cascata
+// di errori sui prodotti rimasti.
+const COOLDOWN_BLOCCO_MS = [8_000, 20_000, 40_000];
+
 export default function ImportaBatch({
   voci,
   codiciEsistenti,
@@ -149,6 +155,9 @@ export default function ImportaBatch({
   // silenzio invece di affiancarsi al motore nuovo (doppio motore, form con i
   // dati dell'item sbagliato, item riportati in stati non finali).
   const runRef = useRef(0);
+  // Blocchi consecutivi dal fornitore (403/429/5xx): guidano il cooldown
+  // crescente e l'auto-pausa. Azzerato a ogni analisi andata a buon fine.
+  const blocchiRef = useRef(0);
 
   // --- Revisione (modalita "con revisione") -----------------------------------
   const [correnteIdx, setCorrenteIdx] = useState<number | null>(null);
@@ -180,6 +189,14 @@ export default function ImportaBatch({
 
   async function attesaPausa() {
     while (pausaRef.current && !abortRef.current) await sleep(300);
+  }
+
+  // Attesa a step per il cooldown: si interrompe subito su "Interrompi".
+  async function attesaInterrompibile(ms: number) {
+    const fine = Date.now() + ms;
+    while (Date.now() < fine && !abortRef.current) {
+      await sleep(Math.min(400, Math.max(0, fine - Date.now())));
+    }
   }
 
   function etichetta(item: ItemImport): string {
@@ -250,6 +267,10 @@ export default function ImportaBatch({
         // una foto persa non blocca le successive
       }
       aggiornaItem(idx, { fotoOk });
+      // Piccola pausa tra un download e l'altro: le foto sono la sorgente
+      // principale di richieste ravvicinate (una scheda = 1 pagina + N
+      // immagini), ed e cio che fa scattare il blocco 403 a meta batch.
+      if (f < dati.fotoSel.length - 1) await sleep(250);
     }
     const fotoPerse = dati.fotoSel.length - fotoOk;
 
@@ -281,7 +302,7 @@ export default function ImportaBatch({
 
   // --- Motore automatico -------------------------------------------------------
 
-  async function processaAuto(idx: number) {
+  async function processaAuto(idx: number): Promise<{ bloccato: boolean }> {
     const item = itemsRef.current[idx];
     aggiornaItem(idx, { stato: "analisi", nota: undefined });
     const r = await analizzaUrlFornitoreAction(item.url, { riscriviAI });
@@ -289,14 +310,20 @@ export default function ImportaBatch({
       // Interrotto durante l'analisi: la bozza e solo in memoria, si scarta e
       // l'item torna in coda (niente schede create DOPO il click di stop).
       aggiornaItem(idx, { stato: "attesa" });
-      return;
+      return { bloccato: false };
     }
     if (!r.ok || !r.bozza) {
+      if (r.throttled) {
+        // Non e un problema del prodotto: il fornitore ci frena. L'item torna
+        // in coda e verra ritentato dopo il cooldown del motore.
+        aggiornaItem(idx, { stato: "attesa", nota: undefined });
+        return { bloccato: true };
+      }
       aggiornaItem(idx, {
         stato: "errore",
         nota: r.error ?? "Analisi non riuscita.",
       });
-      return;
+      return { bloccato: false };
     }
     const b = r.bozza;
     await creaConFoto(idx, {
@@ -309,6 +336,7 @@ export default function ImportaBatch({
       categoriaId: categoriaId || null,
       soloOnline,
     });
+    return { bloccato: false };
   }
 
   async function avviaAuto() {
@@ -318,6 +346,7 @@ export default function ImportaBatch({
     abortRef.current = false;
     pausaRef.current = false;
     setPausa(false);
+    blocchiRef.current = 0;
     runRef.current++;
     setFase("lavora");
     for (;;) {
@@ -326,8 +355,9 @@ export default function ImportaBatch({
       if (abortRef.current) break;
       const idx = itemsRef.current.findIndex((x) => x.stato === "attesa");
       if (idx === -1) break;
+      let bloccato = false;
       try {
-        await processaAuto(idx);
+        ({ bloccato } = await processaAuto(idx));
       } catch {
         aggiornaItem(idx, {
           stato: "errore",
@@ -335,12 +365,39 @@ export default function ImportaBatch({
         });
       }
       setProgressoItem("");
+      if (bloccato) {
+        // Il fornitore ci frena (403/429). L'item e gia tornato in coda: aspetto
+        // un cooldown crescente e lo ritento, invece di bruciare i prodotti
+        // rimasti in una cascata di errori come faceva prima.
+        const n = ++blocchiRef.current;
+        if (n > COOLDOWN_BLOCCO_MS.length) {
+          // Blocco persistente: pausa e palla al gestore (niente loop infinito).
+          blocchiRef.current = 0;
+          pausaRef.current = true;
+          setPausa(true);
+          mostra(
+            "Il fornitore sta bloccando le richieste (troppe in poco tempo). Ho messo in pausa: aspetta un minuto e premi «Riprendi».",
+            "errore",
+          );
+          continue; // attesaPausa tiene fermo il motore fino a «Riprendi»
+        }
+        const attesa = COOLDOWN_BLOCCO_MS[n - 1];
+        setProgressoItem(
+          `Il fornitore ci frena: aspetto ${Math.round(attesa / 1000)}s e riprovo…`,
+        );
+        await attesaInterrompibile(attesa);
+        setProgressoItem("");
+        continue; // ritenta lo stesso item (e in stato "attesa")
+      }
+      blocchiRef.current = 0; // esito non-blocco: la serie di blocchi si azzera
       await sleep(350); // cortesia verso il fornitore
     }
     runningRef.current = false;
     setRunning(false);
     setProgressoItem("");
-    setFase("riepilogo");
+    // In auto-pausa NON vado al riepilogo: resto in "lavora", pronto a
+    // riprendere. Ci arrivo solo a coda finita o su "Interrompi".
+    if (!pausaRef.current) setFase("riepilogo");
   }
 
   // --- Motore con revisione ------------------------------------------------------
@@ -382,6 +439,34 @@ export default function ImportaBatch({
         return;
       }
       if (!r.ok || !r.bozza) {
+        if (r.throttled) {
+          // Il fornitore ci frena: NON marcare errore e non passare oltre a
+          // raffica (sarebbe la stessa cascata del motore auto). Cooldown e
+          // ritenta lo stesso item; dopo troppi blocchi mi fermo.
+          const n = ++blocchiRef.current;
+          aggiornaItem(idx, { stato: "attesa" });
+          if (n > COOLDOWN_BLOCCO_MS.length) {
+            blocchiRef.current = 0;
+            setCorrenteIdx(null);
+            setBozzaCorrente(null);
+            setAnalizzando(false);
+            mostra(
+              "Il fornitore sta bloccando le richieste. Mi fermo qui: aspetta un minuto e riprendi dal riepilogo.",
+              "errore",
+            );
+            setFase("riepilogo");
+            return;
+          }
+          mostra(
+            `Il fornitore ci frena: aspetto ${Math.round(
+              COOLDOWN_BLOCCO_MS[n - 1] / 1000,
+            )}s e riprovo…`,
+            "errore",
+          );
+          await attesaInterrompibile(COOLDOWN_BLOCCO_MS[n - 1]);
+          if (abortRef.current || run !== runRef.current) return;
+          continue; // ripesca lo stesso item (ora "attesa")
+        }
         aggiornaItem(idx, {
           stato: "errore",
           nota: r.error ?? "Analisi non riuscita.",
@@ -393,6 +478,7 @@ export default function ImportaBatch({
         continue; // prossimo item della coda, `analizzando` resta true
       }
       aggiornaItem(idx, { stato: "revisione" });
+      blocchiRef.current = 0; // analisi riuscita: azzera la serie di blocchi
       setBozzaCorrente(r.bozza);
       setAnalizzando(false);
       return;
@@ -401,6 +487,7 @@ export default function ImportaBatch({
 
   function avviaRevisione() {
     abortRef.current = false;
+    blocchiRef.current = 0;
     runRef.current++;
     setFase("lavora");
     void analizzaProssimo();
