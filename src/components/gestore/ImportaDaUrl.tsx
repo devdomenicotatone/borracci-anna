@@ -210,7 +210,11 @@ export default function ImportaDaUrl({ categorie }: { categorie: Categoria[] }) 
         for (let i = 0; i < dati.fotoSel.length; i++) {
           setProgresso(`Foto ${i + 1} di ${dati.fotoSel.length}…`);
           try {
-            const f = await importaFotoDaUrlAction(r.prodottoId, dati.fotoSel[i]);
+            const f = await importaFotoDaUrlAction(
+              r.prodottoId,
+              dati.fotoSel[i],
+              url.trim(),
+            );
             if (!f.ok) erroriFoto++;
           } catch {
             erroriFoto++;

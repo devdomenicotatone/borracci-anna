@@ -556,14 +556,17 @@ export function parseListingBlt(html: string): ListingBlt {
 export class ErroreFornitore extends Error {
   readonly status?: number;
   readonly throttled: boolean;
+  /** Attesa suggerita dal fornitore (header Retry-After) in ms, se presente. */
+  readonly retryAfterMs?: number;
   constructor(
     messaggio: string,
-    opzioni?: { status?: number; throttled?: boolean },
+    opzioni?: { status?: number; throttled?: boolean; retryAfterMs?: number },
   ) {
     super(messaggio);
     this.name = "ErroreFornitore";
     this.status = opzioni?.status;
     this.throttled = opzioni?.throttled ?? false;
+    this.retryAfterMs = opzioni?.retryAfterMs;
   }
 }
 
@@ -572,30 +575,137 @@ export class ErroreFornitore extends Error {
 // o ha un intoppo temporaneo (5xx, 408). Ogni altro status e un errore vero.
 const STATUS_THROTTLING = new Set([403, 408, 429, 500, 502, 503, 504]);
 
-/** Attesa (ms) prima del retry: rispetta Retry-After, altrimenti backoff+jitter. */
-function attesaRetry(res: Response, tentativo: number): number {
-  const retryAfter = res.headers.get("retry-after");
-  if (retryAfter) {
-    const sec = Number(retryAfter);
-    if (Number.isFinite(sec) && sec > 0) return Math.min(sec * 1000, 8_000);
+/** True se lo status merita rallentamento+retry (WAF/5xx passeggero) invece di errore. */
+export function eStatoThrottlingFornitore(status: number): boolean {
+  return STATUS_THROTTLING.has(status);
+}
+
+/**
+ * Retry-After della risposta convertito in ms. Gestisce sia il formato a secondi
+ * ("30") sia la data HTTP ("Wed, 21 Oct 2026 07:28:00 GMT"); null se assente o
+ * illeggibile. A differenza di prima NON cappa a 8s: chi lo usa decide il tetto
+ * (il limiter ne applica uno sano), così un "Retry-After: 30" non viene tradito.
+ */
+export function retryAfterMsDaRisposta(res: Response): number | null {
+  const v = res.headers.get("retry-after");
+  if (!v) return null;
+  const sec = Number(v);
+  if (Number.isFinite(sec)) return sec > 0 ? sec * 1000 : 0;
+  const data = Date.parse(v);
+  if (Number.isFinite(data)) {
+    const diff = data - Date.now();
+    return diff > 0 ? diff : 0;
   }
-  const base = Math.min(600 * 2 ** tentativo, 4_000); // 600, 1200, 2400, 4000…
-  return base + Math.floor(Math.random() * 300); // jitter anti-sincronia
+  return null;
 }
 
 function dormi(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// Header da browser reale: un UA credibile riduce i blocchi, ma il fornitore
-// puo comunque rispondere 403 quando le richieste arrivano troppo in fretta —
-// per quello c'e il retry con backoff (vedi STATUS_THROTTLING e fetchPaginaBlt).
+// --- Rate limiter globale adattivo (leaky-bucket + AIMD) ---------------------
+// Un SOLO ritmo per tutto il traffico verso il fornitore (pagine, listing,
+// foto): ogni richiesta prenota uno "slot" spaziato di `intervalloMs` dal
+// precedente, così la sequenza pagina→foto→foto non parte a raffica — ed è il
+// burst, non il volume medio, che fa scattare il 403 del WAF. L'intervallo è
+// ADATTIVO (AIMD): parte prudente, scende dopo una serie di successi (additive
+// decrease) e RADDOPPIA a ogni blocco (multiplicative increase), scoprendo da
+// solo il ritmo che il fornitore tollera invece di ripartire a manetta. Lo
+// stato vive per istanza serverless (best-effort, come cacheLogin): poiché il
+// client dispatcha le action in serie, una istanza calda vede quasi tutto il
+// traffico. Non coordina fra istanze diverse: quello è compito della coda in
+// background (fase successiva).
+const RATE_MIN_MS = 700; //         ritmo più veloce concesso (~85 req/min)
+const RATE_MAX_MS = 9_000; //       freno massimo dopo blocchi ripetuti
+const RATE_START_MS = 1_800; //     partenza prudente (~33 req/min)
+const RATE_DECREMENTO_MS = 120; //  di quanto accelera a ogni tacca
+const RATE_SUCCESSI_PER_TACCA = 12; // successi consecutivi per una tacca
+
+const rateFornitore = {
+  intervalloMs: RATE_START_MS,
+  prossimoSlot: 0,
+  successi: 0,
+};
+
+/**
+ * Prenota il prossimo slot e attende fin lì. Con `scadenza` (epoch ms), se lo
+ * slot cadrebbe OLTRE il budget non prenota e ritorna false: il chiamante lo
+ * tratta come throttling temporaneo (rimanda l'item) invece di sforare il
+ * maxDuration della action. Le richieste concorrenti (foto + pagina) restano
+ * spaziate: la prenotazione dello slot è sincrona, prima dell'await.
+ */
+export async function attendiTurnoFornitore(scadenza?: number): Promise<boolean> {
+  const ora = Date.now();
+  const slot = Math.max(ora, rateFornitore.prossimoSlot);
+  if (scadenza !== undefined && slot > scadenza) return false;
+  rateFornitore.prossimoSlot = slot + rateFornitore.intervalloMs;
+  const attesa = slot - ora;
+  if (attesa > 0) await dormi(attesa);
+  return true;
+}
+
+/** Esito positivo: dopo abbastanza successi consecutivi si accelera di una tacca. */
+export function segnalaSuccessoFornitore(): void {
+  if (++rateFornitore.successi >= RATE_SUCCESSI_PER_TACCA) {
+    rateFornitore.successi = 0;
+    rateFornitore.intervalloMs = Math.max(
+      RATE_MIN_MS,
+      rateFornitore.intervalloMs - RATE_DECREMENTO_MS,
+    );
+  }
+}
+
+/**
+ * Blocco dal fornitore (403/429/5xx): raddoppia l'intervallo (fino a RATE_MAX_MS)
+ * e rinvia il prossimo slot di `retryAfterMs` se noto (tetto 60s), altrimenti del
+ * nuovo intervallo. Ritorna i ms di rinvio applicati, così il chiamante decide se
+ * stanno nel proprio budget.
+ */
+export function segnalaBloccoFornitore(retryAfterMs?: number | null): number {
+  rateFornitore.successi = 0;
+  rateFornitore.intervalloMs = Math.min(
+    RATE_MAX_MS,
+    rateFornitore.intervalloMs * 2,
+  );
+  const rinvio =
+    retryAfterMs != null && retryAfterMs > 0
+      ? Math.min(retryAfterMs, 60_000)
+      : rateFornitore.intervalloMs;
+  rateFornitore.prossimoSlot = Math.max(
+    rateFornitore.prossimoSlot,
+    Date.now() + rinvio,
+  );
+  return rinvio;
+}
+
+// Un vero Chrome invia UA e "client hints" (sec-ch-ua) COERENTI tra loro, più
+// gli header Sec-Fetch-* e Accept-Encoding: qui li replichiamo fedelmente per
+// non farci marcare come bot dal WAF (fedeltà, NON evasione: sono clienti B2B
+// legittimi). La major di Chrome sta in una costante unica, così UA e sec-ch-ua
+// non divergono mai — una divergenza è un tell peggiore dell'assenza. Esportati:
+// le richieste immagine (import-actions) li riusano per restare coerenti.
+export const CHROME_MAJOR_FORNITORE = "126";
+export const UA_FORNITORE = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR_FORNITORE}.0.0.0 Safari/537.36`;
+export const SEC_CH_UA_FORNITORE = `"Not/A)Brand";v="8", "Chromium";v="${CHROME_MAJOR_FORNITORE}", "Google Chrome";v="${CHROME_MAJOR_FORNITORE}"`;
+// br incluso: undici decomprime gzip/deflate/br in modo trasparente anche
+// leggendo res.body a pezzi (verificato). MAI dichiarare zstd: undici non lo
+// decomprime e il corpo arriverebbe illeggibile.
+export const ACCEPT_ENCODING_FORNITORE = "gzip, deflate, br";
+
 const HEADER_BROWSER: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "User-Agent": UA_FORNITORE,
   Accept:
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+  "Accept-Encoding": ACCEPT_ENCODING_FORNITORE,
+  "sec-ch-ua": SEC_CH_UA_FORNITORE,
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"macOS"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
 };
 
 const URL_LOGIN = `https://${HOST_FORNITORE}/customer/account/login/`;
@@ -689,6 +799,9 @@ export async function loginBlt(
       method: "POST",
       headers: {
         ...HEADER_BROWSER,
+        // POST del form di login: viene DALLA pagina di login dello stesso sito,
+        // quindi same-origin (il "none" di HEADER_BROWSER contraddirebbe il Referer).
+        "Sec-Fetch-Site": "same-origin",
         Cookie: headerCookie(barattolo),
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: `https://${HOST_FORNITORE}`,
@@ -744,6 +857,14 @@ async function fetchPaginaBlt(
         throttled: true,
       });
     }
+    // Pacing globale: prenota il turno (spaziato e adattivo), redirect e retry
+    // inclusi. Se non c'e turno entro il budget e come un throttling: si rimanda
+    // l'item invece di sforare il maxDuration della action.
+    if (!(await attendiTurnoFornitore(scadenza))) {
+      throw new ErroreFornitore("Coda verso il fornitore troppo lunga.", {
+        throttled: true,
+      });
+    }
     const r = await fetch(urlCorrente, {
       headers: cookie ? { ...HEADER_BROWSER, Cookie: cookie } : HEADER_BROWSER,
       redirect: "manual",
@@ -761,28 +882,38 @@ async function fetchPaginaBlt(
       }
       continue;
     }
-    // Throttling (403/429/5xx): rallenta e riprova la STESSA risorsa finche c'e
-    // budget. Se il tempo residuo non copre l'attesa, si esce con l'errore
-    // parlante qui sotto (il chiamante lo riconosce e mette in cooldown).
-    if (STATUS_THROTTLING.has(r.status) && tentativiRetry < 3) {
+    // Throttling (403/429/5xx): penalizza il rate limiter UNA SOLA volta per
+    // risposta (raddoppia l'intervallo e rinvia il prossimo slot, rispettando
+    // Retry-After), poi UN SOLO retry se il rinvio sta nel budget — prima erano 3
+    // retry, che sparavano richieste ravvicinate proprio mentre il WAF frenava.
+    // Se non si ritenta (retry esaurito o budget insufficiente), l'errore
+    // throttled esce di qui col Retry-After: il chiamante mette in cooldown.
+    if (STATUS_THROTTLING.has(r.status)) {
       await r.body?.cancel().catch(() => {});
-      const attesa = attesaRetry(r, tentativiRetry);
-      if (Date.now() + attesa < scadenza) {
+      const retryAfterMs = retryAfterMsDaRisposta(r);
+      const rinvio = segnalaBloccoFornitore(retryAfterMs);
+      if (tentativiRetry < 1 && Date.now() + rinvio < scadenza) {
         tentativiRetry++;
-        await dormi(attesa);
         continue;
       }
+      throw new ErroreFornitore(`Il fornitore ha risposto ${r.status}.`, {
+        status: r.status,
+        throttled: true,
+        retryAfterMs: retryAfterMs ?? undefined,
+      });
     }
     res = r;
     break;
   }
   if (!res) throw new ErroreFornitore("Troppi redirect dal fornitore.");
   if (!res.ok) {
+    // Errore non-throttling (es. 404/410): nessuna penalità al rate limiter.
     throw new ErroreFornitore(`Il fornitore ha risposto ${res.status}.`, {
       status: res.status,
-      throttled: STATUS_THROTTLING.has(res.status),
+      throttled: false,
     });
   }
+  segnalaSuccessoFornitore();
 
   // Lettura a pezzi con tetto: oltre `maxByte` si tronca (i dati utili ai
   // parser stanno comunque prima del tetto scelto dal chiamante).

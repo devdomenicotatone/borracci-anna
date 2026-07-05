@@ -29,14 +29,22 @@ import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
 import { skuVariante } from "@/lib/catalogo";
 import {
+  ACCEPT_ENCODING_FORNITORE,
   ErroreFornitore,
+  SEC_CH_UA_FORNITORE,
+  UA_FORNITORE,
+  attendiTurnoFornitore,
   eSchedaProdottoBlt,
+  eStatoThrottlingFornitore,
   fetchListingBlt,
   fetchProdottoBlt,
   loginBlt,
   paginaListingBlt,
   parseListingBlt,
   parseProdottoBlt,
+  retryAfterMsDaRisposta,
+  segnalaBloccoFornitore,
+  segnalaSuccessoFornitore,
   urlFornitoreValido,
   type ProdottoBlt,
   type VoceListingBlt,
@@ -78,8 +86,10 @@ function tagliaCanonica(t: string): string {
 // un login per prodotto sarebbe lento e, se le credenziali sono sbagliate,
 // farebbe scattare il captcha di Magento. La cache vive per istanza serverless
 // (best effort: su un'istanza fredda si rifà il login, che e comunque UNO):
-// cookie valido ~10 minuti, esito negativo ricordato ~3 minuti.
-const TTL_COOKIE_MS = 10 * 60 * 1000;
+// cookie valido ~30 minuti, esito negativo ricordato ~3 minuti. I 30' coprono
+// anche i batch lunghi: col rate limiter una categoria intera puo richiedere
+// parecchi minuti e con 10' la cache scadrebbe a meta import, ri-loggando.
+const TTL_COOKIE_MS = 30 * 60 * 1000;
 const TTL_LOGIN_FALLITO_MS = 3 * 60 * 1000;
 let cacheLogin: { cookie: string | null; scade: number } | null = null;
 // Promise del login in volo: due action concorrenti (check-then-act sulla
@@ -263,6 +273,8 @@ export interface EsitoScansione {
   error?: string;
   /** True se l'errore e un blocco temporaneo del fornitore (403/429/5xx). */
   throttled?: boolean;
+  /** Attesa suggerita dal fornitore (Retry-After) in ms, se dichiarata. */
+  retryAfterMs?: number;
   /** "prodotto" se l'URL incollato e una scheda singola (solo con pagina=1). */
   tipo?: "prodotto" | "listing";
   voci?: VoceListingBlt[];
@@ -308,6 +320,7 @@ export async function scansionaListingAction(
       ok: false,
       error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
       throttled: e instanceof ErroreFornitore ? e.throttled : false,
+      retryAfterMs: e instanceof ErroreFornitore ? e.retryAfterMs : undefined,
     };
   }
 
@@ -389,6 +402,8 @@ export async function analizzaUrlFornitoreAction(
   error?: string;
   /** True se l'errore e un blocco temporaneo del fornitore (403/429/5xx). */
   throttled?: boolean;
+  /** Attesa suggerita dal fornitore (Retry-After) in ms, se dichiarata. */
+  retryAfterMs?: number;
   bozza?: BozzaImport;
 }> {
   const sessione = await verifySession();
@@ -415,6 +430,7 @@ export async function analizzaUrlFornitoreAction(
       ok: false,
       error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
       throttled: e instanceof ErroreFornitore ? e.throttled : false,
+      retryAfterMs: e instanceof ErroreFornitore ? e.retryAfterMs : undefined,
     };
   }
 
@@ -662,14 +678,33 @@ export async function creaProdottoDaImportAction(input: {
 
 // --- 3) Import di una foto dal fornitore ------------------------------------------
 
-// Header da browser per il download delle immagini (il sito non ha anti-bot
-// ma serve un UA credibile, come per le pagine).
-const HEADER_IMMAGINI: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-  Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-  "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-};
+// Header da browser per il download immagini: coerenti con le pagine (stesso UA
+// e sec-ch-ua) più i Sec-Fetch-* tipici di una sotto-risorsa immagine. Un
+// browser vero, caricando le <img> della scheda, invia ANCHE il cookie di
+// sessione e il Referer della pagina prodotto: ometterli (come prima) è una
+// firma da bot ("pagina loggata + immagini anonime dallo stesso IP"). Li
+// aggiungiamo quando disponibili — è fedeltà al browser, non evasione. Il
+// Referer si accetta solo se del fornitore (difesa da leak/SSRF).
+function intestazioniImmagine(opts: {
+  referer?: string | null;
+  cookie?: string | null;
+}): Record<string, string> {
+  const h: Record<string, string> = {
+    "User-Agent": UA_FORNITORE,
+    Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+    "Accept-Encoding": ACCEPT_ENCODING_FORNITORE,
+    "sec-ch-ua": SEC_CH_UA_FORNITORE,
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "same-origin",
+  };
+  if (opts.referer && urlFornitoreValido(opts.referer)) h.Referer = opts.referer;
+  if (opts.cookie) h.Cookie = opts.cookie;
+  return h;
+}
 
 const MAX_FOTO_BYTE = 10 * 1024 * 1024; // 10MB
 
@@ -698,12 +733,22 @@ function fotoUrlValida(fotoUrl: string): boolean {
  */
 async function scaricaFoto(
   fotoUrl: string,
+  opts: { referer?: string | null; cookie?: string | null } = {},
 ): Promise<{ byte: Uint8Array; contentType: string } | { errore: string }> {
+  // Budget cumulativo: con l'attesa del rate limiter una foto non deve tenere
+  // occupata la action oltre il maxDuration (60s), foto + pagina inclusi.
+  const scadenza = Date.now() + 30_000;
+  const headers = intestazioniImmagine(opts);
   let urlCorrente = fotoUrl;
   let res: Response | null = null;
   for (let salto = 0; salto < 3; salto++) {
+    // Stesso pacing globale delle pagine: la foto consuma un permesso dallo
+    // stesso tetto, così la sequenza pagina→foto→foto esce spaziata.
+    if (!(await attendiTurnoFornitore(scadenza))) {
+      return { errore: "Fornitore occupato: riprova." };
+    }
     const r = await fetch(urlCorrente, {
-      headers: HEADER_IMMAGINI,
+      headers,
       redirect: "manual",
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
@@ -721,7 +766,17 @@ async function scaricaFoto(
     break;
   }
   if (!res) return { errore: "Troppi redirect." };
-  if (!res.ok) return { errore: `Il fornitore ha risposto ${res.status}.` };
+  if (!res.ok) {
+    // Anche un 403 sulle foto insegna al limiter a rallentare (le foto sono la
+    // sorgente principale di richieste ravvicinate) — rispettando il Retry-After
+    // della risposta, come per le pagine, così il prossimo slot (foto O pagina)
+    // aspetta il tempo dettato dal fornitore invece del solo raddoppio.
+    if (eStatoThrottlingFornitore(res.status)) {
+      segnalaBloccoFornitore(retryAfterMsDaRisposta(res));
+    }
+    return { errore: `Il fornitore ha risposto ${res.status}.` };
+  }
+  segnalaSuccessoFornitore();
 
   const contentType = (res.headers.get("content-type") ?? "")
     .split(";")[0]
@@ -780,6 +835,8 @@ async function scaricaFoto(
 export async function importaFotoDaUrlAction(
   prodottoId: string,
   fotoUrl: string,
+  /** URL della scheda di provenienza: usato come Referer (fedeltà browser). */
+  refererUrl?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
@@ -807,7 +864,13 @@ export async function importaFotoDaUrlAction(
       return { ok: true };
     }
 
-    const scaricata = await scaricaFoto(fotoUrl);
+    // Cookie di sessione (riusa la cache di login) + Referer della scheda: come
+    // farebbe il browser caricando le <img> della pagina prodotto. Il Referer
+    // passa solo se del fornitore (difesa da leak/SSRF, ricontrollata a valle).
+    const { cookie } = await cookieFornitore();
+    const referer =
+      refererUrl && urlFornitoreValido(refererUrl) ? refererUrl : null;
+    const scaricata = await scaricaFoto(fotoUrl, { cookie, referer });
     if ("errore" in scaricata) return { ok: false, error: scaricata.errore };
 
     const estensione =

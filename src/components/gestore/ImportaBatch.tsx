@@ -93,6 +93,14 @@ function sleep(ms: number): Promise<void> {
 // e lascia decidere al gestore, invece di trasformare il blocco in una cascata
 // di errori sui prodotti rimasti.
 const COOLDOWN_BLOCCO_MS = [8_000, 20_000, 40_000];
+const COOLDOWN_MAX_MS = 90_000;
+
+// Attesa effettiva: il maggiore tra il cooldown crescente e il Retry-After
+// dettato dal fornitore (con un tetto sano), così onoriamo il tempo che il WAF
+// ci chiede invece di ripiombargli addosso troppo presto.
+function attesaCooldown(base: number, retryAfterMs?: number): number {
+  return Math.min(COOLDOWN_MAX_MS, Math.max(base, retryAfterMs ?? 0));
+}
 
 export default function ImportaBatch({
   voci,
@@ -251,6 +259,9 @@ export default function ImportaBatch({
     // (foto + eventuale pubblicazione): l'annulla agisce solo tra una scheda
     // e l'altra, mai a meta — una bozza monca sarebbe peggio di un minuto in piu.
     let fotoOk = 0;
+    // URL della scheda di provenienza: diventa il Referer del download foto
+    // (fedeltà browser lato server, riduce i falsi positivi del WAF).
+    const urlScheda = itemsRef.current[idx]?.url;
     aggiornaItem(idx, {
       stato: "foto",
       prodottoId: c.prodottoId,
@@ -261,7 +272,11 @@ export default function ImportaBatch({
       await attesaPausa();
       setProgressoItem(`Foto ${f + 1} di ${dati.fotoSel.length}…`);
       try {
-        const esito = await importaFotoDaUrlAction(c.prodottoId, dati.fotoSel[f]);
+        const esito = await importaFotoDaUrlAction(
+          c.prodottoId,
+          dati.fotoSel[f],
+          urlScheda,
+        );
         if (esito.ok) fotoOk++;
       } catch {
         // una foto persa non blocca le successive
@@ -302,7 +317,9 @@ export default function ImportaBatch({
 
   // --- Motore automatico -------------------------------------------------------
 
-  async function processaAuto(idx: number): Promise<{ bloccato: boolean }> {
+  async function processaAuto(
+    idx: number,
+  ): Promise<{ bloccato: boolean; retryAfterMs?: number }> {
     const item = itemsRef.current[idx];
     aggiornaItem(idx, { stato: "analisi", nota: undefined });
     const r = await analizzaUrlFornitoreAction(item.url, { riscriviAI });
@@ -317,7 +334,7 @@ export default function ImportaBatch({
         // Non e un problema del prodotto: il fornitore ci frena. L'item torna
         // in coda e verra ritentato dopo il cooldown del motore.
         aggiornaItem(idx, { stato: "attesa", nota: undefined });
-        return { bloccato: true };
+        return { bloccato: true, retryAfterMs: r.retryAfterMs };
       }
       aggiornaItem(idx, {
         stato: "errore",
@@ -356,8 +373,9 @@ export default function ImportaBatch({
       const idx = itemsRef.current.findIndex((x) => x.stato === "attesa");
       if (idx === -1) break;
       let bloccato = false;
+      let retryAfterMs: number | undefined;
       try {
-        ({ bloccato } = await processaAuto(idx));
+        ({ bloccato, retryAfterMs } = await processaAuto(idx));
       } catch {
         aggiornaItem(idx, {
           stato: "errore",
@@ -381,7 +399,7 @@ export default function ImportaBatch({
           );
           continue; // attesaPausa tiene fermo il motore fino a «Riprendi»
         }
-        const attesa = COOLDOWN_BLOCCO_MS[n - 1];
+        const attesa = attesaCooldown(COOLDOWN_BLOCCO_MS[n - 1], retryAfterMs);
         setProgressoItem(
           `Il fornitore ci frena: aspetto ${Math.round(attesa / 1000)}s e riprovo…`,
         );
@@ -457,13 +475,12 @@ export default function ImportaBatch({
             setFase("riepilogo");
             return;
           }
+          const attesa = attesaCooldown(COOLDOWN_BLOCCO_MS[n - 1], r.retryAfterMs);
           mostra(
-            `Il fornitore ci frena: aspetto ${Math.round(
-              COOLDOWN_BLOCCO_MS[n - 1] / 1000,
-            )}s e riprovo…`,
+            `Il fornitore ci frena: aspetto ${Math.round(attesa / 1000)}s e riprovo…`,
             "errore",
           );
-          await attesaInterrompibile(COOLDOWN_BLOCCO_MS[n - 1]);
+          await attesaInterrompibile(attesa);
           if (abortRef.current || run !== runRef.current) return;
           continue; // ripesca lo stesso item (ora "attesa")
         }
