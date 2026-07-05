@@ -31,6 +31,9 @@ create table if not exists public.prodotti (
   -- Magazzino NON in tempo reale: il cliente sceglie colore+taglia e contatta
   -- il negozio ("Scrivici per la disponibilita"). Vedi migration 20260623160000.
   disponibilita_su_richiesta boolean not null default true,
+  -- Articolo disponibile SOLO dal sito, non presente in negozio (badge
+  -- informativo in vetrina). Vedi migration 20260705120000.
+  solo_online   boolean not null default false,
   creato_il     timestamptz not null default now()
 );
 -- Idempotente per i DB gia creati (la create-table sopra non aggiunge colonne).
@@ -38,6 +41,8 @@ alter table public.prodotti
   add column if not exists disponibilita_su_richiesta boolean not null default true;
 alter table public.prodotti
   add column if not exists codice text;
+alter table public.prodotti
+  add column if not exists solo_online boolean not null default false;
 create unique index if not exists prodotti_codice_key on public.prodotti (codice);
 
 create index if not exists idx_prodotti_attivo on public.prodotti (attivo);

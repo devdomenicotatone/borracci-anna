@@ -1,18 +1,25 @@
 "use server";
 
-// Server Actions "Importa da URL" (fornitore Ingrosso BLT).
-// Flusso: il gestore incolla l'URL di un prodotto del fornitore ->
+// Server Actions "Importa da fornitore" (Ingrosso BLT).
+// Flusso singolo: il gestore incolla l'URL di un prodotto del fornitore ->
 //   1) analizzaUrlFornitoreAction: login (se configurato), download, parsing e
 //      riscrittura AI di nome+descrizione -> BozzaImport (nessun salvataggio);
 //   2) creaProdottoDaImportAction: crea il prodotto SEMPRE come BOZZA
 //      (attivo=false, su richiesta) con le varianti taglia a stock 0;
 //   3) importaFotoDaUrlAction: il client importa le foto UNA ALLA VOLTA
 //      (master originali, senza ricompressione), stesso percorso della galleria.
+// Flusso massivo (URL di una pagina categoria/listing): il client orchestra
+//   scansionaListingAction (una PAGINA di listing per chiamata: gli URL delle
+//   schede) + verificaCodiciAction (pre-check duplicati), poi per ogni scheda
+//   riusa il flusso singolo 1->2->3. Ogni chiamata resta cosi dentro il
+//   maxDuration della pagina, e un errore su un prodotto non ferma gli altri.
 //
 // Sicurezza: URL e fotoUrl passano SEMPRE dalla whitelist host del fornitore
-// (difesa SSRF); credenziali solo da env (mai dal client); 1 solo tentativo di
-// login per run; il contenuto del fornitore e trattato come DATO non fidato
-// per Claude (mai HTML grezzo, schema rigido, istruzioni ignorate).
+// (difesa SSRF); credenziali solo da env (mai dal client); login con cache di
+// modulo (mai piu di un tentativo ogni pochi minuti: il captcha di Magento si
+// attiva sui fallimenti ripetuti); il contenuto del fornitore e trattato come
+// DATO non fidato per Claude (mai HTML grezzo, schema rigido, istruzioni
+// ignorate).
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
@@ -22,11 +29,16 @@ import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
 import { skuVariante } from "@/lib/catalogo";
 import {
+  eSchedaProdottoBlt,
+  fetchListingBlt,
   fetchProdottoBlt,
   loginBlt,
+  paginaListingBlt,
+  parseListingBlt,
   parseProdottoBlt,
   urlFornitoreValido,
   type ProdottoBlt,
+  type VoceListingBlt,
 } from "@/lib/gestore/fornitori/ingrossoblt";
 
 const MODELLO = "claude-sonnet-4-6";
@@ -57,6 +69,55 @@ function tagliaCanonica(t: string): string {
   if (maiuscola === "XXL") return "2XL";
   if (maiuscola === "XXXL") return "3XL";
   return maiuscola;
+}
+
+// --- Login fornitore con cache di modulo ---------------------------------------
+
+// Nel flusso massivo analizzaUrlFornitoreAction gira decine di volte di fila:
+// un login per prodotto sarebbe lento e, se le credenziali sono sbagliate,
+// farebbe scattare il captcha di Magento. La cache vive per istanza serverless
+// (best effort: su un'istanza fredda si rifà il login, che e comunque UNO):
+// cookie valido ~10 minuti, esito negativo ricordato ~3 minuti.
+const TTL_COOKIE_MS = 10 * 60 * 1000;
+const TTL_LOGIN_FALLITO_MS = 3 * 60 * 1000;
+let cacheLogin: { cookie: string | null; scade: number } | null = null;
+// Promise del login in volo: due action concorrenti (check-then-act sulla
+// cache) farebbero DUE POST di credenziali ravvicinati, proprio il pattern
+// anti-captcha che la cache vuole evitare. Cosi il tentativo e sempre UNO.
+let loginInCorso: Promise<string | null> | null = null;
+
+async function cookieFornitore(): Promise<{
+  cookie: string | null;
+  credenziali: boolean;
+  loginFallito: boolean;
+}> {
+  const email = (process.env.BLT_EMAIL ?? "").trim();
+  const password = (process.env.BLT_PASSWORD ?? "").trim();
+  if (!email || !password) {
+    return { cookie: null, credenziali: false, loginFallito: false };
+  }
+  if (cacheLogin && cacheLogin.scade > Date.now()) {
+    return {
+      cookie: cacheLogin.cookie,
+      credenziali: true,
+      loginFallito: cacheLogin.cookie === null,
+    };
+  }
+  if (!loginInCorso) {
+    loginInCorso = loginBlt(email, password)
+      .then((cookie) => {
+        cacheLogin = {
+          cookie,
+          scade: Date.now() + (cookie ? TTL_COOKIE_MS : TTL_LOGIN_FALLITO_MS),
+        };
+        return cookie;
+      })
+      .finally(() => {
+        loginInCorso = null;
+      });
+  }
+  const cookie = await loginInCorso;
+  return { cookie, credenziali: true, loginFallito: cookie === null };
 }
 
 // --- Contratto condiviso ------------------------------------------------------
@@ -143,8 +204,11 @@ ${prodotto.descrizioneFornitore.slice(0, 4000) || "(nessuna)"}`;
 
   try {
     // Budget timeout dell'intera action ≤ maxDuration=60 della pagina importa:
-    // login 2×8s + fetch pagina 15s + Claude 25s ≈ 56s nel caso peggiore.
-    const client = new Anthropic({ timeout: 25_000 });
+    // login 16s + fetch pagina 20s + Claude 25s ≈ 61s nel caso peggiore (raro:
+    // i budget di login/fetch sono cumulativi e quasi mai al massimo).
+    // maxRetries: 0 — il default (2) porterebbe il solo passo AI a ~77s; il
+    // "retry" logico e gia il fallback ai testi del fornitore nel chiamante.
+    const client = new Anthropic({ timeout: 25_000, maxRetries: 0 });
     const msg = await client.messages.create({
       model: MODELLO,
       max_tokens: 1024,
@@ -188,14 +252,134 @@ ${prodotto.descrizioneFornitore.slice(0, 4000) || "(nessuna)"}`;
   }
 }
 
+// --- 0) Scansione di una pagina listing ------------------------------------------
+
+// Tetto anti-runaway: 40 pagine x 25 card = 1000 prodotti per scansione.
+const MAX_PAGINE_LISTING = 40;
+
+export interface EsitoScansione {
+  ok: boolean;
+  error?: string;
+  /** "prodotto" se l'URL incollato e una scheda singola (solo con pagina=1). */
+  tipo?: "prodotto" | "listing";
+  voci?: VoceListingBlt[];
+  /** Totale articoli dichiarato dal toolbar del fornitore, se leggibile. */
+  totale?: number | null;
+  /** True quando il listing e finito (pagina vuota o senza card). */
+  fine?: boolean;
+}
+
+/**
+ * Scarica UNA pagina di un listing del fornitore e ne estrae le card (URL
+ * scheda + SKU + titolo). Il client chiama pagina 1, 2, 3... e si ferma a
+ * `fine`: ogni chiamata resta cosi ben dentro il budget della route, e la
+ * scansione mostra il progresso pagina per pagina. Con pagina=1 rileva anche
+ * il caso "URL di una scheda singola" e lo segnala con tipo="prodotto".
+ * Niente login: i listing sono pubblici e qui non servono i prezzi ingrosso.
+ */
+export async function scansionaListingAction(
+  url: string,
+  pagina: number,
+): Promise<EsitoScansione> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+
+  // Difesa SSRF: si scarica SOLO da https://www.ingrossoblt.com.
+  if (!urlFornitoreValido(url)) {
+    return { ok: false, error: "URL non del fornitore supportato." };
+  }
+  if (
+    !Number.isInteger(pagina) ||
+    pagina < 1 ||
+    pagina > MAX_PAGINE_LISTING
+  ) {
+    return { ok: false, error: "Numero di pagina non valido." };
+  }
+
+  let html: string;
+  try {
+    html = await fetchListingBlt(paginaListingBlt(url, pagina));
+  } catch (e) {
+    const messaggio = e instanceof Error ? e.message : "errore di rete";
+    return {
+      ok: false,
+      error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
+    };
+  }
+
+  if (pagina === 1 && eSchedaProdottoBlt(html)) {
+    return { ok: true, tipo: "prodotto" };
+  }
+
+  const listing = parseListingBlt(html);
+  return {
+    ok: true,
+    tipo: "listing",
+    voci: listing.voci,
+    totale: listing.totale,
+    fine: listing.vuota || listing.voci.length === 0,
+  };
+}
+
+/**
+ * Pre-check duplicati del flusso massivo: quali di questi codici prodotto sono
+ * gia a catalogo? Il client marca le card corrispondenti come "gia presente" e
+ * le salta senza scaricarle. E solo un'ottimizzazione: la garanzia vera resta
+ * il vincolo unique su prodotti.codice al momento della creazione.
+ */
+export async function verificaCodiciAction(
+  codici: string[],
+): Promise<{ ok: boolean; error?: string; esistenti?: string[] }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+
+  // Mai fidarsi della forma dell'input: un POST forgiato con `codici` non-array
+  // non deve far saltare la action (contratto: sempre { ok, error? }).
+  const grezzi = Array.isArray(codici) ? codici : [];
+  const richiesti = new Set(
+    grezzi
+      .map((c) => (typeof c === "string" ? c.trim().toUpperCase() : ""))
+      .filter((c) => c !== "" && c.length <= 64)
+      .slice(0, 1000),
+  );
+  if (richiesti.size === 0) return { ok: true, esistenti: [] };
+
+  try {
+    // Confronto CASE-INSENSITIVE in JS: a DB i codici non sono normalizzati
+    // (un "pa0126" inserito a mano non matcherebbe un .in() con "PA0126") e
+    // l'indice unique e case-sensitive. Il catalogo e piccolo (boutique):
+    // leggere i codici non-null a pagine di 1000 e semplice e robusto.
+    const esistenti = new Set<string>();
+    for (let da = 0; da < 10_000; da += 1000) {
+      const { data, error } = await sessione.supabase
+        .from("prodotti")
+        .select("codice")
+        .not("codice", "is", null)
+        .range(da, da + 999);
+      if (error) return { ok: false, error: error.message };
+      for (const riga of data ?? []) {
+        const c = (riga.codice as string | null)?.trim().toUpperCase();
+        if (c && richiesti.has(c)) esistenti.add(c);
+      }
+      if (!data || data.length < 1000) break;
+    }
+    return { ok: true, esistenti: [...esistenti] };
+  } catch {
+    return { ok: false, error: "Errore di rete durante il controllo duplicati." };
+  }
+}
+
 // --- 1) Analisi dell'URL fornitore ---------------------------------------------
 
 /**
  * Scarica e analizza la pagina prodotto del fornitore e prepara la bozza da
  * far rivedere al gestore. NON salva nulla. Mai throw: sempre { ok, error? }.
+ * `opzioni.riscriviAI=false` salta la riscrittura di nome+descrizione (utile
+ * nei flussi massivi quando il gestore preferisce la velocita ai testi rifiniti).
  */
 export async function analizzaUrlFornitoreAction(
   url: string,
+  opzioni?: { riscriviAI?: boolean },
 ): Promise<{ ok: boolean; error?: string; bozza?: BozzaImport }> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
@@ -207,17 +391,9 @@ export async function analizzaUrlFornitoreAction(
 
   const avvisi: string[] = [];
 
-  // Login opzionale: credenziali SOLO da env, UN solo tentativo per run
-  // (il captcha Magento si attiva dopo ripetuti fallimenti: mai retry).
-  const email = (process.env.BLT_EMAIL ?? "").trim();
-  const password = (process.env.BLT_PASSWORD ?? "").trim();
-  const credenziali = Boolean(email && password);
-  let cookie: string | null = null;
-  let loginFallito = false;
-  if (credenziali) {
-    cookie = await loginBlt(email, password);
-    if (!cookie) loginFallito = true;
-  }
+  // Login opzionale: credenziali SOLO da env, con cache di modulo (vedi
+  // cookieFornitore: il captcha Magento si attiva sui fallimenti ripetuti).
+  const { cookie, credenziali, loginFallito } = await cookieFornitore();
 
   let prodotto: ProdottoBlt;
   try {
@@ -256,9 +432,10 @@ export async function analizzaUrlFornitoreAction(
     }
   }
 
-  // Riscrittura AI di nome e descrizione; se fallisce la bozza resta valida
-  // con i testi del fornitore (ripuliti dal parser) e un avviso.
-  const riscritta = await riscriviConClaude(prodotto);
+  // Riscrittura AI di nome e descrizione (salvo opt-out); se fallisce la bozza
+  // resta valida con i testi del fornitore (ripuliti dal parser) e un avviso.
+  const conAI = opzioni?.riscriviAI !== false;
+  const riscritta = conAI ? await riscriviConClaude(prodotto) : null;
   let nome: string;
   let descrizione: string;
   if (riscritta) {
@@ -267,9 +444,11 @@ export async function analizzaUrlFornitoreAction(
   } else {
     nome = prodotto.nome;
     descrizione = prodotto.descrizioneFornitore.trim();
-    avvisi.push(
-      "Riscrittura AI non riuscita: nome e descrizione sono quelli del fornitore, da rivedere.",
-    );
+    if (conAI) {
+      avvisi.push(
+        "Riscrittura AI non riuscita: nome e descrizione sono quelli del fornitore, da rivedere.",
+      );
+    }
   }
   nome = nome.replace(/\s+/g, " ").trim();
   if (!nome) {
@@ -304,8 +483,11 @@ export async function analizzaUrlFornitoreAction(
 
 /**
  * Crea il prodotto BOZZA dall'import rivisto dal gestore: attivo=false,
- * disponibilita_su_richiesta=true, nessuna categoria, una variante per taglia
- * (colore null, stock 0, SKU dal codice base o dallo slug). MAI auto-pubblicare.
+ * disponibilita_su_richiesta=true, categoria opzionale, una variante per taglia
+ * (colore null, stock 0, SKU dal codice base o dallo slug). MAI auto-pubblicare
+ * da qui: l'eventuale pubblicazione e un passo esplicito e separato del client.
+ * `duplicato=true` nell'esito segnala il caso "codice gia a catalogo", che nel
+ * flusso massivo e un salto pulito e non un errore.
  */
 export async function creaProdottoDaImportAction(input: {
   nome: string;
@@ -314,7 +496,15 @@ export async function creaProdottoDaImportAction(input: {
   descrizione: string;
   prezzoCents: number;
   taglie: string[];
-}): Promise<{ ok: boolean; error?: string; prodottoId?: string }> {
+  categoriaId?: string | null;
+  /** Articolo non presente in negozio: badge "Solo online" in vetrina. */
+  soloOnline?: boolean;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  prodottoId?: string;
+  duplicato?: boolean;
+}> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
   const { supabase } = sessione;
@@ -326,13 +516,17 @@ export async function creaProdottoDaImportAction(input: {
   if (!/^[a-z0-9-]+$/.test(slugBase)) {
     return { ok: false, error: "Slug non valido: solo minuscole, numeri e trattini." };
   }
-  const codice = (input.codice ?? "").trim() || null;
+  // Codice normalizzato a MAIUSCOLO: il parser BLT produce codici maiuscoli e
+  // l'indice unique e case-sensitive; senza normalizzazione "pa0126"/"PA0126"
+  // coesisterebbero come doppioni reali.
+  const codice = (input.codice ?? "").trim().toUpperCase() || null;
   if (codice && slugify(codice) === "") {
     return { ok: false, error: "Codice non valido: usa lettere o numeri." };
   }
   if (!Number.isInteger(input.prezzoCents) || input.prezzoCents <= 0) {
     return { ok: false, error: "Inserisci un prezzo valido maggiore di zero." };
   }
+  const categoriaId = (input.categoriaId ?? "").trim() || null;
 
   // Taglie: set canonico + libere corte, max 15, senza duplicati.
   const taglie: string[] = [];
@@ -367,10 +561,11 @@ export async function creaProdottoDaImportAction(input: {
           nome,
           codice,
           descrizione: input.descrizione?.trim() || null,
-          categoria_id: null,
+          categoria_id: categoriaId,
           prezzo_cents: input.prezzoCents,
           attivo: false, //                       SEMPRE bozza: pubblica il gestore
           disponibilita_su_richiesta: true,
+          solo_online: input.soloOnline === true,
         })
         .select("id")
         .single();
@@ -380,7 +575,14 @@ export async function creaProdottoDaImportAction(input: {
       } else if (error && error.code === "23505" && error.message.includes("codice")) {
         return {
           ok: false,
+          duplicato: true,
           error: "Questo codice e gia in uso da un altro prodotto.",
+        };
+      } else if (error && error.code === "23503") {
+        // FK violata: la categoria scelta e stata eliminata nel frattempo.
+        return {
+          ok: false,
+          error: "La categoria selezionata non esiste piu. Ricarica la pagina e riprova.",
         };
       } else if (error && error.code !== "23505") {
         return { ok: false, error: error.message };

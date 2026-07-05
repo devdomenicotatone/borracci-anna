@@ -434,6 +434,116 @@ export function parseProdottoBlt(html: string, url: string): ProdottoBlt {
   };
 }
 
+// --- Listing / pagine categoria ---------------------------------------------------
+
+export interface VoceListingBlt {
+  /** URL assoluto della scheda prodotto. */
+  url: string;
+  /** SKU mostrato sulla card (es. "ITA003.BI"), null se non leggibile. */
+  sku: string | null;
+  /** Titolo della card, ripulito. */
+  nome: string | null;
+}
+
+export interface ListingBlt {
+  voci: VoceListingBlt[];
+  /** Totale articoli della categoria (toolbar "Articoli X-Y di Z"), se leggibile. */
+  totale: number | null;
+  /** True se la pagina dichiara "nessun prodotto" (oltre l'ultima pagina o filtro vuoto). */
+  vuota: boolean;
+}
+
+/**
+ * True se l'HTML e una SCHEDA prodotto (e non una pagina listing). I marker
+ * sono della scheda Magento (product-info-main / og:type=product): il listing
+ * non li ha, e la scheda contiene si card "product-item" ma solo tra i correlati.
+ * Le regex girano su una finestra iniziale e con quantificatori limitati: su
+ * HTML ostile (host compromesso) `[^>]*` ripetuto degenererebbe in backtracking
+ * quadratico, bloccando l'event loop per minuti (il fetch listing arriva a 8MB).
+ */
+export function eSchedaProdottoBlt(html: string): boolean {
+  if (html.includes('class="product-info-main"')) return true; // includes: lineare
+  const testa = html.slice(0, 500_000); // le meta og: stanno nell'head
+  return (
+    /<meta[^>]{0,300}property=["']og:type["'][^>]{0,300}content=["']product["']/i.test(
+      testa,
+    ) ||
+    /<meta[^>]{0,300}content=["']product["'][^>]{0,300}property=["']og:type["']/i.test(
+      testa,
+    )
+  );
+}
+
+/**
+ * URL della pagina `pagina` di un listing: preserva i filtri della query
+ * (target, product_typology, ...) e imposta/rimuove il parametro `p` di Magento.
+ */
+export function paginaListingBlt(url: string, pagina: number): string {
+  const u = new URL(url);
+  if (pagina <= 1) u.searchParams.delete("p");
+  else u.searchParams.set("p", String(pagina));
+  return u.toString();
+}
+
+/**
+ * Estrae le card prodotto da una pagina listing Magento. Best effort, mai
+ * throw: ogni card e il blocco che inizia a `product-item-info`; dentro si
+ * leggono il link scheda (anchor `product-item-link`, l'unico con quella
+ * classe), il titolo e lo SKU della card (`product_detail_sku_inside`).
+ */
+export function parseListingBlt(html: string): ListingBlt {
+  // Totale dal toolbar ("Articoli 1-25 di 60", o "10 Articoli" su pagina
+  // unica): l'ultimo numero del blocco e in entrambi i casi il totale.
+  let totale: number | null = null;
+  const toolbar = html.match(/class="toolbar-amount"[^>]*>([\s\S]{0,400}?)<\/p>/);
+  if (toolbar) {
+    const numeri = [...toolbar[1].matchAll(/toolbar-number"[^>]*>\s*(\d[\d.]*)/g)]
+      .map((m) => parseInt(m[1].replace(/\./g, ""), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (numeri.length > 0) totale = numeri[numeri.length - 1];
+  }
+
+  const voci: VoceListingBlt[] = [];
+  const visti = new Set<string>();
+  // Il primo segmento (prima della prima card) si scarta; l'ultimo arriva a
+  // fine documento ma dopo le card non ci sono altri anchor product-item-link.
+  const segmenti = html.split(/class="product-item-info"/).slice(1);
+  for (const segmento of segmenti) {
+    // Link e SKU stanno nei primi KB della card: finestra corta e quantificatori
+    // limitati, per non degenerare in backtracking quadratico su HTML ostile.
+    const finestra = segmento.slice(0, 30_000);
+    // Anchor del titolo, tollerante all'ordine degli attributi.
+    const anchor = finestra.match(
+      /<a\s[^>]{0,500}product-item-link[^>]{0,500}>([\s\S]{0,1000}?)<\/a>/,
+    );
+    if (!anchor) continue;
+    const href = anchor[0].match(/href="([^"]+)"/);
+    if (!href) continue;
+    const url = decodificaEntita(href[1]).trim();
+    // Solo schede del fornitore (.html, eventuale query ignorabile ma sospetta:
+    // le schede reali non ne hanno).
+    if (!urlFornitoreValido(url) || !/\.html$/.test(url)) continue;
+    if (visti.has(url)) continue;
+    visti.add(url);
+
+    const nome = testoPiano(anchor[1]) || null;
+    const skuMatch = finestra.match(
+      /product_detail_sku_inside[^>]*>[\s\S]{0,80}?Sku:\s*([^<\s][^<]*?)\s*</i,
+    );
+    const sku = skuMatch
+      ? decodificaEntita(skuMatch[1]).trim().toUpperCase().slice(0, 40) || null
+      : null;
+    voci.push({ url, sku, nome });
+  }
+
+  // "Nessun prodotto": il banner "message info empty" compare nella SIDEBAR di
+  // OGNI pagina della categoria (verificato sul sito reale), quindi da solo non
+  // dice nulla. La pagina e vuota solo se non c'e nemmeno una card.
+  const vuota =
+    voci.length === 0 && /class="message info empty"/.test(html);
+  return { voci, totale, vuota };
+}
+
 // --- Rete: login e download -----------------------------------------------------------------
 
 // Header da browser reale: il sito non ha anti-bot ma serve un UA credibile.
@@ -487,17 +597,24 @@ export async function loginBlt(
   try {
     const barattolo = new Map<string, string>();
 
+    // Budget CUMULATIVO dell'intero login (GET + redirect + POST): senza,
+    // una catena di risposte lente sommerebbe i timeout per-fetch ben oltre
+    // il budget della action (maxDuration 60s della pagina importa).
+    const scadenza = Date.now() + 16_000;
+    const timeoutResiduo = () =>
+      AbortSignal.timeout(Math.min(8_000, Math.max(1_000, scadenza - Date.now())));
+
     // 1. GET pagina login: form_key + cookie iniziali (seguendo a mano al
     //    massimo 3 redirect, per non perdere i set-cookie intermedi).
-    //    Timeout 8s per fetch: il budget totale della action resta sotto i 60s.
     let urlCorrente = URL_LOGIN;
     let paginaLogin = "";
     for (let salto = 0; salto < 3; salto++) {
+      if (Date.now() >= scadenza) return null;
       const res = await fetch(urlCorrente, {
         headers: { ...HEADER_BROWSER, Cookie: headerCookie(barattolo) },
         redirect: "manual",
         cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
+        signal: timeoutResiduo(),
       });
       accumulaCookie(res, barattolo);
       if (res.status >= 300 && res.status < 400) {
@@ -537,7 +654,7 @@ export async function loginBlt(
       body: corpo.toString(),
       redirect: "manual",
       cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
+      signal: timeoutResiduo(),
     });
     accumulaCookie(res, barattolo);
 
@@ -555,26 +672,34 @@ export async function loginBlt(
 
 /**
  * Scarica l'HTML di una pagina del fornitore (UA browser, timeout 15s, corpo
- * troncato a ~3MB). I redirect sono seguiti A MANO e ogni salto e riverificato
- * contro la whitelist: con redirect:"follow" un 3xx del fornitore trascinerebbe
- * la fetch su host arbitrari (SSRF). Lancia su URL non valido o errore HTTP:
- * il chiamante (server action) traduce in un errore parlante.
+ * troncato a `maxByte`). I redirect sono seguiti A MANO e ogni salto e
+ * riverificato contro la whitelist: con redirect:"follow" un 3xx del fornitore
+ * trascinerebbe la fetch su host arbitrari (SSRF). Lancia su URL non valido o
+ * errore HTTP: il chiamante (server action) traduce in un errore parlante.
  */
-export async function fetchProdottoBlt(
+async function fetchPaginaBlt(
   url: string,
-  cookie?: string | null,
+  cookie: string | null | undefined,
+  maxByte: number,
 ): Promise<string> {
   if (!urlFornitoreValido(url)) {
     throw new Error("URL non del fornitore supportato.");
   }
+  // Budget CUMULATIVO su tutta la catena di redirect: il timeout per-fetch da
+  // solo permetterebbe fino a 5 x 15s per un singolo download, sforando il
+  // maxDuration della action chiamante.
+  const scadenza = Date.now() + 20_000;
   let urlCorrente = url;
   let res: Response | null = null;
   for (let salto = 0; salto < 5; salto++) {
+    if (Date.now() >= scadenza) throw new Error("Il fornitore e troppo lento.");
     const r = await fetch(urlCorrente, {
       headers: cookie ? { ...HEADER_BROWSER, Cookie: cookie } : HEADER_BROWSER,
       redirect: "manual",
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(
+        Math.min(15_000, Math.max(1_000, scadenza - Date.now())),
+      ),
     });
     if (r.status >= 300 && r.status < 400) {
       const destinazione = r.headers.get("location");
@@ -593,21 +718,20 @@ export async function fetchProdottoBlt(
     throw new Error(`Il fornitore ha risposto ${res.status}.`);
   }
 
-  // Lettura a pezzi con tetto ~3MB: la pagina prodotto sta ampiamente sotto,
-  // e i dati utili al parser sono comunque nella prima parte del documento.
-  const MAX_BYTE = 3 * 1024 * 1024;
-  if (!res.body) return (await res.text()).slice(0, MAX_BYTE);
+  // Lettura a pezzi con tetto: oltre `maxByte` si tronca (i dati utili ai
+  // parser stanno comunque prima del tetto scelto dal chiamante).
+  if (!res.body) return (await res.text()).slice(0, maxByte);
   const lettore = res.body.getReader();
   const pezzi: Uint8Array[] = [];
   let totale = 0;
-  while (totale < MAX_BYTE) {
+  while (totale < maxByte) {
     const { done, value } = await lettore.read();
     if (done) break;
     pezzi.push(value);
     totale += value.byteLength;
   }
-  if (totale >= MAX_BYTE) await lettore.cancel().catch(() => {});
-  const unito = new Uint8Array(Math.min(totale, MAX_BYTE));
+  if (totale >= maxByte) await lettore.cancel().catch(() => {});
+  const unito = new Uint8Array(Math.min(totale, maxByte));
   let offset = 0;
   for (const pezzo of pezzi) {
     const spazio = unito.length - offset;
@@ -616,4 +740,24 @@ export async function fetchProdottoBlt(
     offset += Math.min(pezzo.length, spazio);
   }
   return new TextDecoder("utf-8").decode(unito);
+}
+
+/** Scarica una SCHEDA prodotto: sta ampiamente sotto i 3MB. */
+export async function fetchProdottoBlt(
+  url: string,
+  cookie?: string | null,
+): Promise<string> {
+  return fetchPaginaBlt(url, cookie, 3 * 1024 * 1024);
+}
+
+/**
+ * Scarica una pagina LISTING. Tetto piu alto delle schede: le pagine categoria
+ * reali superano i 3MB (misurate fino a ~3,5MB) e con il tetto basso le ultime
+ * card della pagina andrebbero perse in silenzio.
+ */
+export async function fetchListingBlt(
+  url: string,
+  cookie?: string | null,
+): Promise<string> {
+  return fetchPaginaBlt(url, cookie, 8 * 1024 * 1024);
 }

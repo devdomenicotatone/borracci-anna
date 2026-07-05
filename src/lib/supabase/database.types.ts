@@ -27,6 +27,7 @@ export interface Database {
           immagine_url: string | null;
           attivo: boolean;
           disponibilita_su_richiesta: boolean;
+          solo_online: boolean;
           categoria_id: string | null;
           codice: string | null;
           creato_il: string;
@@ -41,6 +42,7 @@ export interface Database {
           immagine_url?: string | null;
           attivo?: boolean;
           disponibilita_su_richiesta?: boolean;
+          solo_online?: boolean;
           categoria_id?: string | null;
           codice?: string | null;
           creato_il?: string;
@@ -55,6 +57,7 @@ export interface Database {
           immagine_url?: string | null;
           attivo?: boolean;
           disponibilita_su_richiesta?: boolean;
+          solo_online?: boolean;
           categoria_id?: string | null;
           codice?: string | null;
           creato_il?: string;

@@ -40,6 +40,11 @@ export interface Prodotto {
    * Default true (vedi migration 20260623160000).
    */
   disponibilita_su_richiesta?: boolean;
+  /**
+   * Articolo disponibile SOLO dal sito, non presente in negozio: badge
+   * informativo in vetrina. Default false (vedi migration 20260705120000).
+   */
+  solo_online?: boolean;
 }
 
 /**

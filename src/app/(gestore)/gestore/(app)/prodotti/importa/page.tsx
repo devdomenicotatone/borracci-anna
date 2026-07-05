@@ -1,4 +1,5 @@
 import { requireGestore } from "@/lib/gestore/auth";
+import { caricaCategorie } from "@/lib/categorie";
 import ImportaDaUrl from "@/components/gestore/ImportaDaUrl";
 
 // L'analisi (download dal fornitore + riscrittura della descrizione) puo
@@ -7,7 +8,8 @@ import ImportaDaUrl from "@/components/gestore/ImportaDaUrl";
 export const maxDuration = 60;
 
 export default async function ImportaProdottoPage() {
-  await requireGestore();
+  const { supabase } = await requireGestore();
+  const categorie = await caricaCategorie(supabase);
 
   return (
     <div>
@@ -15,11 +17,12 @@ export default async function ImportaProdottoPage() {
         📦 Importa da fornitore
       </h1>
       <p className="mx-auto mb-6 max-w-xl text-sm text-muted lg:max-w-4xl">
-        Incolla l&apos;indirizzo di un prodotto Ingrosso BLT: prepariamo una
-        bozza con foto, prezzo, taglie e descrizione. La rivedi, la crei e la
-        pubblichi dalla scheda: niente va in vendita da solo.
+        Incolla l&apos;indirizzo di un prodotto Ingrosso BLT oppure di
+        un&apos;intera categoria: prepariamo le schede con foto, prezzo, taglie
+        e descrizione. Scegli tu se rivederle una a una o importarle in
+        automatico; niente va in vendita senza il tuo ok.
       </p>
-      <ImportaDaUrl />
+      <ImportaDaUrl categorie={categorie} />
     </div>
   );
 }
