@@ -8,7 +8,14 @@
 // In modalita "Scrivici per la disponibilita" le giacenze non si gestiscono
 // (magazzino non in tempo reale): si configurano solo le opzioni disponibili.
 
-import { COLORI, TAGLIE, coloreChiaro, coloreHex } from "@/lib/catalogo";
+import {
+  COLORI,
+  TAGLIE,
+  TAGLIE_BAMBINO_ETA,
+  TAGLIE_BAMBINO_NUM,
+  coloreChiaro,
+  coloreHex,
+} from "@/lib/catalogo";
 
 export default function EditorVarianti({
   colori,
@@ -28,6 +35,33 @@ export default function EditorVarianti({
   onSetTaglie: (taglie: string[]) => void;
   suRichiesta: boolean;
 }) {
+  // Adulto e bambino vivono nella stessa selezione `taglie`: i "Tutte/Nessuna"
+  // agiscono SOLO sulla propria scala, senza azzerare l'altra.
+  const TAGLIE_BAMBINO = [...TAGLIE_BAMBINO_ETA, ...TAGLIE_BAMBINO_NUM];
+  const impostaScala = (scala: readonly string[], attiva: boolean) => {
+    const fuori = taglie.filter((t) => !scala.includes(t));
+    onSetTaglie(attiva ? [...fuori, ...scala] : fuori);
+  };
+  const chipTaglia = (t: string) => {
+    const sel = taglie.includes(t);
+    return (
+      <button
+        key={t}
+        type="button"
+        aria-pressed={sel}
+        onClick={() => onToggleTaglia(t)}
+        className={[
+          "h-11 min-w-[3rem] rounded-xl px-3 font-display text-sm font-bold transition-all",
+          sel
+            ? "bg-sea text-white shadow-sea"
+            : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-lagoon",
+        ].join(" ")}
+      >
+        {t}
+      </button>
+    );
+  };
+
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
@@ -151,21 +185,54 @@ export default function EditorVarianti({
 
       {/* TAGLIE ------------------------------------------------------------ */}
       <fieldset className="mt-3 rounded-2xl bg-white p-4 shadow-soft ring-1 ring-line">
-        <div className="flex items-center justify-between px-1">
-          <legend className="font-display text-xs font-bold uppercase tracking-wide text-muted">
-            Taglie
-          </legend>
+        <legend className="px-1 font-display text-xs font-bold uppercase tracking-wide text-muted">
+          Taglie
+        </legend>
+
+        {/* Adulto: scala XXS→6XL */}
+        <div className="mt-1 flex items-center justify-between px-1">
+          <span className="font-display text-xs font-bold text-foreground">
+            Adulto
+          </span>
           <div className="flex gap-3 text-xs font-bold">
             <button
               type="button"
-              onClick={() => onSetTaglie([...TAGLIE])}
+              onClick={() => impostaScala(TAGLIE, true)}
               className="text-sea transition-colors hover:text-lagoon"
             >
               Tutte
             </button>
             <button
               type="button"
-              onClick={() => onSetTaglie([])}
+              onClick={() => impostaScala(TAGLIE, false)}
+              className="text-muted transition-colors hover:text-foreground"
+            >
+              Nessuna
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">{TAGLIE.map(chipTaglia)}</div>
+
+        {/* Bambino: range per eta (5-6, 9-11, ...) e numeri (6, 8, ...) del
+            fornitore, tenuti verbatim. */}
+        <div className="mt-4 flex items-center justify-between px-1">
+          <span className="font-display text-xs font-bold text-foreground">
+            Bambino{" "}
+            <span className="font-medium normal-case text-muted">
+              · età e numero
+            </span>
+          </span>
+          <div className="flex gap-3 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => impostaScala(TAGLIE_BAMBINO, true)}
+              className="text-sea transition-colors hover:text-lagoon"
+            >
+              Tutte
+            </button>
+            <button
+              type="button"
+              onClick={() => impostaScala(TAGLIE_BAMBINO, false)}
               className="text-muted transition-colors hover:text-foreground"
             >
               Nessuna
@@ -173,29 +240,16 @@ export default function EditorVarianti({
           </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          {TAGLIE.map((t) => {
-            const sel = taglie.includes(t);
-            return (
-              <button
-                key={t}
-                type="button"
-                aria-pressed={sel}
-                onClick={() => onToggleTaglia(t)}
-                className={[
-                  "h-11 min-w-[3rem] rounded-xl px-3 font-display text-sm font-bold transition-all",
-                  sel
-                    ? "bg-sea text-white shadow-sea"
-                    : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-lagoon",
-                ].join(" ")}
-              >
-                {t}
-              </button>
-            );
-          })}
+          {TAGLIE_BAMBINO_ETA.map(chipTaglia)}
         </div>
-        <p className="mt-2 px-1 text-xs text-muted">
-          Scegli l&apos;intervallo (es. dalla M alla 3XL). Senza taglie il
-          prodotto resta solo per colore.
+        <div className="mt-2 flex flex-wrap gap-2">
+          {TAGLIE_BAMBINO_NUM.map(chipTaglia)}
+        </div>
+
+        <p className="mt-3 px-1 text-xs text-muted">
+          Scegli l&apos;intervallo (adulto o bambino). Le taglie bambino seguono
+          le etichette del fornitore (es. 5-6, 9-11 oppure 6, 8, 10). Senza
+          taglie il prodotto resta solo per colore.
         </p>
       </fieldset>
 

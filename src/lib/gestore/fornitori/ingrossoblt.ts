@@ -300,7 +300,13 @@ const TAGLIE_CANONICHE = [
   "6XL",
 ] as const;
 
-/** Normalizza una candidata taglia ("m", "XXL", "6 Anni") o null se non e una taglia. */
+/**
+ * Normalizza una candidata taglia o null se non e una taglia. Riconosce:
+ * adulto ("m", "XXL"→"2XL"), bambino per eta ("6 Anni"→"6 anni"), range del
+ * fornitore ("3-4", "9-11", "3/4"→"3-4") e numero singolo sportswear ("6".."16").
+ * Le taglie bambino restano VERBATIM (una etichetta fornitore = una taglia): il
+ * fornitore usa entrambi i sistemi e vanno mappati 1:1, senza spezzarli.
+ */
 function normalizzaTaglia(grezza: string): string | null {
   const testo = decodificaEntita(grezza).replace(/\s+/g, " ").trim();
   let maiuscola = testo.toUpperCase();
@@ -312,15 +318,29 @@ function normalizzaTaglia(grezza: string): string | null {
   }
   const anni = maiuscola.match(/^(\d{1,2})\s*ANNI$/);
   if (anni) return `${parseInt(anni[1], 10)} anni`;
+  // Bambino: range per eta ("3-4", "9-11", anche con "/").
+  const range = testo.match(/^(\d{1,2})\s*[-/]\s*(\d{1,2})$/);
+  if (range) return `${parseInt(range[1], 10)}-${parseInt(range[2], 10)}`;
+  // Bambino: numero singolo sportswear (fino a 16).
+  const num = testo.match(/^(\d{1,2})$/);
+  if (num && parseInt(num[1], 10) <= 16) return String(parseInt(num[1], 10));
   return null;
 }
 
-/** Rango per ordinare le taglie: bimbo per eta, poi la scala adulto XXS→6XL. */
+/**
+ * Rango per ordinare le taglie: bimbo per eta (anni, range o numero, ×10 per
+ * tenere vicini range e numero della stessa eta), poi la scala adulto XXS→6XL,
+ * poi le sconosciute. Stessa logica di ordineTaglia in lib/catalogo.
+ */
 function rangoTaglia(t: string): number {
-  const anni = t.match(/^(\d{1,2}) anni$/);
-  if (anni) return parseInt(anni[1], 10);
-  const i = (TAGLIE_CANONICHE as readonly string[]).indexOf(t);
-  return i === -1 ? 999 : 100 + i;
+  const anni = t.match(/^(\d{1,2})\s*anni$/i);
+  if (anni) return parseInt(anni[1], 10) * 10;
+  const range = t.match(/^(\d{1,2})\s*[-/]\s*(\d{1,2})$/);
+  if (range) return parseInt(range[1], 10) * 10 + 1;
+  const num = t.match(/^(\d{1,2})$/);
+  if (num) return parseInt(num[1], 10) * 10;
+  const i = (TAGLIE_CANONICHE as readonly string[]).indexOf(t.toUpperCase());
+  return i === -1 ? 100_000 : 10_000 + i;
 }
 
 /**
@@ -334,9 +354,11 @@ function estraiTaglie(html: string): string[] {
 
   // 0. Bundle B2B (markup reale di ingrossoblt da loggati): un blocco
   //    <div data-status="1" class="... bundle-options-M "> per taglia.
-  //    data-status "1" = disponibile; le taglie a "0" vengono scartate.
+  //    data-status "1" = disponibile; le taglie a "0" vengono scartate. Il
+  //    trattino nel gruppo cattura i range bambino interi ("bundle-options-3-4"
+  //    -> "3-4"), altrimenti si troncherebbero a un numero singolo spurio.
   for (const m of html.matchAll(
-    /data-status="(\d)"[^>]*class="[^"]*bundle-options-([A-Za-z0-9]{1,8})/g,
+    /data-status="(\d)"[^>]*class="[^"]*bundle-options-([A-Za-z0-9-]{1,8})/g,
   )) {
     if (m[1] === "1") candidate.push(m[2]);
   }

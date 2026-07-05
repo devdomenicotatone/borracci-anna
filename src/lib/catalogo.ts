@@ -24,13 +24,49 @@ export const TAGLIE = [
 
 export type Taglia = (typeof TAGLIE)[number];
 
-/** Indice di ordinamento di una taglia (le sconosciute vanno in fondo). */
+// Taglie BAMBINO. Il fornitore usa DUE sistemi che convivono (verificato sul
+// sito): range per eta ("5-6", "9-11", ...) sulle t-shirt a licenza, e numeri
+// singoli ("6", "8", ...) sullo sportswear (es. Ferrari). Li teniamo VERBATIM:
+// una etichetta del fornitore = una taglia, mai spezzata (cosi l'import mappa
+// 1:1 e i filtri non mostrano doppioni). NB: "9-11" salta a 3 anni — e cosi sul
+// fornitore, non un refuso; per questo NON e una scala uniforme a 2 anni.
+export const TAGLIE_BAMBINO_ETA = [
+  "1-2",
+  "3-4",
+  "5-6",
+  "7-8",
+  "9-11",
+  "12-13",
+  "14-15",
+] as const;
+export const TAGLIE_BAMBINO_NUM = ["6", "8", "10", "12", "14", "16"] as const;
+
+/**
+ * Indice di ordinamento di una taglia. Le taglie BAMBINO (range "A-B", numero
+ * singolo, o "N anni") si ordinano per eta e vengono PRIMA della scala adulto
+ * XXS→6XL; le sconosciute vanno in fondo. Il fattore ×10 lascia spazio perche
+ * range e numero della stessa eta (es. "5-6" e "6") restino vicini e stabili.
+ */
 export function ordineTaglia(t: string | null | undefined): number {
-  const i = TAGLIE.indexOf((t ?? "").toUpperCase() as Taglia);
-  return i === -1 ? TAGLIE.length : i;
+  const s = (t ?? "").trim();
+  if (!s) return 1_000_000;
+  // Adulto: scala XXS→6XL (match esatto).
+  const iAdulto = TAGLIE.indexOf(s.toUpperCase() as Taglia);
+  if (iAdulto !== -1) return 10_000 + iAdulto;
+  // Bambino per eta: "N anni", range "A-B"/"A/B", numero singolo.
+  const anni = s.match(/^(\d{1,2})\s*anni$/i);
+  if (anni) return parseInt(anni[1], 10) * 10;
+  const range = s.match(/^(\d{1,2})\s*[-/]\s*(\d{1,2})$/);
+  if (range) return parseInt(range[1], 10) * 10 + 1;
+  const num = s.match(/^(\d{1,2})$/);
+  if (num) return parseInt(num[1], 10) * 10;
+  return 1_000_000; // sconosciute in fondo
 }
 
-/** Ordina una lista di taglie secondo la scala (XXS → 6XL), ignorando i duplicati. */
+/**
+ * Ordina una lista di taglie: bambino per eta, poi adulto XXS → 6XL, poi il
+ * resto. Ignora i duplicati.
+ */
 export function ordinaTaglie(taglie: Iterable<string>): string[] {
   return [...new Set(taglie)].sort((a, b) => ordineTaglia(a) - ordineTaglia(b));
 }
