@@ -750,3 +750,83 @@ export async function assegnaCategoriaBulkAction(
     return { ok: false, error: "Errore di rete. Riprova." };
   }
 }
+
+/**
+ * Elimina piu prodotti in un colpo, con la STESSA strategia sicura del delete
+ * singolo (eliminaProdottoAction): i prodotti gia venduti (presenti in
+ * ordine_righe) si SOFT-eliminano (attivo=false) per non spezzare lo storico
+ * ordini (prodotto_id e ON DELETE SET NULL); quelli mai venduti si HARD-eliminano
+ * (cleanup foto + delete, varianti via ON DELETE CASCADE). Ritorna il conteggio
+ * dei due esiti cosi la UI puo spiegare perche alcuni sono stati "nascosti".
+ */
+export async function eliminaProdottiBulkAction(
+  ids: string[],
+): Promise<EsitoAzione & { eliminati?: number; nascosti?: number }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+  const { supabase } = sessione;
+
+  const unici = [...new Set(ids)].filter(Boolean);
+  if (unici.length === 0) {
+    return { ok: false, error: "Nessun prodotto selezionato." };
+  }
+
+  try {
+    // Quali sono stati venduti (compaiono in ordine_righe) -> soft delete.
+    const { data: righe, error: erRighe } = await supabase
+      .from("ordine_righe")
+      .select("prodotto_id")
+      .in("prodotto_id", unici);
+    if (erRighe) return { ok: false, error: erRighe.message };
+
+    const venduti = new Set(
+      (righe ?? []).map((r) => r.prodotto_id).filter(Boolean),
+    );
+    const daNascondere = unici.filter((id) => venduti.has(id));
+    const daEliminare = unici.filter((id) => !venduti.has(id));
+
+    // Soft: i venduti restano (solo nascosti) per preservare lo storico ordini.
+    // `.select("id")` ritorna le righe DAVVERO toccate (non la lunghezza
+    // dell'input): un id gia sparito da una lista stantia non gonfia il conteggio.
+    let nNascosti = 0;
+    if (daNascondere.length > 0) {
+      const { data, error } = await supabase
+        .from("prodotti")
+        .update({ attivo: false })
+        .in("id", daNascondere)
+        .select("id");
+      if (error) return { ok: false, error: error.message };
+      nNascosti = data?.length ?? 0;
+    }
+
+    // Hard: cleanup foto (best effort, cartella per prodotto) + delete unico.
+    let nEliminati = 0;
+    if (daEliminare.length > 0) {
+      await Promise.all(
+        daEliminare.map(async (id) => {
+          const { data: files } = await supabase.storage
+            .from("prodotti")
+            .list(id);
+          if (files && files.length > 0) {
+            await supabase.storage
+              .from("prodotti")
+              .remove(files.map((f) => `${id}/${f.name}`));
+          }
+        }),
+      );
+      const { data, error } = await supabase
+        .from("prodotti")
+        .delete()
+        .in("id", daEliminare)
+        .select("id");
+      if (error) return { ok: false, error: error.message };
+      nEliminati = data?.length ?? 0;
+    }
+
+    revalidatePath("/gestore/prodotti");
+    revalidatePath("/");
+    return { ok: true, eliminati: nEliminati, nascosti: nNascosti };
+  } catch {
+    return { ok: false, error: "Errore di rete. Riprova." };
+  }
+}

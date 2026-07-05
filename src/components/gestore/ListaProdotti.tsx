@@ -5,7 +5,7 @@
 // Filtri e ordinamento girano client-side sui dati gia caricati dal server
 // component padre (fino a 1000 righe: istantaneo, niente round-trip).
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -15,7 +15,10 @@ import {
   gruppiCategorie,
   idConDiscendenti,
 } from "@/lib/categorie-albero";
-import { assegnaCategoriaBulkAction } from "@/lib/gestore/actions";
+import {
+  assegnaCategoriaBulkAction,
+  eliminaProdottiBulkAction,
+} from "@/lib/gestore/actions";
 import type { Categoria } from "@/lib/types";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import ToggleAttivo from "@/components/gestore/ToggleAttivo";
@@ -70,6 +73,10 @@ export default function ListaProdotti({
     new Set(),
   );
   const [bulkCategoria, setBulkCategoria] = useState("");
+  // Ancora per la selezione a intervalli con Shift; conferma inline dell'elimina.
+  const [ancoraId, setAncoraId] = useState<string | null>(null);
+  const shiftRef = useRef(false);
+  const [confermaElimina, setConfermaElimina] = useState(false);
   const [inCorso, startTransition] = useTransition();
   const { mostra } = useToast();
   const router = useRouter();
@@ -158,6 +165,29 @@ export default function ListaProdotti({
     });
   }
 
+  // Click su una checkbox riga. Con Shift SELEZIONA (aggiunge) l'intervallo tra
+  // l'ultima riga cliccata (ancora) e questa, nell'ordine visibile — come Gmail
+  // o il Finder. Senza Shift: toggle singolo e nuova ancora. Il modificatore si
+  // legge nell'onClick (l'onChange non porta i tasti premuti) via shiftRef.
+  // L'ancora e un ID, non un indice: resta valida anche se i filtri cambiano.
+  function selezionaClick(id: string) {
+    if (shiftRef.current && ancoraId && ancoraId !== id) {
+      const a = visibili.findIndex((p) => p.id === ancoraId);
+      const b = visibili.findIndex((p) => p.id === id);
+      if (a !== -1 && b !== -1) {
+        const [da, fine] = a < b ? [a, b] : [b, a];
+        setSelezionati((prev) => {
+          const next = new Set(prev);
+          for (let i = da; i <= fine; i++) next.add(visibili[i].id);
+          return next;
+        });
+        return; // ancora invariata: si puo continuare a estendere
+      }
+    }
+    toggleSelezione(id);
+    setAncoraId(id);
+  }
+
   const tuttiVisibiliSelezionati =
     visibili.length > 0 && visibili.every((p) => selezionati.has(p.id));
 
@@ -190,10 +220,37 @@ export default function ListaProdotti({
         );
         setSelezionati(new Set());
         setBulkCategoria("");
+        setAncoraId(null);
         router.refresh();
       } else {
         mostra(esito.error ?? "Impossibile aggiornare la categoria.", "errore");
       }
+    });
+  }
+
+  function eseguiElimina() {
+    const ids = [...selezionati];
+    startTransition(async () => {
+      const esito = await eliminaProdottiBulkAction(ids);
+      if (!esito.ok) {
+        mostra(esito.error ?? "Impossibile eliminare i prodotti.", "errore");
+        return;
+      }
+      const el = esito.eliminati ?? 0;
+      const na = esito.nascosti ?? 0;
+      let msg: string;
+      if (na === 0) {
+        msg = `${el} ${el === 1 ? "prodotto eliminato" : "prodotti eliminati"}.`;
+      } else if (el === 0) {
+        msg = `${na} ${na === 1 ? "prodotto nascosto" : "prodotti nascosti"} (già venduti, mantenuti per lo storico ordini).`;
+      } else {
+        msg = `${el} ${el === 1 ? "eliminato" : "eliminati"}, ${na} ${na === 1 ? "nascosto" : "nascosti"} (già venduti, mantenuti per lo storico).`;
+      }
+      mostra(msg);
+      setSelezionati(new Set());
+      setConfermaElimina(false);
+      setAncoraId(null);
+      router.refresh();
     });
   }
 
@@ -401,7 +458,10 @@ export default function ListaProdotti({
                     type="checkbox"
                     aria-label={`Seleziona ${p.nome}`}
                     checked={selezionato}
-                    onChange={() => toggleSelezione(p.id)}
+                    onClick={(e) => {
+                      shiftRef.current = e.shiftKey;
+                    }}
+                    onChange={() => selezionaClick(p.id)}
                     className="h-5 w-5 shrink-0 cursor-pointer rounded accent-sea"
                   />
                   <Link
@@ -471,50 +531,103 @@ export default function ListaProdotti({
       {selezionati.size > 0 && (
         <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 md:inset-x-auto md:bottom-6 md:left-1/2 md:w-auto md:-translate-x-1/2">
           <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2.5 rounded-3xl bg-foreground p-3 text-white shadow-[0_18px_50px_-12px_rgba(10,31,51,0.55)] md:flex-nowrap md:rounded-full md:py-2.5 md:pl-5">
-            <span className="font-display text-sm font-bold tabular-nums">
-              {selezionati.size}{" "}
-              {selezionati.size === 1 ? "selezionato" : "selezionati"}
-            </span>
-            <div className="min-w-0 flex-1 basis-48 [&_select]:h-11 [&_select]:rounded-full [&_select]:text-sm">
-              <CategoriaSelect
-                id="bulk-categoria"
-                categorie={categorie}
-                value={bulkCategoria}
-                onChange={setBulkCategoria}
-                disabled={inCorso}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={applicaBulk}
-              disabled={inCorso}
-              className="inline-flex h-11 shrink-0 items-center rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-60"
-            >
-              {inCorso
-                ? "Applico…"
-                : bulkCategoria
-                  ? "Assegna"
-                  : "Rimuovi categoria"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelezionati(new Set())}
-              disabled={inCorso}
-              aria-label="Annulla selezione"
-              className="grid h-11 w-11 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
+            {confermaElimina ? (
+              // Conferma inline a due passi: niente modale, ma un'azione
+              // distruttiva non parte mai al primo click.
+              <>
+                <span className="min-w-0 flex-1 font-display text-sm font-bold">
+                  Eliminare {selezionati.size}{" "}
+                  {selezionati.size === 1 ? "prodotto" : "prodotti"}?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConfermaElimina(false)}
+                  disabled={inCorso}
+                  className="inline-flex h-11 shrink-0 items-center rounded-full px-4 font-display text-sm font-bold text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={eseguiElimina}
+                  disabled={inCorso}
+                  className="inline-flex h-11 shrink-0 items-center rounded-full bg-coral px-5 font-display text-sm font-bold text-white shadow-coral transition-all hover:-translate-y-0.5 disabled:opacity-60"
+                >
+                  {inCorso ? "Elimino…" : "Sì, elimina"}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="font-display text-sm font-bold tabular-nums">
+                  {selezionati.size}{" "}
+                  {selezionati.size === 1 ? "selezionato" : "selezionati"}
+                </span>
+                <div className="min-w-0 flex-1 basis-40 [&_select]:h-11 [&_select]:rounded-full [&_select]:text-sm">
+                  <CategoriaSelect
+                    id="bulk-categoria"
+                    categorie={categorie}
+                    value={bulkCategoria}
+                    onChange={setBulkCategoria}
+                    disabled={inCorso}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={applicaBulk}
+                  disabled={inCorso}
+                  className="inline-flex h-11 shrink-0 items-center rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-60"
+                >
+                  {inCorso
+                    ? "Applico…"
+                    : bulkCategoria
+                      ? "Assegna"
+                      : "Rimuovi categoria"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfermaElimina(true)}
+                  disabled={inCorso}
+                  className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-4 font-display text-sm font-bold text-coral ring-1 ring-coral/40 transition-colors hover:bg-coral hover:text-white disabled:opacity-60"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                  </svg>
+                  Elimina
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelezionati(new Set());
+                    setConfermaElimina(false);
+                    setAncoraId(null);
+                  }}
+                  disabled={inCorso}
+                  aria-label="Annulla selezione"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
