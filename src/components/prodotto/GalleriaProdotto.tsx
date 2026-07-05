@@ -58,7 +58,7 @@ export default function GalleriaProdotto({
   return (
     <div className="flex flex-col gap-3">
       {/* Foto principale */}
-      <div className="relative aspect-square w-full overflow-hidden rounded-3xl bg-surface shadow-sea">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-surface shadow-sea">
         {urlPrincipale ? (
           <Image
             src={urlPrincipale}
@@ -132,7 +132,7 @@ export default function GalleriaProdotto({
                 aria-pressed={sel}
                 title={f.etichetta}
                 className={[
-                  "relative aspect-square w-16 shrink-0 snap-start overflow-hidden rounded-xl transition-all sm:w-[4.5rem]",
+                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl transition-all sm:w-[4.5rem]",
                   sel
                     ? "ring-2 ring-sea"
                     : "opacity-70 ring-1 ring-line hover:-translate-y-0.5 hover:opacity-100",

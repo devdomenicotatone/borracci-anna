@@ -152,7 +152,7 @@ export default function ProdottoDettaglio({
   const esaurito = !senzaVarianti && varianti.every((v) => v.stock <= 0);
 
   return (
-    <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-2">
+    <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-[1.15fr_1fr]">
       {/* Galleria */}
       <GalleriaProdotto
         foto={fotoGalleria}
@@ -163,7 +163,7 @@ export default function ProdottoDettaglio({
       />
 
       {/* Dettagli e acquisto */}
-      <div className="flex flex-col">
+      <div className="flex flex-col md:sticky md:top-6">
         <span className="mb-2 inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
           <svg
             className="h-4 w-4"

@@ -47,7 +47,7 @@ export default function ProductCard({
       className="group relative block rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea"
       aria-label={`Vedi ${prodotto.nome}`}
     >
-      <div className="relative aspect-[3/3.4] w-full overflow-hidden rounded-2xl">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl">
         {prodotto.solo_online && (
           <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-sea ring-1 ring-sea/25 backdrop-blur">
             <svg
