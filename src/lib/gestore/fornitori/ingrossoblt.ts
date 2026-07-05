@@ -141,27 +141,6 @@ function codiceDaPagina(html: string): string | null {
   return m ? decodificaEntita(m[1]).trim().toUpperCase() : null;
 }
 
-/**
- * Rifinisce un nome grezzo del fornitore: toglie la firma del sito, l'eventuale
- * prezzo in coda e il codice finale (che va nel campo dedicato). Condiviso tra
- * il parser HTML (og:title) e il mapper GraphQL (name), così la ripulitura è
- * identica su entrambe le sorgenti.
- */
-function rifinisciNome(nome: string, codice: string | null): string {
-  let n = nome
-    .replace(/\s*\|\s*Ingrosso BLT\s*$/i, "") //     "... | Ingrosso BLT"
-    .replace(/\s+a\s+[\d.,]+\s*€\s*$/i, "") //        "... a 20.13€"
-    .trim();
-  if (codice) {
-    // "... - PA0126" in coda: il codice va nel campo dedicato, non nel nome.
-    const codiceEscaped = codice.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    n = n.replace(new RegExp(`\\s*[-–]\\s*${codiceEscaped}\\s*$`, "i"), "");
-  } else {
-    n = n.replace(/\s*[-–]\s*[a-z]{1,4}[0-9]{2,6}\s*$/i, "");
-  }
-  return n.replace(/\s+/g, " ").trim();
-}
-
 /** Nome da og:title o <title>, ripulito da codice, prezzo e firma del sito. */
 function estraiNome(html: string, codice: string | null): string {
   const og =
@@ -176,7 +155,18 @@ function estraiNome(html: string, codice: string | null): string {
     const titolo = html.match(/<title>([\s\S]*?)<\/title>/i);
     nome = titolo ? decodificaEntita(titolo[1]) : "";
   }
-  return rifinisciNome(nome, codice);
+  nome = nome
+    .replace(/\s*\|\s*Ingrosso BLT\s*$/i, "") //     "... | Ingrosso BLT"
+    .replace(/\s+a\s+[\d.,]+\s*€\s*$/i, "") //        "... a 20.13€"
+    .trim();
+  if (codice) {
+    // "... - PA0126" in coda: il codice va nel campo dedicato, non nel nome.
+    const codiceEscaped = codice.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    nome = nome.replace(new RegExp(`\\s*[-–]\\s*${codiceEscaped}\\s*$`, "i"), "");
+  } else {
+    nome = nome.replace(/\s*[-–]\s*[a-z]{1,4}[0-9]{2,6}\s*$/i, "");
+  }
+  return nome.replace(/\s+/g, " ").trim();
 }
 
 // --- Prezzi ---------------------------------------------------------------------
@@ -967,259 +957,4 @@ export async function fetchListingBlt(
   cookie?: string | null,
 ): Promise<string> {
   return fetchPaginaBlt(url, cookie, 8 * 1024 * 1024);
-}
-
-// --- Sorgente GraphQL --------------------------------------------------------
-// Il fornitore (Magento 2) espone /graphql pubblico e FUORI dal WAF: una sola
-// POST restituisce la scheda in JSON strutturato (sku, prezzo ingrosso, foto,
-// taglie, descrizione) senza toccare le pagine HTML protette. È la sorgente
-// preferita; il parser HTML resta il fallback (vedi analizzaUrlFornitoreAction).
-// Il JSON del fornitore è trattato come DATO NON FIDATO: ogni campo è best
-// effort e si degrada a null/[]/"" senza mai lanciare da fetchProdottoGraphql.
-
-const URL_GRAPHQL = `https://${HOST_FORNITORE}/graphql`;
-
-// url_key + i soli campi che servono al mapper. Le taglie stanno, a seconda del
-// tipo Magento: in BundleProduct.items[].title ("<sku>.<taglia>", es.
-// "DAM016.BN.XL") oppure in ConfigurableProduct.configurable_options (per
-// robustezza: il catalogo BLT oggi è Bundle+Simple, ma il fragment non costa e
-// non rompe le altre query). I SimpleProduct (es. cappelli) non hanno taglie.
-const QUERY_PRODOTTO_GRAPHQL =
-  "query($k:String!){products(filter:{url_key:{eq:$k}},pageSize:1){items{" +
-  "__typename sku name url_key " +
-  "price_range{minimum_price{final_price{value}}} " +
-  "media_gallery{__typename url position disabled} " +
-  "description{html} short_description{html} " +
-  "... on BundleProduct{items{title}} " +
-  "... on ConfigurableProduct{configurable_options{attribute_code label values{label}}}}}}";
-
-// Tetto sul numero di elementi processati dagli array del JSON (foto, taglie):
-// difesa dal CPU-burn se una risposta anomala resta sotto il tetto di 2MB.
-const MAX_VOCI_GRAPHQL = 100;
-
-/** url_key Magento dall'URL scheda: "/t-shirt-...-dam016-bn.html" => "t-shirt-...-dam016-bn". */
-function urlKeyDaUrl(url: string): string | null {
-  try {
-    const percorso = new URL(url).pathname.replace(/^\/+/, "").replace(/\/+$/, "");
-    const senzaHtml = percorso.replace(/\.html?$/i, "");
-    // Le schede BLT sono "flat" (nessun "/" nel key): un path con segmenti non
-    // è una scheda mappabile per url_key, meglio lasciare il fallback HTML.
-    if (!senzaHtml || senzaHtml.includes("/")) return null;
-    return /^[a-z0-9][a-z0-9-]*$/i.test(senzaHtml) ? senzaHtml : null;
-  } catch {
-    return null;
-  }
-}
-
-/** URL master (full-res) da un URL galleria Magento: toglie il segmento /cache/<hash>/. */
-function masterDaFotoUrl(url: string): string {
-  return url.replace(/\/cache\/[0-9a-f]+\//i, "/");
-}
-
-/** Estrae in modo difensivo `.html` da un blocco { html } del JSON GraphQL. */
-function htmlDiCampo(v: unknown): string {
-  if (typeof v === "object" && v !== null) {
-    const h = (v as { html?: unknown }).html;
-    if (typeof h === "string") return h;
-  }
-  return "";
-}
-
-/** Naviga data.products.items[0] con type guard; null se assente o forma inattesa. */
-function estraiVoceGraphql(dati: unknown): Record<string, unknown> | null {
-  if (typeof dati !== "object" || dati === null) return null;
-  const data = (dati as { data?: unknown }).data;
-  if (typeof data !== "object" || data === null) return null;
-  const products = (data as { products?: unknown }).products;
-  if (typeof products !== "object" || products === null) return null;
-  const items = (products as { items?: unknown }).items;
-  if (!Array.isArray(items) || items.length === 0) return null;
-  const primo = items[0];
-  return typeof primo === "object" && primo !== null
-    ? (primo as Record<string, unknown>)
-    : null;
-}
-
-/**
- * Mappa una voce prodotto GraphQL su ProdottoBlt. Richiede almeno nome e prezzo
- * ingrosso: senza, ritorna null così il chiamante ripiega sull'HTML (che potrebbe
- * avere il dato). `prezzoConsigliatoCents` è sempre null: da anonimo GraphQL non
- * espone il consigliato (modulo Msrp) — il prezzo si calcola (ingrosso+IVA)×3.
- * `attributi` è [] : la tabella non è esposta, la riscrittura AI usa la descrizione.
- */
-function mappaProdottoGraphql(
-  voce: Record<string, unknown>,
-  url: string,
-): ProdottoBlt | null {
-  const sku = (typeof voce.sku === "string" ? voce.sku : "").trim().toUpperCase();
-  const codice = sku || codiceDaUrl(url);
-
-  let prezzoIngrossoCents: number | null = null;
-  const pr = voce.price_range;
-  if (typeof pr === "object" && pr !== null) {
-    const min = (pr as { minimum_price?: unknown }).minimum_price;
-    if (typeof min === "object" && min !== null) {
-      const fp = (min as { final_price?: unknown }).final_price;
-      if (typeof fp === "object" && fp !== null) {
-        const val = (fp as { value?: unknown }).value;
-        if (typeof val === "number" && Number.isFinite(val) && val > 0) {
-          prezzoIngrossoCents = Math.round(val * 100);
-        }
-      }
-    }
-  }
-
-  const nomeGrezzo = typeof voce.name === "string" ? voce.name : "";
-  const nome = rifinisciNome(decodificaEntita(nomeGrezzo), codice);
-
-  // Serve almeno nome E prezzo: senza, si lascia decidere all'HTML.
-  if (!nome || prezzoIngrossoCents === null) return null;
-
-  // Foto: solo ProductImage non disabilitate, in ordine di position, master
-  // (de-cache) e SOLO dal catalogo media del fornitore, deduplicate.
-  const foto: string[] = [];
-  const gallery = voce.media_gallery;
-  if (Array.isArray(gallery)) {
-    const immagini = gallery
-      .slice(0, MAX_VOCI_GRAPHQL)
-      .filter((g): g is Record<string, unknown> => typeof g === "object" && g !== null)
-      .filter((g) => g.__typename === undefined || g.__typename === "ProductImage")
-      .filter((g) => g.disabled !== true)
-      .sort((a, b) => {
-        const pa = typeof a.position === "number" ? a.position : 0;
-        const pb = typeof b.position === "number" ? b.position : 0;
-        return pa - pb;
-      });
-    for (const g of immagini) {
-      const grezzo = typeof g.url === "string" ? g.url : "";
-      if (!grezzo) continue;
-      const master = masterDaFotoUrl(grezzo);
-      if (master.startsWith(PREFISSO_FOTO) && !foto.includes(master)) {
-        foto.push(master);
-      }
-    }
-  }
-
-  // Taglie: BundleProduct.items[].title = "<sku>.<taglia>", oppure — per un
-  // ConfigurableProduct — le etichette di configurable_options.values. I
-  // SimpleProduct (es. cappelli) non hanno taglie: taglie=[] è corretto (il
-  // chiamante propone la scala di default). Array limitati a MAX_VOCI_GRAPHQL.
-  const taglieSet = new Set<string>();
-  const items = voce.items;
-  if (Array.isArray(items)) {
-    const prefisso = sku ? `${sku}.` : "";
-    for (const it of items.slice(0, MAX_VOCI_GRAPHQL)) {
-      if (typeof it !== "object" || it === null) continue;
-      const title = (
-        typeof (it as { title?: unknown }).title === "string"
-          ? (it as { title: string }).title
-          : ""
-      ).trim();
-      if (!title) continue;
-      const grezza =
-        prefisso && title.toUpperCase().startsWith(prefisso)
-          ? title.slice(prefisso.length)
-          : title.includes(".")
-            ? title.slice(title.lastIndexOf(".") + 1)
-            : title;
-      const t = normalizzaTaglia(grezza);
-      if (t) taglieSet.add(t);
-    }
-  }
-  const opzioniConfig = voce.configurable_options;
-  if (Array.isArray(opzioniConfig)) {
-    // Etichette di ogni opzione: normalizzaTaglia scarta ciò che non è una
-    // taglia (es. colori), quindi non serve individuare l'attributo "taglia".
-    for (const opt of opzioniConfig.slice(0, MAX_VOCI_GRAPHQL)) {
-      if (typeof opt !== "object" || opt === null) continue;
-      const valori = (opt as { values?: unknown }).values;
-      if (!Array.isArray(valori)) continue;
-      for (const v of valori.slice(0, MAX_VOCI_GRAPHQL)) {
-        if (typeof v !== "object" || v === null) continue;
-        const label = (v as { label?: unknown }).label;
-        if (typeof label !== "string") continue;
-        const t = normalizzaTaglia(label);
-        if (t) taglieSet.add(t);
-      }
-    }
-  }
-  const taglie = [...taglieSet].sort((a, b) => rangoTaglia(a) - rangoTaglia(b));
-
-  const descHtml = htmlDiCampo(voce.description) || htmlDiCampo(voce.short_description);
-
-  return {
-    nome,
-    codice,
-    prezzoIngrossoCents,
-    prezzoIvatoCents: Math.round(prezzoIngrossoCents * 1.22), // IVA 22%
-    prezzoConsigliatoCents: null,
-    foto,
-    taglie,
-    attributi: [],
-    descrizioneFornitore: descHtml ? testoPiano(descHtml) : "",
-  };
-}
-
-/**
- * Scarica e mappa una scheda dal GraphQL del fornitore (per url_key derivato
- * dall'URL). Ritorna null — MAI lancia — su url non mappabile, errore di rete,
- * risposta non-200, JSON invalido, prodotto assente o dati insufficienti: il
- * chiamante ripiega sul parser HTML. Passa dal rate limiter globale come ogni
- * richiesta al fornitore, e un throttling (raro: /graphql è fuori dal WAF) lo
- * segnala comunque al limiter.
- */
-export async function fetchProdottoGraphql(url: string): Promise<ProdottoBlt | null> {
-  if (!urlFornitoreValido(url)) return null;
-  const urlKey = urlKeyDaUrl(url);
-  if (!urlKey) return null;
-  const scadenza = Date.now() + 12_000;
-  try {
-    if (!(await attendiTurnoFornitore(scadenza))) return null;
-    const res = await fetch(URL_GRAPHQL, {
-      method: "POST",
-      headers: {
-        "User-Agent": UA_FORNITORE,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-        "Accept-Encoding": ACCEPT_ENCODING_FORNITORE,
-        "sec-ch-ua": SEC_CH_UA_FORNITORE,
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"macOS"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        Origin: `https://${HOST_FORNITORE}`,
-        Referer: url,
-      },
-      body: JSON.stringify({
-        query: QUERY_PRODOTTO_GRAPHQL,
-        variables: { k: urlKey },
-      }),
-      redirect: "manual",
-      cache: "no-store",
-      signal: AbortSignal.timeout(
-        Math.min(10_000, Math.max(1_000, scadenza - Date.now())),
-      ),
-    });
-    if (!res.ok) {
-      if (STATUS_THROTTLING.has(res.status)) {
-        segnalaBloccoFornitore(retryAfterMsDaRisposta(res));
-      }
-      return null;
-    }
-    segnalaSuccessoFornitore();
-    // Il JSON di una scheda sta ampiamente sotto 2MB: tetto anti-abuso.
-    const testo = (await res.text()).slice(0, 2 * 1024 * 1024);
-    let dati: unknown;
-    try {
-      dati = JSON.parse(testo);
-    } catch {
-      return null;
-    }
-    const voce = estraiVoceGraphql(dati);
-    return voce ? mappaProdottoGraphql(voce, url) : null;
-  } catch {
-    return null; // rete, timeout, forma inattesa: si degrada al parser HTML
-  }
 }
