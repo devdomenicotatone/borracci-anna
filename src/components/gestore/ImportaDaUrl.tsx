@@ -13,6 +13,7 @@ import Link from "next/link";
 
 import {
   analizzaUrlFornitoreAction,
+  copiaFotoTraProdottiAction,
   creaProdottoDaImportAction,
   importaFotoDaUrlAction,
   scansionaListingAction,
@@ -229,21 +230,38 @@ export default function ImportaDaUrl({ categorie }: { categorie: Categoria[] }) 
             avvisi.push(r.error ?? "Creazione non riuscita.");
             continue;
           }
-          if (!primoId) primoId = r.prodottoId;
           if (r.error) avvisi.push(r.error); // ok:true + error = intoppo parziale
-          // Foto una alla volta; un errore (anche di rete) non blocca le altre.
-          for (let i = 0; i < dati.fotoSel.length; i++) {
-            setProgresso(`Foto ${i + 1} di ${dati.fotoSel.length}…`);
+          if (primoId) {
+            // Seconda scheda dello split: copia le foto dalla prima (gia
+            // scaricate), senza ri-scaricarle dal fornitore.
+            setProgresso("Copio le foto…");
             try {
-              const f = await importaFotoDaUrlAction(
-                r.prodottoId,
-                dati.fotoSel[i],
-                url.trim(),
-              );
-              if (f.ok) fotoOk++;
-              else fotoErr++;
+              const cp = await copiaFotoTraProdottiAction(primoId, r.prodottoId);
+              const copiate = cp.copiate ?? 0;
+              fotoOk += copiate;
+              // Foto non copiate (es. file storage sorgente mancanti): segnalate,
+              // non inghiottite — l'utente sa che la scheda ne ha meno.
+              fotoErr += Math.max(0, dati.fotoSel.length - copiate);
             } catch {
-              fotoErr++;
+              // copia fallita: la scheda esiste, foto da rimettere a mano
+              fotoErr += dati.fotoSel.length;
+            }
+          } else {
+            primoId = r.prodottoId;
+            // Foto una alla volta; un errore (anche di rete) non blocca le altre.
+            for (let i = 0; i < dati.fotoSel.length; i++) {
+              setProgresso(`Foto ${i + 1} di ${dati.fotoSel.length}…`);
+              try {
+                const f = await importaFotoDaUrlAction(
+                  r.prodottoId,
+                  dati.fotoSel[i],
+                  url.trim(),
+                );
+                if (f.ok) fotoOk++;
+                else fotoErr++;
+              } catch {
+                fotoErr++;
+              }
             }
           }
         }

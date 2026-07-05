@@ -931,3 +931,89 @@ export async function importaFotoDaUrlAction(
     return { ok: false, error: "Errore di rete durante l'import della foto." };
   }
 }
+
+/**
+ * Copia l'INTERA galleria da un prodotto a un altro SENZA ri-scaricare dal
+ * fornitore. Usata dallo split uomo+bambino: un URL misto crea due schede con le
+ * STESSE foto — la prima le scarica, la seconda le copia da qui. Copia gli
+ * oggetti storage (bucket "prodotti", stesso nome file in cartella diversa) e
+ * replica le righe prodotto_foto (url, ordine, colore, blur_data_url),
+ * impostando la copertina. Idempotente: salta le foto gia presenti sul
+ * destinatario. Cosi si dimezzano le richieste al WAF del fornitore rispetto a
+ * due download separati.
+ */
+export async function copiaFotoTraProdottiAction(
+  daProdottoId: string,
+  aProdottoId: string,
+): Promise<{ ok: boolean; error?: string; copiate?: number }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+  const { supabase } = sessione;
+
+  // Nome file dall'URL pubblico (l'hash dell'URL sorgente: identico tra le due
+  // schede, cambia solo la cartella <prodottoId>/).
+  const nomeFile = (url: string): string =>
+    url.split("?")[0].split("/").pop() ?? "";
+
+  try {
+    const { data: sorgenti, error: errLeggi } = await supabase
+      .from("prodotto_foto")
+      .select("url, ordine, colore, blur_data_url")
+      .eq("prodotto_id", daProdottoId)
+      .order("ordine", { ascending: true });
+    if (errLeggi) return { ok: false, error: errLeggi.message };
+    if (!sorgenti || sorgenti.length === 0) return { ok: true, copiate: 0 };
+
+    // Foto gia sul destinatario (per nome file): idempotenza su re-run.
+    const { data: presenti } = await supabase
+      .from("prodotto_foto")
+      .select("url")
+      .eq("prodotto_id", aProdottoId);
+    const gia = new Set(
+      (presenti ?? []).map((f) => nomeFile(f.url as string)).filter(Boolean),
+    );
+
+    let copiate = 0;
+    for (const f of sorgenti) {
+      const nome = nomeFile(f.url as string);
+      if (!nome || gia.has(nome)) continue;
+      const { error: errCopy } = await supabase.storage
+        .from("prodotti")
+        .copy(`${daProdottoId}/${nome}`, `${aProdottoId}/${nome}`);
+      // "gia esistente" non e un errore: si prosegue con l'inserimento riga.
+      if (errCopy && !/exist|duplicate|already/i.test(errCopy.message)) continue;
+      const { data: pub } = supabase.storage
+        .from("prodotti")
+        .getPublicUrl(`${aProdottoId}/${nome}`);
+      const { error: errIns } = await supabase.from("prodotto_foto").insert({
+        prodotto_id: aProdottoId,
+        variante_id: null,
+        colore: (f.colore as string | null) ?? null,
+        url: `${pub.publicUrl}?v=${Date.now()}`,
+        ordine: f.ordine as number,
+        blur_data_url: (f.blur_data_url as string | null) ?? null,
+      });
+      if (!errIns) copiate++;
+    }
+
+    // Copertina = prima foto per ordine (convenzione delle action galleria).
+    const { data: finali } = await supabase
+      .from("prodotto_foto")
+      .select("url")
+      .eq("prodotto_id", aProdottoId)
+      .order("ordine", { ascending: true })
+      .limit(1);
+    await supabase
+      .from("prodotti")
+      .update({ immagine_url: (finali?.[0]?.url as string | undefined) ?? null })
+      .eq("id", aProdottoId);
+
+    revalidatePath("/gestore/prodotti");
+    revalidatePath(`/gestore/prodotti/${aProdottoId}`);
+    revalidatePath("/");
+    revalidatePath("/prodotti/[slug]", "page");
+    return { ok: true, copiate };
+  } catch {
+    return { ok: false, error: "Errore durante la copia delle foto." };
+  }
+}

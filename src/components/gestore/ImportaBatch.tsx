@@ -20,6 +20,7 @@ import Link from "next/link";
 
 import {
   analizzaUrlFornitoreAction,
+  copiaFotoTraProdottiAction,
   creaProdottoDaImportAction,
   importaFotoDaUrlAction,
   type BozzaImport,
@@ -236,6 +237,9 @@ export default function ImportaBatch({
       fotoSel: string[];
       categoriaId: string | null;
       soloOnline: boolean;
+      /** Split: se valorizzato, le foto si COPIANO da questa scheda (gia
+          scaricata) invece di ri-scaricarle dal fornitore. */
+      copiaFotoDa?: string;
     },
   ): Promise<boolean> {
     aggiornaItem(idx, { stato: "creazione" });
@@ -276,24 +280,37 @@ export default function ImportaBatch({
       fotoOk: 0,
       fotoTot: dati.fotoSel.length,
     });
-    for (let f = 0; f < dati.fotoSel.length; f++) {
-      await attesaPausa();
-      setProgressoItem(`Foto ${f + 1} di ${dati.fotoSel.length}…`);
+    if (dati.copiaFotoDa) {
+      // Seconda scheda dello split: riusa le foto gia scaricate della prima
+      // (copia storage), senza nessuna richiesta al fornitore.
+      setProgressoItem("Copio le foto…");
       try {
-        const esito = await importaFotoDaUrlAction(
-          c.prodottoId,
-          dati.fotoSel[f],
-          urlScheda,
-        );
-        if (esito.ok) fotoOk++;
+        const cp = await copiaFotoTraProdottiAction(dati.copiaFotoDa, c.prodottoId);
+        fotoOk = cp.copiate ?? 0;
       } catch {
-        // una foto persa non blocca le successive
+        // copia fallita: la scheda esiste comunque, foto da rimettere a mano
       }
       aggiornaItem(idx, { fotoOk });
-      // Piccola pausa tra un download e l'altro: le foto sono la sorgente
-      // principale di richieste ravvicinate (una scheda = 1 pagina + N
-      // immagini), ed e cio che fa scattare il blocco 403 a meta batch.
-      if (f < dati.fotoSel.length - 1) await sleep(250);
+    } else {
+      for (let f = 0; f < dati.fotoSel.length; f++) {
+        await attesaPausa();
+        setProgressoItem(`Foto ${f + 1} di ${dati.fotoSel.length}…`);
+        try {
+          const esito = await importaFotoDaUrlAction(
+            c.prodottoId,
+            dati.fotoSel[f],
+            urlScheda,
+          );
+          if (esito.ok) fotoOk++;
+        } catch {
+          // una foto persa non blocca le successive
+        }
+        aggiornaItem(idx, { fotoOk });
+        // Piccola pausa tra un download e l'altro: le foto sono la sorgente
+        // principale di richieste ravvicinate (una scheda = 1 pagina + N
+        // immagini), ed e cio che fa scattare il blocco 403 a meta batch.
+        if (f < dati.fotoSel.length - 1) await sleep(250);
+      }
     }
     const fotoPerse = dati.fotoSel.length - fotoOk;
 
@@ -395,6 +412,9 @@ export default function ImportaBatch({
         fotoSel: base.fotoSel,
         categoriaId: j.categoriaId,
         soloOnline: base.soloOnline,
+        // La prima scheda creata (primoId) scarica le foto; le successive le
+        // copiano da lei, senza ri-scaricarle dal fornitore.
+        copiaFotoDa: primoId,
       });
       const cur = itemsRef.current[idx];
       if (ok) {
