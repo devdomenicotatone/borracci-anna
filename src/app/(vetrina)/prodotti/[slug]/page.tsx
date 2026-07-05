@@ -61,6 +61,7 @@ function prodottoEsempio(slug: string): ProdottoPdp {
     immagine_url: null,
     attivo: true,
     disponibilita_su_richiesta: true,
+    solo_online: false,
     varianti,
     foto: [],
     percorso: [],
@@ -85,7 +86,7 @@ const caricaProdotto = cache(async (
       supabase
         .from("prodotti")
         .select(
-          "id, slug, codice, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, varianti(id, prodotto_id, taglia, colore, sku, stock), prodotto_foto(id, prodotto_id, variante_id, colore, url, ordine, blur_data_url)",
+          "id, slug, codice, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, solo_online, categoria_id, varianti(id, prodotto_id, taglia, colore, sku, stock), prodotto_foto(id, prodotto_id, variante_id, colore, url, ordine, blur_data_url)",
         )
         .eq("slug", slug)
         .eq("attivo", true)
@@ -137,6 +138,7 @@ const caricaProdotto = cache(async (
       immagine_url: data.immagine_url,
       attivo: data.attivo,
       disponibilita_su_richiesta: data.disponibilita_su_richiesta,
+      solo_online: data.solo_online,
       varianti,
       foto,
       percorso,
@@ -257,6 +259,7 @@ export default async function PaginaProdotto({ params }: PdpProps) {
         prodotto={prodottoBase}
         foto={foto}
         suRichiesta={prodottoBase.disponibilita_su_richiesta ?? true}
+        soloOnline={prodottoBase.solo_online ?? false}
       />
     </main>
   );

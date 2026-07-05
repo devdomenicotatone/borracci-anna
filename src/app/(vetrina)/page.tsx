@@ -74,7 +74,7 @@ async function caricaProdotti(): Promise<Prodotto[]> {
     const { data, error } = await supabase
       .from("prodotti")
       .select(
-        "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo",
+        "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online",
       )
       .eq("attivo", true)
       .order("nome", { ascending: true });

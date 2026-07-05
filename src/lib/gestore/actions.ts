@@ -114,6 +114,7 @@ export async function salvaProdottoAction(
   const attivo = formData.get("attivo") === "true";
   const disponibilitaSuRichiesta =
     formData.get("disponibilita_su_richiesta") === "true";
+  const soloOnline = formData.get("solo_online") === "true";
 
   // Varianti serializzate dal form (JSON). Presenti solo in modifica: in
   // creazione il prodotto non ha ancora un id a cui agganciarle.
@@ -149,6 +150,7 @@ export async function salvaProdottoAction(
     prezzo_cents: prezzoCents,
     attivo,
     disponibilita_su_richiesta: disponibilitaSuRichiesta,
+    solo_online: soloOnline,
   };
 
   let nuovoId = id;

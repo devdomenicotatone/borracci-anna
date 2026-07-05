@@ -40,6 +40,24 @@ export default function ProductCard({ prodotto }: { prodotto: Prodotto }) {
       aria-label={`Vedi ${prodotto.nome}`}
     >
       <div className="relative aspect-[3/3.4] w-full overflow-hidden rounded-2xl">
+        {prodotto.solo_online && (
+          <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-sea ring-1 ring-sea/25 backdrop-blur">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-2.5 w-2.5"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+            </svg>
+            Solo online
+          </span>
+        )}
         {prodotto.immagine_url ? (
           // eslint-disable-next-line @next/next/no-img-element -- url esterne arbitrarie dal DB
           <img

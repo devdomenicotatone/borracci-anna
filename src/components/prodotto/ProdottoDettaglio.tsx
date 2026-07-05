@@ -27,10 +27,13 @@ export default function ProdottoDettaglio({
   prodotto,
   foto,
   suRichiesta,
+  soloOnline = false,
 }: {
   prodotto: ProdottoConVarianti;
   foto: ProdottoFoto[];
   suRichiesta: boolean;
+  /** Articolo non presente in negozio: mostra il badge "Solo online". */
+  soloOnline?: boolean;
 }) {
   const varianti = prodotto.varianti;
 
@@ -185,6 +188,25 @@ export default function ProdottoDettaglio({
         <p className="mt-3 font-display text-3xl font-extrabold text-coral">
           {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
         </p>
+
+        {soloOnline && (
+          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-sea/10 px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+            </svg>
+            Solo online — non disponibile in negozio
+          </span>
+        )}
 
         {prodotto.descrizione && (
           <p className="mt-6 max-w-prose whitespace-pre-line leading-relaxed text-muted">

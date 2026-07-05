@@ -44,6 +44,7 @@ export interface ProdottoForm {
   attivo: boolean;
   categoria_id: string | null;
   disponibilita_su_richiesta: boolean;
+  solo_online: boolean;
 }
 
 /** Chiave stabile di una combinazione colore|taglia (vuoto = null). */
@@ -87,6 +88,7 @@ export default function FormProdotto({
   const [suRichiesta, setSuRichiesta] = useState(
     prodotto?.disponibilita_su_richiesta ?? true,
   );
+  const [soloOnline, setSoloOnline] = useState(prodotto?.solo_online ?? false);
 
   // ----- Varianti (colori × taglie): selezione tenuta qui, applicata al save.
   const [colori, setColori] = useState<string[]>(() => [
@@ -234,6 +236,7 @@ export default function FormProdotto({
       prezzoCents !== prodotto.prezzo_cents ||
       attivo !== prodotto.attivo ||
       suRichiesta !== prodotto.disponibilita_su_richiesta ||
+      soloOnline !== prodotto.solo_online ||
       variantiCambiate
     : true;
 
@@ -273,6 +276,11 @@ export default function FormProdotto({
         type="hidden"
         name="disponibilita_su_richiesta"
         value={suRichiesta ? "true" : "false"}
+      />
+      <input
+        type="hidden"
+        name="solo_online"
+        value={soloOnline ? "true" : "false"}
       />
       {modifica && (
         <input
@@ -411,6 +419,14 @@ export default function FormProdotto({
             onToggle={() => setSuRichiesta((v) => !v)}
           />
 
+          <CardToggle
+            className="lg:hidden"
+            titolo="Solo online"
+            descrizione="Articolo non presente in negozio: in vetrina compare il badge «Solo online»."
+            acceso={soloOnline}
+            onToggle={() => setSoloOnline((v) => !v)}
+          />
+
           {/* Varianti: solo in modifica (in creazione il prodotto non ha ancora
               un id a cui agganciarle; si aggiungono dopo il primo salvataggio). */}
           {modifica && (
@@ -464,6 +480,12 @@ export default function FormProdotto({
             descrizione="Il cliente sceglie colore e taglia e ti contatta: nessun pagamento online e nessun conteggio del magazzino."
             acceso={suRichiesta}
             onToggle={() => setSuRichiesta((v) => !v)}
+          />
+          <CardToggle
+            titolo="Solo online"
+            descrizione="Articolo non presente in negozio: in vetrina compare il badge «Solo online»."
+            acceso={soloOnline}
+            onToggle={() => setSoloOnline((v) => !v)}
           />
         </div>
       </div>
