@@ -38,6 +38,7 @@ import {
   eStatoThrottlingFornitore,
   fetchListingBlt,
   fetchProdottoBlt,
+  fetchProdottoGraphql,
   loginBlt,
   paginaListingBlt,
   parseListingBlt,
@@ -416,22 +417,40 @@ export async function analizzaUrlFornitoreAction(
 
   const avvisi: string[] = [];
 
-  // Login opzionale: credenziali SOLO da env, con cache di modulo (vedi
-  // cookieFornitore: il captcha Magento si attiva sui fallimenti ripetuti).
-  const { cookie, credenziali, loginFallito } = await cookieFornitore();
-
-  let prodotto: ProdottoBlt;
+  // Sorgente dati: PRIMA GraphQL (una sola POST, fuori dal WAF), POI fallback
+  // all'HTML (login + scraping della pagina protetta) se GraphQL non risponde o
+  // non trova la scheda. Così le fetch pagina per-prodotto — la parte esposta al
+  // WAF — spariscono quando GraphQL funziona, senza perdere nulla se non va.
+  let prodotto: ProdottoBlt | null = null;
+  let fonteGraphql = false;
   try {
-    const html = await fetchProdottoBlt(url, cookie);
-    prodotto = parseProdottoBlt(html, url);
-  } catch (e) {
-    const messaggio = e instanceof Error ? e.message : "errore di rete";
-    return {
-      ok: false,
-      error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
-      throttled: e instanceof ErroreFornitore ? e.throttled : false,
-      retryAfterMs: e instanceof ErroreFornitore ? e.retryAfterMs : undefined,
-    };
+    prodotto = await fetchProdottoGraphql(url);
+    fonteGraphql = prodotto !== null;
+  } catch {
+    prodotto = null; // fetchProdottoGraphql non lancia, ma la difesa non costa
+  }
+
+  // Flag del percorso HTML per gli avvisi sul prezzo (validi solo lì).
+  let credenzialiHtml = false;
+  let loginFallitoHtml = false;
+  if (!prodotto) {
+    // Login opzionale: credenziali SOLO da env, con cache di modulo (vedi
+    // cookieFornitore: il captcha Magento si attiva sui fallimenti ripetuti).
+    const { cookie, credenziali, loginFallito } = await cookieFornitore();
+    credenzialiHtml = credenziali;
+    loginFallitoHtml = loginFallito;
+    try {
+      const html = await fetchProdottoBlt(url, cookie);
+      prodotto = parseProdottoBlt(html, url);
+    } catch (e) {
+      const messaggio = e instanceof Error ? e.message : "errore di rete";
+      return {
+        ok: false,
+        error: `Impossibile scaricare la pagina del fornitore (${messaggio}). Riprova.`,
+        throttled: e instanceof ErroreFornitore ? e.throttled : false,
+        retryAfterMs: e instanceof ErroreFornitore ? e.retryAfterMs : undefined,
+      };
+    }
   }
 
   // Prezzo: consigliato del fornitore se visibile, altrimenti (ingrosso+IVA)×3.
@@ -450,11 +469,16 @@ export async function analizzaUrlFornitoreAction(
     };
   }
   if (fontePrezzo === "calcolato") {
-    if (!credenziali) {
+    if (fonteGraphql) {
+      // Da GraphQL anonimo il consigliato (Msrp) non è esposto: prezzo calcolato.
+      avvisi.push(
+        "Prezzo consigliato non disponibile via GraphQL: calcolato (ingrosso+IVA)×3.",
+      );
+    } else if (!credenzialiHtml) {
       avvisi.push(
         "Login fornitore non configurato: prezzo calcolato (ingrosso+IVA)×3.",
       );
-    } else if (loginFallito) {
+    } else if (loginFallitoHtml) {
       avvisi.push("Login fornitore fallito: prezzo calcolato (ingrosso+IVA)×3.");
     }
     // Soglia di sanità: un (ingrosso+IVA)×3 sopra i 500€ è quasi sempre un
