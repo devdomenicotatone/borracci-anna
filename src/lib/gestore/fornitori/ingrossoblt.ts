@@ -678,18 +678,15 @@ export function segnalaBloccoFornitore(retryAfterMs?: number | null): number {
   return rinvio;
 }
 
-// Un vero Chrome invia UA e "client hints" (sec-ch-ua) COERENTI tra loro, più
-// gli header Sec-Fetch-* e Accept-Encoding: qui li replichiamo fedelmente per
-// non farci marcare come bot dal WAF (fedeltà, NON evasione: sono clienti B2B
-// legittimi). La major di Chrome sta in una costante unica, così UA e sec-ch-ua
-// non divergono mai — una divergenza è un tell peggiore dell'assenza. Esportati:
-// le richieste immagine (import-actions) li riusano per restare coerenti.
+// Header minimi da browser. NON inviamo i "client hints" (sec-ch-ua) né i
+// Sec-Fetch-*: dichiarerebbero "sono Chrome 126" mentre l'impronta TLS (JA3) di
+// Node/undici NON è quella di Chrome — un WAF che incrocia client-hints e TLS
+// vede la discrepanza e ci marca come bot (verificato: aggiungerli non aiuta e
+// può peggiorare). UA credibile + Accept + lingua bastano; Accept-Encoding è
+// neutro (nessuna finta identità) e undici decomprime gzip/deflate/br da solo
+// (MAI zstd: non lo decomprime e il corpo arriverebbe illeggibile).
 export const CHROME_MAJOR_FORNITORE = "126";
 export const UA_FORNITORE = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR_FORNITORE}.0.0.0 Safari/537.36`;
-export const SEC_CH_UA_FORNITORE = `"Not/A)Brand";v="8", "Chromium";v="${CHROME_MAJOR_FORNITORE}", "Google Chrome";v="${CHROME_MAJOR_FORNITORE}"`;
-// br incluso: undici decomprime gzip/deflate/br in modo trasparente anche
-// leggendo res.body a pezzi (verificato). MAI dichiarare zstd: undici non lo
-// decomprime e il corpo arriverebbe illeggibile.
 export const ACCEPT_ENCODING_FORNITORE = "gzip, deflate, br";
 
 const HEADER_BROWSER: Record<string, string> = {
@@ -698,14 +695,6 @@ const HEADER_BROWSER: Record<string, string> = {
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
   "Accept-Encoding": ACCEPT_ENCODING_FORNITORE,
-  "sec-ch-ua": SEC_CH_UA_FORNITORE,
-  "sec-ch-ua-mobile": "?0",
-  "sec-ch-ua-platform": '"macOS"',
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Site": "none",
-  "Sec-Fetch-User": "?1",
-  "Upgrade-Insecure-Requests": "1",
 };
 
 const URL_LOGIN = `https://${HOST_FORNITORE}/customer/account/login/`;
@@ -799,9 +788,6 @@ export async function loginBlt(
       method: "POST",
       headers: {
         ...HEADER_BROWSER,
-        // POST del form di login: viene DALLA pagina di login dello stesso sito,
-        // quindi same-origin (il "none" di HEADER_BROWSER contraddirebbe il Referer).
-        "Sec-Fetch-Site": "same-origin",
         Cookie: headerCookie(barattolo),
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: `https://${HOST_FORNITORE}`,

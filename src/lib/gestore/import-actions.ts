@@ -31,7 +31,6 @@ import { skuVariante } from "@/lib/catalogo";
 import {
   ACCEPT_ENCODING_FORNITORE,
   ErroreFornitore,
-  SEC_CH_UA_FORNITORE,
   UA_FORNITORE,
   attendiTurnoFornitore,
   eSchedaProdottoBlt,
@@ -678,13 +677,12 @@ export async function creaProdottoDaImportAction(input: {
 
 // --- 3) Import di una foto dal fornitore ------------------------------------------
 
-// Header da browser per il download immagini: coerenti con le pagine (stesso UA
-// e sec-ch-ua) più i Sec-Fetch-* tipici di una sotto-risorsa immagine. Un
-// browser vero, caricando le <img> della scheda, invia ANCHE il cookie di
-// sessione e il Referer della pagina prodotto: ometterli (come prima) è una
-// firma da bot ("pagina loggata + immagini anonime dallo stesso IP"). Li
-// aggiungiamo quando disponibili — è fedeltà al browser, non evasione. Il
-// Referer si accetta solo se del fornitore (difesa da leak/SSRF).
+// Header da browser per il download immagini. Come per le pagine, NIENTE
+// sec-ch-ua / Sec-Fetch-* (dichiarerebbero Chrome mentre l'impronta TLS non lo
+// è: bot-tell). Aggiungiamo però cookie di sessione e Referer della scheda,
+// quando disponibili: un browser vero, caricando le <img> del prodotto, li
+// invia — ometterli era una firma da bot ("pagina loggata + immagini anonime").
+// Il Referer si accetta solo se del fornitore (difesa da leak/SSRF).
 function intestazioniImmagine(opts: {
   referer?: string | null;
   cookie?: string | null;
@@ -694,12 +692,6 @@ function intestazioniImmagine(opts: {
     Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
     "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
     "Accept-Encoding": ACCEPT_ENCODING_FORNITORE,
-    "sec-ch-ua": SEC_CH_UA_FORNITORE,
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
-    "Sec-Fetch-Dest": "image",
-    "Sec-Fetch-Mode": "no-cors",
-    "Sec-Fetch-Site": "same-origin",
   };
   if (opts.referer && urlFornitoreValido(opts.referer)) h.Referer = opts.referer;
   if (opts.cookie) h.Cookie = opts.cookie;
