@@ -66,7 +66,7 @@ export default function CatalogoSezione({
             <Link
               href={basePath}
               scroll={false}
-              className="mt-5 inline-flex h-11 items-center rounded-full bg-coral px-6 font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+              className="mt-5 inline-flex h-11 items-center rounded-full bg-coral-ink px-6 font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
             >
               Azzera i filtri
             </Link>
@@ -83,8 +83,13 @@ export default function CatalogoSezione({
             aria-label="Prodotti in vetrina"
             className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
           >
-            {prodotti.map((prodotto) => (
-              <ProductCard key={prodotto.id} prodotto={prodotto} />
+            {prodotti.map((prodotto, i) => (
+              // Prima riga (fino a 4 col): priorita alta, candidate LCP.
+              <ProductCard
+                key={prodotto.id}
+                prodotto={prodotto}
+                priorita={i < 4}
+              />
             ))}
           </div>
 

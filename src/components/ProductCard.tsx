@@ -30,7 +30,14 @@ function gradientPer(seed: string): (typeof TILE_GRADIENTS)[number] {
   return TILE_GRADIENTS[hash % TILE_GRADIENTS.length];
 }
 
-export default function ProductCard({ prodotto }: { prodotto: Prodotto }) {
+export default function ProductCard({
+  prodotto,
+  priorita = false,
+}: {
+  prodotto: Prodotto;
+  /** true per le card above-the-fold (prima riga): candidate LCP. */
+  priorita?: boolean;
+}) {
   const gradiente = gradientPer(prodotto.id || prodotto.slug);
   const inchiostro = TILE_INK.has(gradiente);
 
@@ -70,6 +77,11 @@ export default function ProductCard({ prodotto }: { prodotto: Prodotto }) {
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             quality={75}
+            // Card above-the-fold: caricala subito con priorita alta (candidate
+            // LCP). In Next 16 `priority` e deprecato -> loading="eager" +
+            // fetchPriority="high". Le altre restano lazy (default).
+            loading={priorita ? "eager" : "lazy"}
+            fetchPriority={priorita ? "high" : "auto"}
             className="object-cover transition-transform duration-300 group-hover:scale-[1.04]"
           />
         ) : (

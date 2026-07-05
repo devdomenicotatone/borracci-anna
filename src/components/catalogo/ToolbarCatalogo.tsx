@@ -152,7 +152,7 @@ export default function ToolbarCatalogo({
             onChange={(e) =>
               naviga({ ...filtri, ordina: e.target.value as Ordinamento })
             }
-            className="h-11 appearance-none rounded-full bg-white pl-4 pr-9 font-display text-sm font-bold text-foreground ring-1 ring-line outline-none transition-shadow hover:ring-sea"
+            className="h-11 appearance-none rounded-full bg-white pl-4 pr-9 font-display text-base font-bold text-foreground ring-1 ring-line outline-none transition-shadow hover:ring-sea sm:text-sm"
           >
             {ORDINAMENTI.map((o) => (
               <option key={o} value={o}>
@@ -223,7 +223,7 @@ export default function ToolbarCatalogo({
             <button
               type="button"
               onClick={() => naviga({ ...FILTRI_VUOTI, ordina: filtri.ordina })}
-              className="ml-1 font-display text-sm font-bold text-coral transition-colors hover:text-coral-ink"
+              className="ml-1 font-display text-sm font-bold text-coral-ink transition-colors hover:text-coral"
             >
               Azzera tutto
             </button>

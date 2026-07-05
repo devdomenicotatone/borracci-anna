@@ -228,11 +228,11 @@ export async function confermaOrdineAction(
       // poi riporta l'ordine in attesa coi valori pre-conferma. Il revert e
       // guardato su "confermato": mai regredire un ordine nel frattempo pagato.
       // L'email non e ancora partita, quindi il gestore puo solo riprovare.
-      await admin
+      const { error: errRipristinoRighe } = await admin
         .from("ordine_righe")
         .update({ rimossa_il: null, rimossa_motivo: null })
         .eq("ordine_id", id);
-      await admin
+      const { error: errRipristinoOrdine } = await admin
         .from("ordini")
         .update({
           stato: "in_attesa",
@@ -242,6 +242,14 @@ export async function confermaOrdineAction(
         })
         .eq("id", id)
         .eq("stato", "confermato");
+      // Se il ripristino non riesce l'ordine puo restare "confermato" (pagabile)
+      // con righe in stato misto: lo segnaliamo perche va verificato a mano.
+      if (errRipristinoRighe || errRipristinoOrdine) {
+        console.error(
+          `[confermaOrdineAction] ripristino NON riuscito per ordine ${id}, stato da verificare a mano:`,
+          errRipristinoRighe?.message ?? errRipristinoOrdine?.message,
+        );
+      }
       return { ok: false, error: erroreRighe };
     }
 

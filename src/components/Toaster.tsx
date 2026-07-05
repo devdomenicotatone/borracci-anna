@@ -8,6 +8,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -41,14 +42,26 @@ export function ToasterProvider({
 }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
+  // Id dei timeout di auto-dismiss ancora attivi, per ripulirli allo smontaggio.
+  const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const mostra = useCallback((messaggio: string, tipo: TipoToast = "ok") => {
     const id = (counter.current += 1);
     setToasts((t) => [...t, { id, tipo, messaggio }]);
     // Auto-dismiss dopo 3,5s.
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id));
+      timers.current.delete(timer);
     }, 3500);
+    timers.current.add(timer);
+  }, []);
+
+  // Cleanup: cancella i timeout pendenti allo smontaggio del provider.
+  useEffect(() => {
+    const attivi = timers.current;
+    return () => {
+      attivi.forEach(clearTimeout);
+    };
   }, []);
 
   return (

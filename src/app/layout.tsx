@@ -42,6 +42,9 @@ export const metadata: Metadata = {
     title: TITOLO,
     description: DESCRIZIONE,
   },
+  // iOS: nome breve in home screen + web app "capace" con status bar chiara.
+  // L'icona apple-touch (180x180) e' fornita da src/app/apple-icon.tsx.
+  appleWebApp: { title: "Anna Shop", statusBarStyle: "default", capable: true },
 };
 
 // Viewport globale. `viewportFit: "cover"` e' l'opt-in che rende reali le

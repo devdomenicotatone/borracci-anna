@@ -130,7 +130,7 @@ export default function CartItem({
               onClick={() => impostaQuantita(riga.quantita - 1)}
               disabled={inAttesa || riga.quantita <= 1}
               aria-label="Diminuisci quantita"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
             >
               −
             </button>
@@ -145,7 +145,7 @@ export default function CartItem({
               onClick={() => impostaQuantita(riga.quantita + 1)}
               disabled={inAttesa || riga.quantita >= maxQuantita}
               aria-label="Aumenta quantita"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
             >
               +
             </button>

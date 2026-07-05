@@ -187,8 +187,13 @@ export function CartProvider({
     const esito = await svuotaCarrello();
     if (esito.ok) {
       setRighe([]);
+    } else {
+      riconcilia(esito);
+      if (esito.motivo !== "non_configurato") {
+        mostra("Svuotamento non riuscito. Riprova.", "errore");
+      }
     }
-  }, [applica]);
+  }, [applica, mostra, riconcilia]);
 
   const count = righeOttimistiche.reduce((a, r) => a + r.quantita, 0);
   const subtotaleCents = righeOttimistiche.reduce(

@@ -286,7 +286,7 @@ export default function ImportaDaUrl({ categorie }: { categorie: Categoria[] }) 
             spellCheck={false}
             autoCapitalize="none"
             disabled={analizzando}
-            className={`${inputCls} font-mono text-sm`}
+            className={`${inputCls} font-mono text-base`}
           />
         </Campo>
         {url.trim() !== "" && !urlOk && (

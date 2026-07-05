@@ -32,6 +32,7 @@ export default function MappaNegozio() {
   useEffect(() => {
     if (!contenitore.current || mappaRef.current) return;
     let annullato = false;
+    let timerResize: ReturnType<typeof setTimeout> | undefined;
 
     (async () => {
       const L = await import("leaflet");
@@ -68,11 +69,12 @@ export default function MappaNegozio() {
         .openPopup();
 
       // La cella mappa puo essere dimensionata dopo l'init: ricalcola.
-      setTimeout(() => mappa.invalidateSize(), 0);
+      timerResize = setTimeout(() => mappa.invalidateSize(), 0);
     })();
 
     return () => {
       annullato = true;
+      clearTimeout(timerResize);
       mappaRef.current?.remove();
       mappaRef.current = null;
     };

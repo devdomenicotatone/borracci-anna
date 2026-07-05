@@ -22,9 +22,18 @@ export default async function VetrinaLayout({
   return (
     <ToasterProvider>
       <CartProvider statoIniziale={statoIniziale}>
+        {/* Skip link: nascosto finche non riceve focus da tastiera, poi visibile. */}
+        <a
+          href="#contenuto"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-lg focus:bg-sea focus:px-4 focus:py-2 focus:text-white"
+        >
+          Vai al contenuto
+        </a>
         <div className="flex min-h-screen flex-col">
           <Header />
-          <main className="flex-1">{children}</main>
+          <main id="contenuto" className="flex-1">
+            {children}
+          </main>
           <Footer />
         </div>
         <CartDrawer />

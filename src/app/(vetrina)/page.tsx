@@ -3,6 +3,7 @@
 // server; se le env mancano degrada con grazia ai prodotti di esempio
 // (lib/vetrina), cosi la pagina rende SEMPRE (anche in build senza env).
 
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import CatalogoSezione from "@/components/catalogo/CatalogoSezione";
@@ -19,6 +20,12 @@ import { caricaFacetteVetrina, caricaProdottiVetrina } from "@/lib/vetrina";
 
 // I dati arrivano dal DB in base alla richiesta: niente prerender statico.
 export const dynamic = "force-dynamic";
+
+// Canonical assoluto via metadataBase: la home e raggiungibile con query di
+// tracciamento (utm_*, gclid) e con i filtri catalogo in searchParams.
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 // Tile gradiente per le card categoria (stesse classi delle card prodotto).
 // tile-sun e chiara: vuole testo scuro per il contrasto.

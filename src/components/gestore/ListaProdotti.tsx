@@ -201,7 +201,7 @@ export default function ListaProdotti({
     <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
             <svg
               viewBox="0 0 24 24"
               fill="none"

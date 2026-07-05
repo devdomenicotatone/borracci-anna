@@ -42,7 +42,7 @@ import {
   type VoceListingBlt,
 } from "@/lib/gestore/fornitori/ingrossoblt";
 
-const MODELLO = "claude-sonnet-4-6";
+const MODELLO = "claude-sonnet-5";
 
 // Proposta di default quando il parser non rileva taglie sul sito.
 // Solo taglie della scala del negozio (catalogo usa "2XL", non "XXL").
@@ -440,6 +440,13 @@ export async function analizzaUrlFornitoreAction(
       );
     } else if (loginFallito) {
       avvisi.push("Login fornitore fallito: prezzo calcolato (ingrosso+IVA)×3.");
+    }
+    // Soglia di sanità: un (ingrosso+IVA)×3 sopra i 500€ è quasi sempre un
+    // dato anomalo del parser. Non blocchiamo né cappiamo: solo un avviso.
+    if (prezzoCents > 50000) {
+      avvisi.push(
+        "Prezzo calcolato molto alto (oltre 500€): ricontrolla prima di pubblicare.",
+      );
     }
   }
 

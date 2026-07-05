@@ -3,7 +3,7 @@
 // foto da Supabase per slug. Se le env Supabase non sono configurate degrada
 // con grazia a un prodotto d'esempio, cosi il progetto builda anche senza DB.
 
-import { Fragment, cache } from "react";
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -174,6 +174,9 @@ export async function generateMetadata({
   return {
     title: prodotto.nome, // -> "<nome> · Anna Shop" via template del root
     description: descrizione,
+    // Canonical assoluto via metadataBase: neutralizza le query di tracciamento
+    // (utm_*, gclid) con cui la PDP puo essere raggiunta.
+    alternates: { canonical: `/prodotti/${slug}` },
     openGraph: {
       title: `${prodotto.nome} · Anna Shop`,
       description: descrizione,
@@ -231,36 +234,58 @@ export default async function PaginaProdotto({ params }: PdpProps) {
           __html: JSON.stringify(datiStrutturati).replace(/</g, "\\u003c"),
         }}
       />
-      <nav
-        className="mb-8 flex flex-wrap items-center gap-2 text-sm text-muted"
-        aria-label="Percorso di navigazione"
-      >
-        {percorso.length > 0 ? (
-          // Catena categorie (es. Uomo / Polo). Solo testo: non esistono ancora
-          // pagine filtrate per categoria a cui collegarsi.
-          percorso.map((c) => (
-            <Fragment key={c.id}>
-              <span className="font-medium">{c.nome}</span>
-              <span aria-hidden="true" className="text-line">
-                /
-              </span>
-            </Fragment>
-          ))
-        ) : (
-          // Fallback senza categoria: link alla home come prima.
-          <>
+      <nav aria-label="Percorso di navigazione" className="mb-8">
+        <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
+          <li>
             <Link
               href="/"
-              className="font-medium text-sea transition-colors hover:text-lagoon"
+              className="rounded-full transition-colors hover:text-sea"
             >
-              Anna Shop
+              Home
             </Link>
-            <span aria-hidden="true" className="text-line">
-              /
+          </li>
+          {/* Catena categorie (es. Uomo > Polo): link alle pagine /categoria. */}
+          {percorso.map((c) => (
+            <li key={c.id} className="flex items-center gap-1.5">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5 text-line"
+                aria-hidden="true"
+              >
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              <Link
+                href={`/categoria/${c.slug}`}
+                className="transition-colors hover:text-sea"
+              >
+                {c.nome}
+              </Link>
+            </li>
+          ))}
+          {/* Nodo finale: il nome prodotto, pagina corrente. */}
+          <li className="flex items-center gap-1.5">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5 text-line"
+              aria-hidden="true"
+            >
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+            <span aria-current="page" className="font-medium text-foreground">
+              {prodotto.nome}
             </span>
-          </>
-        )}
-        <span className="font-medium text-foreground">{prodotto.nome}</span>
+          </li>
+        </ol>
       </nav>
 
       <ProdottoDettaglio

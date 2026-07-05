@@ -165,7 +165,7 @@ export default function GestoreGalleria({
     <section className="mx-auto mt-8 max-w-xl lg:max-w-5xl">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
             <svg
               viewBox="0 0 24 24"
               fill="none"

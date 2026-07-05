@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 import PulsantePaga from "@/components/prodotto/PulsantePaga";
 import { createAdminSupabase } from "@/lib/supabase/admin";
@@ -99,7 +100,7 @@ const STATO_UI: Record<
     testo:
       "Questa richiesta è stata annullata. Se pensi sia un errore, scrivici pure: troviamo una soluzione.",
     chip: "Annullato",
-    chipCls: "bg-coral/15 text-coral",
+    chipCls: "bg-coral/15 text-coral-ink",
   },
 };
 
@@ -270,15 +271,9 @@ export default async function PaginaOrdine({
 // l'icona maglietta (stessa di ListaProdotti).
 function MiniaturaRiga({ url }: { url: string | null }) {
   return (
-    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-line">
+    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-line">
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- url da Storage con cache-bust
-        <img
-          src={url}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
+        <Image src={url} alt="" fill sizes="48px" className="object-cover" />
       ) : (
         <div className="tile-cyan grid h-full w-full place-items-center text-white">
           <svg

@@ -353,7 +353,7 @@ function RigaCategoria({
           ? "Sposta o promuovi prima le sottocategorie"
           : "Sposta sotto una categoria principale"
       }
-      className="h-9 max-w-[9rem] rounded-lg bg-white px-2 text-xs font-semibold text-foreground ring-1 ring-line outline-none disabled:opacity-40"
+      className="h-11 max-w-[9rem] rounded-lg bg-white px-2 text-xs font-semibold text-foreground ring-1 ring-line outline-none disabled:opacity-40"
     >
       <option value="">Principale</option>
       {radici
@@ -388,7 +388,7 @@ function RigaCategoria({
           }}
           disabled={occupato}
           aria-label={`Trascina per riordinare ${categoria.nome}; frecce su e giu per spostare`}
-          className="grid h-11 w-7 flex-none touch-none cursor-grab select-none place-items-center rounded-lg text-muted transition-colors hover:bg-surface active:cursor-grabbing disabled:opacity-40"
+          className="grid h-11 w-11 flex-none touch-none cursor-grab select-none place-items-center rounded-lg text-muted transition-colors hover:bg-surface active:cursor-grabbing disabled:opacity-40"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
             <circle cx="9" cy="6" r="1.5" />
@@ -416,7 +416,7 @@ function RigaCategoria({
                   chiudiModifica(false, true);
                 }
               }}
-              className="h-9 w-full rounded-lg bg-white px-2.5 text-sm font-semibold text-foreground ring-2 ring-sea outline-none"
+              className="h-11 w-full rounded-lg bg-white px-2.5 text-sm font-semibold text-foreground ring-2 ring-sea outline-none"
             />
           ) : (
             <button
@@ -463,7 +463,7 @@ function RigaCategoria({
           aria-label={`Sposta su ${categoria.nome}`}
           disabled={occupato || ctx.indice === 0}
           onClick={() => ctx.muovi(-1)}
-          className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white text-sea ring-1 ring-line transition-colors hover:bg-surface disabled:opacity-40"
+          className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white text-sea ring-1 ring-line transition-colors hover:bg-surface disabled:opacity-40"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
             <path d="m18 15-6-6-6 6" />
@@ -474,7 +474,7 @@ function RigaCategoria({
           aria-label={`Sposta giu ${categoria.nome}`}
           disabled={occupato || ctx.indice === ctx.totale - 1}
           onClick={() => ctx.muovi(1)}
-          className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white text-sea ring-1 ring-line transition-colors hover:bg-surface disabled:opacity-40"
+          className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white text-sea ring-1 ring-line transition-colors hover:bg-surface disabled:opacity-40"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
             <path d="m6 9 6 6 6-6" />
@@ -485,7 +485,7 @@ function RigaCategoria({
           aria-label={`Elimina ${categoria.nome}`}
           disabled={occupato}
           onClick={() => onElimina(categoria)}
-          className="grid h-9 w-9 flex-none place-items-center rounded-full text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
+          className="grid h-11 w-11 flex-none place-items-center rounded-full text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />

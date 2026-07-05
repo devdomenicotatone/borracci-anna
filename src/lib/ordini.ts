@@ -9,6 +9,7 @@
 // di verita degli articoli (server-side, da cookie): il client non li sceglie.
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
@@ -73,8 +74,25 @@ export async function inviaRichiestaAction(
     const admin = createAdminSupabase();
 
     // Rate limit best-effort (DB-backed, quindi condiviso tra istanze): frena
-    // flood e doppi invii. Max 3 richieste / 60s per email.
+    // flood e doppi invii. Due limiti nella finestra di 60s:
+    //   1) per-email: max 3 (blocca il singolo cliente che spamma).
+    //   2) globale: max 25 richieste in_attesa a prescindere dall'email
+    //      (tetto anti-flood: l'email e un campo libero e variandola il cap
+    //      per-email si aggira, questo no).
+    // TODO: cap per-IP DB-backed per una difesa piu granulare — richiede una
+    // colonna `ip` sulla tabella ordini (migration da fare in futuro).
     const daPocoIso = new Date(Date.now() - 60_000).toISOString();
+
+    // Log dell'IP (x-forwarded-for) per tracciabilita del flood; headers() e
+    // async in Next 16.
+    try {
+      const h = await headers();
+      const ip = h.get("x-forwarded-for");
+      if (ip) console.warn(`[ordini] richiesta da IP ${ip}`);
+    } catch {
+      // Contesto senza header (es. test): ignora.
+    }
+
     const { count: recenti } = await admin
       .from("ordini")
       .select("id", { count: "exact", head: true })
@@ -83,6 +101,17 @@ export async function inviaRichiestaAction(
     if ((recenti ?? 0) >= 3) {
       return {
         error: "Hai inviato troppe richieste di recente. Riprova tra qualche minuto.",
+      };
+    }
+
+    const { count: recentiGlobali } = await admin
+      .from("ordini")
+      .select("id", { count: "exact", head: true })
+      .eq("stato", "in_attesa")
+      .gte("creato_il", daPocoIso);
+    if ((recentiGlobali ?? 0) >= 25) {
+      return {
+        error: "Servizio momentaneamente occupato. Riprova tra qualche minuto.",
       };
     }
 
@@ -212,7 +241,7 @@ export async function creaCheckoutOrdineAction(
     const admin = createAdminSupabase();
     const { data: ordine } = await admin
       .from("ordini")
-      .select("id, stato, costo_spedizione_cents")
+      .select("id, stato, costo_spedizione_cents, stripe_session_id")
       .eq("token", token)
       .maybeSingle();
     if (!ordine) return { ok: false, error: "Ordine non trovato." };
@@ -270,6 +299,18 @@ export async function creaCheckoutOrdineAction(
         : undefined;
 
     const stripe = getStripe();
+
+    // Se esiste gia una sessione per questo ordine, falla scadere PRIMA di
+    // crearne una nuova: cosi la vecchia non e piu pagabile e si impedisce il
+    // doppio addebito (e il doppio scarico stock via webhook di due sessioni).
+    if (ordine.stripe_session_id) {
+      try {
+        await stripe.checkout.sessions.expire(ordine.stripe_session_id);
+      } catch {
+        // Gia scaduta/completata: ignora.
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,

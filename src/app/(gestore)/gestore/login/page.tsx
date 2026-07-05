@@ -27,7 +27,7 @@ export default function LoginPage() {
         <div className="rounded-3xl bg-white p-7 shadow-soft sm:p-8">
           <div className="mb-7 text-center">
             <Wordmark className="text-3xl" />
-            <p className="mt-2 text-sm font-display font-bold uppercase tracking-wide text-lagoon">
+            <p className="mt-2 text-sm font-display font-bold uppercase tracking-wide text-sea">
               Area gestore
             </p>
           </div>

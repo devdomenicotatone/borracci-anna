@@ -1,6 +1,6 @@
 "use server";
 
-// Feature AI "Genera scheda da foto" (Claude Sonnet 4.6, vision + tool use).
+// Feature AI "Genera scheda da foto" (Claude Sonnet 5, vision + tool use).
 // 1) generaSchedaDaFotoAction: manda le foto (prodotto + etichetta) a Claude e
 //    riceve una bozza strutturata (nome, descrizione, composizione, lavaggio,
 //    prezzo, colori con gli indici delle foto). NON salva nulla.
@@ -15,7 +15,7 @@ import { slugify } from "@/lib/gestore/slug";
 import { COLORI, coloreCanonico } from "@/lib/catalogo";
 import { revalidatePath } from "next/cache";
 
-const MODELLO = "claude-sonnet-4-6";
+const MODELLO = "claude-sonnet-5";
 
 // Palette colori del negozio: l'AI DEVE scegliere tra questi nomi. Cosi i tag
 // colore combaciano con i chip dell'editor e non si creano "Blu navy"/"Azzurra"

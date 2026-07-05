@@ -85,7 +85,7 @@ const CHIP: Record<StatoOrdine, { label: string; cls: string }> = {
   in_attesa: { label: "Da confermare", cls: "bg-sun/30 text-[#8a6500]" },
   confermato: { label: "Da pagare", cls: "bg-lagoon/15 text-sea" },
   pagato: { label: "Pagato", cls: "bg-sea/15 text-sea" },
-  annullato: { label: "Annullato", cls: "bg-coral/15 text-coral" },
+  annullato: { label: "Annullato", cls: "bg-coral/15 text-coral-ink" },
 };
 
 function dataIt(iso: string): string {
@@ -274,7 +274,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   return (
     <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <div className="mb-5">
-        <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+        <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -295,8 +295,9 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
         </h1>
       </div>
 
-      {/* Filtri */}
-      <div className="mb-4 flex flex-wrap gap-1 rounded-full bg-surface-2 p-1 text-sm lg:w-fit">
+      {/* Filtri: su mobile fila scrollabile (niente a-capo dentro il rounded-full),
+          da lg torna larghezza contenuto senza scroll. -mx/px per il bleed ai bordi. */}
+      <div className="-mx-4 mb-4 flex flex-nowrap gap-1 overflow-x-auto rounded-full bg-surface-2 px-4 py-1 text-sm lg:mx-0 lg:w-fit lg:flex-wrap lg:px-1">
         {FILTRI.map((f) => (
           <button
             key={f.key}
@@ -304,7 +305,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
             aria-pressed={filtro === f.key}
             onClick={() => setFiltro(f.key)}
             className={[
-              "flex-1 whitespace-nowrap rounded-full px-3 py-2 font-display font-bold transition-all lg:flex-none lg:px-5",
+              "shrink-0 whitespace-nowrap rounded-full px-3 py-2 font-display font-bold transition-all lg:px-5",
               filtro === f.key
                 ? "bg-sea text-white shadow-sea"
                 : "text-muted hover:text-foreground",
@@ -467,7 +468,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                                   type="button"
                                   disabled={pending}
                                   onClick={() => toggleRimozione(o.id, r.id)}
-                                  className="-ml-2 rounded-full px-2 py-1 text-xs font-bold text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
+                                  className="-ml-2 rounded-full px-2 py-1 text-xs font-bold text-coral-ink transition-colors hover:bg-coral/10 disabled:opacity-50"
                                 >
                                   Non disponibile
                                 </button>
@@ -539,7 +540,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                               "Ordine rifiutato.",
                             )
                           }
-                          className="rounded-full px-3 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
+                          className="rounded-full px-3 py-2 text-xs font-bold text-coral-ink transition-colors hover:bg-coral/10 disabled:opacity-50"
                         >
                           Rifiuta
                         </button>

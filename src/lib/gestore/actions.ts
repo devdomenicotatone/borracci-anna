@@ -410,10 +410,13 @@ async function sincronizzaCopertina(
   prodottoId: string,
   foto: FotoGalleriaRow[],
 ): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from("prodotti")
     .update({ immagine_url: foto[0]?.url ?? null })
     .eq("id", prodottoId);
+  // Se l'update fallisce, la copertina in vetrina resterebbe disallineata dalla
+  // prima foto: rilancia cosi lo cattura il try/catch dell'action chiamante.
+  if (error) throw error;
 }
 
 function revalidaProdotto(prodottoId: string): void {

@@ -32,7 +32,7 @@ export default function EditorVarianti({
     <section>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-lagoon">
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
             <svg
               viewBox="0 0 24 24"
               fill="none"

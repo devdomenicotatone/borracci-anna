@@ -25,6 +25,16 @@ const EVENTI_FINALIZZAZIONE = new Set<Stripe.Event["type"]>([
   "checkout.session.async_payment_succeeded",
 ]);
 
+// Eventi "negativi" (sessione scaduta o pagamento fallito): non cambiano stato
+// ne stock, ma li logghiamo per non lasciarli silenziosi.
+const EVENTI_SCADUTI = new Set<Stripe.Event["type"]>([
+  "checkout.session.expired",
+]);
+const EVENTI_PAGAMENTO_FALLITO = new Set<Stripe.Event["type"]>([
+  "checkout.session.async_payment_failed",
+  "payment_intent.payment_failed",
+]);
+
 /** Riga da scalare a magazzino: SKU della variante + quantita acquistata. */
 interface RigaStock {
   sku: string;
@@ -157,6 +167,26 @@ export async function POST(req: Request): Promise<Response> {
         return new Response("Elaborazione fallita.", { status: 500 });
       }
     }
+  } else if (EVENTI_SCADUTI.has(event.type)) {
+    // Sessione scaduta senza pagamento: nessun ordine da finalizzare, nessuno
+    // stock scalato. Logghiamo per tracciabilita e restiamo idempotenti.
+    const session = event.data.object as Stripe.Checkout.Session;
+    console.info(
+      "[stripe-webhook] sessione scaduta:",
+      `session=${session.id}`,
+      `payment_status=${session.payment_status}`,
+    );
+  } else if (EVENTI_PAGAMENTO_FALLITO.has(event.type)) {
+    // Pagamento fallito (metodo asincrono o PaymentIntent): non tocchiamo stato
+    // ne stock, ci limitiamo a un warning con i riferimenti utili.
+    const oggetto = event.data.object as
+      | Stripe.Checkout.Session
+      | Stripe.PaymentIntent;
+    console.warn(
+      "[stripe-webhook] pagamento fallito:",
+      `type=${event.type}`,
+      `ref=${oggetto.id}`,
+    );
   }
 
   // Evento ricevuto e (eventualmente) gestito con successo.

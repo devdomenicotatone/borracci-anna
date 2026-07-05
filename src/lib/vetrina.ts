@@ -5,9 +5,11 @@ import "server-only";
 // Condiviso da home e pagine categoria. Filtri e ordinamento si applicano
 // lato DB cosi la vetrina regge anche con molti prodotti.
 
+import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { createAdminSupabase } from "@/lib/supabase/admin";
 import {
   FACETTE_VUOTE,
   type FacetteCatalogo,
@@ -190,24 +192,32 @@ function ordinaColori(colori: Iterable<string>): string[] {
   });
 }
 
+/** Tag per invalidare a mano la cache delle facette (revalidateTag). */
+export const TAG_FACETTE_VETRINA = "facette-vetrina";
+
+/** Durata cache facette: cambiano di rado (nuovi prodotti/varianti). */
+const FACETTE_REVALIDATE_S = 300;
+
 /**
- * Facette per la toolbar filtri: quali taglie/colori esistono davvero nel
- * catalogo attivo (opzionalmente ristretto a una categoria) e il range prezzi.
- * Volutamente NON dipende dai filtri correnti: le opzioni restano stabili
- * mentre l'utente compone la selezione.
+ * Aggregazione facette vera e propria. Isolata perche gira DENTRO unstable_cache:
+ * non puo ricevere il client Supabase (non serializzabile) ne leggere i cookie,
+ * quindi si crea qui un client COOKIELESS (service role, cookieless). Legge solo
+ * dati pubblici del catalogo attivo (prezzo + varianti), coerenti con l'anon.
  */
-export async function caricaFacetteVetrina(
-  supabase: Supabase | null,
-  categoriaIds?: string[],
+async function aggregaFacette(
+  categoriaIds: string[],
 ): Promise<FacetteCatalogo> {
-  if (!supabase) return FACETTE_VUOTE;
+  // Senza service role key non possiamo creare il client cookieless: degrada
+  // a facette vuote invece di lanciare (come il resto della vetrina).
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return FACETTE_VUOTE;
 
   try {
+    const supabase = createAdminSupabase();
     let query = supabase
       .from("prodotti")
       .select("prezzo_cents, varianti(taglia, colore)")
       .eq("attivo", true);
-    if (categoriaIds && categoriaIds.length > 0) {
+    if (categoriaIds.length > 0) {
       query = query.in("categoria_id", categoriaIds);
     }
 
@@ -240,4 +250,37 @@ export async function caricaFacetteVetrina(
   } catch {
     return FACETTE_VUOTE;
   }
+}
+
+/**
+ * Facette per la toolbar filtri: quali taglie/colori esistono davvero nel
+ * catalogo attivo (opzionalmente ristretto a una categoria) e il range prezzi.
+ * Volutamente NON dipende dai filtri correnti: le opzioni restano stabili
+ * mentre l'utente compone la selezione.
+ *
+ * Le pagine vetrina sono force-dynamic, ma le facette dipendono solo dalla
+ * categoria: si cachano con unstable_cache (revalidate breve + tag) cosi il
+ * full-scan prodotti+varianti non gira a ogni richiesta. L'aggregazione usa un
+ * client cookieless creato internamente (unstable_cache non accetta il client
+ * Supabase). L'argomento `supabase` resta solo come guardia "env configurate":
+ * se e null (env Supabase assenti) non si cacha nulla e si torna vuoto.
+ */
+export async function caricaFacetteVetrina(
+  supabase: Supabase | null,
+  categoriaIds?: string[],
+): Promise<FacetteCatalogo> {
+  if (!supabase) return FACETTE_VUOTE;
+
+  // Chiave stabile per categoria: ordinata cosi ordini diversi degli stessi id
+  // condividono la stessa entry di cache. "tutte" = catalogo intero (home).
+  const ids = categoriaIds && categoriaIds.length > 0 ? [...categoriaIds].sort() : [];
+  const chiave = ids.length > 0 ? ids.join(",") : "tutte";
+
+  const cached = unstable_cache(
+    () => aggregaFacette(ids),
+    ["facette-vetrina", chiave],
+    { revalidate: FACETTE_REVALIDATE_S, tags: [TAG_FACETTE_VETRINA] },
+  );
+
+  return cached();
 }

@@ -322,7 +322,7 @@ export default function FormProdotto({
               required
               spellCheck={false}
               autoCapitalize="none"
-              className={`${inputCls} font-mono text-sm`}
+              className={`${inputCls} font-mono text-base`}
             />
           </Campo>
 
@@ -349,7 +349,7 @@ export default function FormProdotto({
               spellCheck={false}
               autoCapitalize="none"
               placeholder="Es. ABC123 (facoltativo)"
-              className={`${inputCls} font-mono text-sm`}
+              className={`${inputCls} font-mono text-base`}
             />
           </Campo>
 
