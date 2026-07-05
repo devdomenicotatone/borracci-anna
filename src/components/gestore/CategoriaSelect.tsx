@@ -6,6 +6,7 @@
 
 import { useMemo } from "react";
 
+import { gruppiCategorie } from "@/lib/categorie-albero";
 import type { Categoria } from "@/lib/types";
 
 export default function CategoriaSelect({
@@ -22,17 +23,7 @@ export default function CategoriaSelect({
   disabled?: boolean;
 }) {
   // Gerarchia a 2 livelli: macro (senza parent) con le loro figlie.
-  const gruppi = useMemo(() => {
-    const radici = categorie
-      .filter((c) => !c.parent_id)
-      .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id));
-    return radici.map((radice) => ({
-      radice,
-      figli: categorie
-        .filter((c) => c.parent_id === radice.id)
-        .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id)),
-    }));
-  }, [categorie]);
+  const gruppi = useMemo(() => gruppiCategorie(categorie), [categorie]);
 
   return (
     <div className="relative">
@@ -44,15 +35,15 @@ export default function CategoriaSelect({
         className="h-12 w-full appearance-none rounded-2xl bg-white px-4 pr-9 text-base text-foreground ring-1 ring-line outline-none transition-shadow disabled:opacity-50"
       >
         <option value="">Nessuna categoria</option>
-        {gruppi.map(({ radice, figli }) =>
-          figli.length === 0 ? (
+        {gruppi.map(({ radice, figlie }) =>
+          figlie.length === 0 ? (
             <option key={radice.id} value={radice.id}>
               {radice.nome}
             </option>
           ) : (
             <optgroup key={radice.id} label={radice.nome}>
               <option value={radice.id}>{radice.nome} (tutto)</option>
-              {figli.map((f) => (
+              {figlie.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.nome}
                 </option>

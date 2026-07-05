@@ -1,4 +1,5 @@
 import { requireGestore } from "@/lib/gestore/auth";
+import { caricaCategorie } from "@/lib/categorie";
 import ListaProdotti, {
   type ProdottoLista,
 } from "@/components/gestore/ListaProdotti";
@@ -13,6 +14,7 @@ interface RigaProdottoGrezza {
   immagine_url: string | null;
   attivo: boolean;
   disponibilita_su_richiesta: boolean;
+  categoria_id: string | null;
   creato_il: string;
   varianti: { stock: number }[] | null;
 }
@@ -22,13 +24,19 @@ interface RigaProdottoGrezza {
 export default async function ProdottiPage() {
   const { supabase } = await requireGestore();
 
-  const { data } = await supabase
-    .from("prodotti")
-    .select(
-      "id, slug, nome, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, creato_il, varianti(stock)",
-    )
-    .order("creato_il", { ascending: false })
-    .limit(200);
+  // Prodotti + categorie in parallelo: le categorie alimentano filtro, badge
+  // di riga e assegnazione in blocco. Limite alzato a 1000 (cap PostgREST):
+  // filtri e ricerca girano client-side e restano istantanei a queste scale.
+  const [{ data }, categorie] = await Promise.all([
+    supabase
+      .from("prodotti")
+      .select(
+        "id, slug, nome, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, creato_il, varianti(stock)",
+      )
+      .order("creato_il", { ascending: false })
+      .limit(1000),
+    caricaCategorie(supabase),
+  ]);
 
   const righe = (data as unknown as RigaProdottoGrezza[] | null) ?? [];
   const prodotti: ProdottoLista[] = righe.map((p) => ({
@@ -40,9 +48,10 @@ export default async function ProdottiPage() {
     immagine_url: p.immagine_url,
     attivo: p.attivo,
     suRichiesta: p.disponibilita_su_richiesta,
+    categoriaId: p.categoria_id,
     numVarianti: p.varianti?.length ?? 0,
     stockTotale: (p.varianti ?? []).reduce((s, v) => s + (v.stock ?? 0), 0),
   }));
 
-  return <ListaProdotti prodotti={prodotti} />;
+  return <ListaProdotti prodotti={prodotti} categorie={categorie} />;
 }

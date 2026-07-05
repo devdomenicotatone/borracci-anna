@@ -705,3 +705,45 @@ export async function eliminaProdottoAction(id: string): Promise<EsitoElimina> {
     return { ok: false, error: "Errore di rete. Riprova." };
   }
 }
+
+/**
+ * Assegna (o toglie, con null) la categoria a piu prodotti in un colpo solo.
+ * Usata dalla selezione multipla della lista prodotti: un unico UPDATE con
+ * .in(), niente N round-trip. Ritorna quante righe sono state aggiornate.
+ */
+export async function assegnaCategoriaBulkAction(
+  ids: string[],
+  categoriaId: string | null,
+): Promise<EsitoAzione & { aggiornati?: number }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+
+  const unici = [...new Set(ids)].filter(Boolean);
+  if (unici.length === 0) {
+    return { ok: false, error: "Nessun prodotto selezionato." };
+  }
+
+  try {
+    const { data, error } = await sessione.supabase
+      .from("prodotti")
+      .update({ categoria_id: categoriaId })
+      .in("id", unici)
+      .select("id");
+    if (error) {
+      // 23503 = categoria cancellata tra il render della lista e il submit.
+      if (error.code === "23503") {
+        return {
+          ok: false,
+          error: "La categoria selezionata non esiste più. Aggiorna la pagina.",
+        };
+      }
+      return { ok: false, error: error.message };
+    }
+
+    revalidatePath("/gestore/prodotti");
+    revalidatePath("/");
+    return { ok: true, aggiornati: data?.length ?? 0 };
+  } catch {
+    return { ok: false, error: "Errore di rete. Riprova." };
+  }
+}

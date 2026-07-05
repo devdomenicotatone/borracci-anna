@@ -248,6 +248,19 @@ h3 {
   animation: drawer-in 0.3s ease-out;
 }
 
+/* Ingresso del menu mobile da sinistra (specchio di drawer-in). */
+@keyframes drawer-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-drawer-in-left {
+  animation: drawer-in-left 0.3s ease-out;
+}
+
 /* Dissolvenza dell'overlay del drawer. */
 @keyframes fade-in {
   from {

@@ -1,93 +1,53 @@
-// Vetrina "Borracci Anna": griglia dei prodotti attivi.
-// Legge da Supabase lato server; se le env mancano, la query fallisce o non
-// ci sono prodotti, degrada con grazia mostrando alcuni prodotti di esempio
-// hardcoded cosi la pagina rende SEMPRE (anche in build senza env).
+// Vetrina "Borracci Anna": hero, scorciatoie per categoria e catalogo con
+// filtri/ordinamento guidati dall'URL (searchParams). Legge da Supabase lato
+// server; se le env mancano degrada con grazia ai prodotti di esempio
+// (lib/vetrina), cosi la pagina rende SEMPRE (anche in build senza env).
 
 import Link from "next/link";
 
-import type { Prodotto } from "@/lib/types";
-import { createServerSupabase } from "@/lib/supabase/server";
-import ProductCard from "@/components/ProductCard";
-import Wordmark from "@/components/Wordmark";
+import CatalogoSezione from "@/components/catalogo/CatalogoSezione";
+import { caricaCategoriePubbliche } from "@/lib/categorie";
+import { gruppiCategorie } from "@/lib/categorie-albero";
+import {
+  parseFiltri,
+  parsePagina,
+  type SearchParamsCatalogo,
+} from "@/lib/filtri-catalogo";
 import { NEGOZIO } from "@/lib/negozio";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { caricaFacetteVetrina, caricaProdottiVetrina } from "@/lib/vetrina";
 
 // I dati arrivano dal DB in base alla richiesta: niente prerender statico.
 export const dynamic = "force-dynamic";
 
-// Prodotti di esempio usati come fallback quando Supabase non e configurato
-// o non restituisce risultati. Prezzi in centesimi, valuta EUR.
-const PRODOTTI_ESEMPIO: Prodotto[] = [
-  {
-    id: "esempio-1",
-    slug: "t-shirt-essenziale-bianca",
-    nome: "T-shirt essenziale bianca",
-    descrizione: "Cotone pettinato, vestibilita regolare.",
-    prezzo_cents: 2900,
-    valuta: "EUR",
-    immagine_url: null,
-    attivo: true,
-  },
-  {
-    id: "esempio-2",
-    slug: "felpa-girocollo-sabbia",
-    nome: "Felpa girocollo sabbia",
-    descrizione: "Spugna pesante, taglio rilassato.",
-    prezzo_cents: 7900,
-    valuta: "EUR",
-    immagine_url: null,
-    attivo: true,
-  },
-  {
-    id: "esempio-3",
-    slug: "pantalone-cargo-nero",
-    nome: "Pantalone cargo nero",
-    descrizione: "Tela di cotone, tasche laterali.",
-    prezzo_cents: 9900,
-    valuta: "EUR",
-    immagine_url: null,
-    attivo: true,
-  },
-  {
-    id: "esempio-4",
-    slug: "camicia-overshirt-verde",
-    nome: "Overshirt verde militare",
-    descrizione: "Doppio uso camicia-giacca.",
-    prezzo_cents: 11900,
-    valuta: "EUR",
-    immagine_url: null,
-    attivo: true,
-  },
-];
+// Tile gradiente per le card categoria (stesse classi delle card prodotto).
+// tile-sun e chiara: vuole testo scuro per il contrasto.
+const TILE_CATEGORIE = [
+  "tile-deep",
+  "tile-coral",
+  "tile-cyan",
+  "tile-sunset",
+  "tile-sun",
+  "tile-cyan-soft",
+] as const;
+const TILE_CHIARE = new Set<string>(["tile-sun"]);
 
-/**
- * Recupera i prodotti attivi dal DB.
- * I prodotti di esempio sono SOLO un fallback per quando Supabase non e
- * configurato (build/anteprima senza env): con DB connesso si mostrano i dati
- * reali, e se non ci sono prodotti attivi la vetrina resta vuota (stato vuoto),
- * senza mai mostrare prodotti finti (che porterebbero a pagine 404).
- */
-async function caricaProdotti(): Promise<Prodotto[]> {
-  try {
-    const supabase = await createServerSupabase();
-    if (!supabase) return PRODOTTI_ESEMPIO; // nessuna env: dati di esempio
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParamsCatalogo>;
+}) {
+  const sp = await searchParams;
+  const filtri = parseFiltri(sp);
+  const pagina = parsePagina(sp);
 
-    const { data, error } = await supabase
-      .from("prodotti")
-      .select(
-        "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online",
-      )
-      .eq("attivo", true)
-      .order("nome", { ascending: true });
-
-    if (error) return []; // errore: vetrina vuota, niente prodotti finti
-    return (data as Prodotto[] | null) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-export default async function Home() {
-  const prodotti = await caricaProdotti();
+  const supabase = await createServerSupabase();
+  const [categorie, esito, facette] = await Promise.all([
+    caricaCategoriePubbliche(),
+    caricaProdottiVetrina(supabase, { filtri, pagina }),
+    caricaFacetteVetrina(supabase),
+  ]);
+  const gruppi = gruppiCategorie(categorie);
 
   // Dati strutturati (schema.org): aiuta Google a capire che è un negozio di
   // abbigliamento a Rimini, con indirizzo, contatti e orari.
@@ -206,10 +166,95 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ===== GRIGLIA PRODOTTI ===== */}
+      {/* ===== SCORCIATOIE CATEGORIA ===== */}
+      {gruppi.length > 0 && (
+        <section
+          aria-labelledby="categorie-title"
+          className="mx-auto max-w-6xl px-5 pt-12 sm:pt-14"
+        >
+          <div className="mb-6">
+            <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className="h-[18px] w-[18px]"
+              >
+                <rect x="3" y="4" width="7" height="7" rx="1.5" />
+                <rect x="14" y="4" width="7" height="7" rx="1.5" />
+                <rect x="3" y="15" width="7" height="5" rx="1.5" />
+                <rect x="14" y="15" width="7" height="5" rx="1.5" />
+              </svg>
+              Trova il tuo stile
+            </span>
+            <h2
+              id="categorie-title"
+              className="mt-2 font-display text-3xl font-extrabold leading-tight text-foreground sm:text-4xl"
+            >
+              Compra per categoria
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {gruppi.map(({ radice, figlie }, i) => {
+              const tile = TILE_CATEGORIE[i % TILE_CATEGORIE.length];
+              const scuro = TILE_CHIARE.has(tile);
+              return (
+                <Link
+                  key={radice.id}
+                  href={`/categoria/${radice.slug}`}
+                  className={`group relative isolate overflow-hidden rounded-3xl p-5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea ${tile} ${
+                    scuro ? "text-foreground" : "text-white"
+                  }`}
+                >
+                  {/* texture a puntini sottili sopra il gradiente */}
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 -z-10 opacity-40 [background-image:radial-gradient(rgba(255,255,255,.35)_1.5px,transparent_2px)] [background-size:18px_18px]"
+                  />
+                  <span className="font-display text-xl font-extrabold sm:text-2xl">
+                    {radice.nome}
+                  </span>
+                  {figlie.length > 0 && (
+                    <p
+                      className={`mt-1 line-clamp-2 text-xs font-medium sm:text-sm ${
+                        scuro ? "text-foreground/75" : "text-white/85"
+                      }`}
+                    >
+                      {figlie.map((f) => f.nome).join(" · ")}
+                    </p>
+                  )}
+                  <span
+                    aria-hidden="true"
+                    className="mt-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur transition-transform duration-200 group-hover:translate-x-1"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4"
+                    >
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ===== CATALOGO CON FILTRI ===== */}
       <section
         id="vetrina"
-        aria-labelledby="novita-title"
+        aria-labelledby="collezione-title"
         className="mx-auto max-w-6xl scroll-mt-20 px-5 py-12 sm:py-16"
       >
         <div className="mb-8 sm:mb-10">
@@ -230,31 +275,21 @@ export default async function Home() {
             Fresche di stagione
           </span>
           <h2
-            id="novita-title"
+            id="collezione-title"
             className="mt-2 font-display text-3xl font-extrabold leading-tight text-foreground sm:text-4xl"
           >
-            Novità dell&apos;estate
+            La collezione
           </h2>
         </div>
 
-        {/* Griglia prodotti (o stato vuoto se non ci sono prodotti attivi) */}
-        {prodotti.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-line bg-surface px-6 py-20 text-center shadow-soft">
-            <Wordmark className="select-none text-3xl opacity-60" />
-            <p className="mt-4 text-sm text-muted">
-              La vetrina è in aggiornamento. Torna presto.
-            </p>
-          </div>
-        ) : (
-          <div
-            aria-label="Prodotti in vetrina"
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
-          >
-            {prodotti.map((prodotto) => (
-              <ProductCard key={prodotto.id} prodotto={prodotto} />
-            ))}
-          </div>
-        )}
+        <CatalogoSezione
+          basePath="/"
+          filtri={filtri}
+          pagina={pagina}
+          facette={facette}
+          prodotti={esito.prodotti}
+          totale={esito.totale}
+        />
       </section>
     </>
   );
