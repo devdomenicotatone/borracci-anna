@@ -468,6 +468,30 @@ create trigger trg_profili_aggiornato
   before update on public.profili
   for each row execute function public.tocca_aggiornato_il();
 
+-- Delete sicuro: un prodotto gia venduto (referenziato da ordine_righe) non si
+-- hard-elimina (la FK e SET NULL, spezzerebbe lo storico); il trigger lo nasconde
+-- (attivo=false) e annulla il delete, atomicamente (chiude la race del check app).
+create or replace function public.prodotto_nascondi_se_venduto()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if exists (
+    select 1 from public.ordine_righe where prodotto_id = old.id
+  ) then
+    update public.prodotti set attivo = false where id = old.id;
+    return null;
+  end if;
+  return old;
+end;
+$$;
+drop trigger if exists trg_prodotto_nascondi_se_venduto on public.prodotti;
+create trigger trg_prodotto_nascondi_se_venduto
+  before delete on public.prodotti
+  for each row execute function public.prodotto_nascondi_se_venduto();
+
 -- Scrittura catalogo per il gestore + lettura dei prodotti non attivi.
 drop policy if exists "prodotti_lettura_gestore" on public.prodotti;
 create policy "prodotti_lettura_gestore"

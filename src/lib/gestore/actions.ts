@@ -669,6 +669,10 @@ export interface EsitoElimina {
  * - se non e mai stato venduto -> hard delete (cleanup foto + delete; le
  *   varianti spariscono via ON DELETE CASCADE).
  * Il check su ordine_righe e possibile grazie alla policy SELECT per il gestore.
+ * NB: la GARANZIA e a livello DB — il trigger BEFORE DELETE
+ * prodotto_nascondi_se_venduto converte in soft-delete qualsiasi prodotto
+ * venduto anche se l'ordine arriva DOPO questo check (chiude la race TOCTOU);
+ * qui il check serve per l'esito `soft` e il cleanup foto.
  */
 export async function eliminaProdottoAction(id: string): Promise<EsitoElimina> {
   const sessione = await verifySession();
@@ -758,6 +762,9 @@ export async function assegnaCategoriaBulkAction(
  * ordini (prodotto_id e ON DELETE SET NULL); quelli mai venduti si HARD-eliminano
  * (cleanup foto + delete, varianti via ON DELETE CASCADE). Ritorna il conteggio
  * dei due esiti cosi la UI puo spiegare perche alcuni sono stati "nascosti".
+ * Come il delete singolo, la GARANZIA e nel trigger DB
+ * prodotto_nascondi_se_venduto: nemmeno una race con un ordine concorrente puo
+ * hard-eliminare un prodotto venduto.
  */
 export async function eliminaProdottiBulkAction(
   ids: string[],
