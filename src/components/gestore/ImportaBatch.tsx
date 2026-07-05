@@ -226,6 +226,7 @@ export default function ImportaBatch({
       prezzoCents: number;
       descrizione: string;
       taglie: string[];
+      colore: string | null;
       fotoSel: string[];
       categoriaId: string | null;
       soloOnline: boolean;
@@ -239,6 +240,7 @@ export default function ImportaBatch({
       descrizione: dati.descrizione,
       prezzoCents: dati.prezzoCents,
       taglie: dati.taglie,
+      colore: dati.colore,
       categoriaId: dati.categoriaId,
       soloOnline: dati.soloOnline,
     });
@@ -349,6 +351,7 @@ export default function ImportaBatch({
       prezzoCents: b.prezzoCents,
       descrizione: b.descrizione,
       taglie: b.taglie,
+      colore: b.colore,
       fotoSel: b.foto,
       categoriaId: categoriaId || null,
       soloOnline,

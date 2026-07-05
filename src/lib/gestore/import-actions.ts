@@ -27,7 +27,7 @@ import { revalidatePath } from "next/cache";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
-import { skuVariante } from "@/lib/catalogo";
+import { coloreCanonico, skuVariante } from "@/lib/catalogo";
 import {
   ACCEPT_ENCODING_FORNITORE,
   ErroreFornitore,
@@ -141,6 +141,7 @@ export interface BozzaImport {
   fontePrezzo: "consigliato" | "calcolato";
   foto: string[];
   taglie: string[]; //        proposte (default S-XXL se il parser non le trova)
+  colore: string | null; //   un solo colore per scheda (dal fornitore), null se non rilevato
   avvisi: string[];
 }
 
@@ -507,6 +508,7 @@ export async function analizzaUrlFornitoreAction(
       fontePrezzo,
       foto: prodotto.foto,
       taglie,
+      colore: prodotto.colore ? coloreCanonico(prodotto.colore) : null,
       avvisi,
     },
   };
@@ -517,7 +519,7 @@ export async function analizzaUrlFornitoreAction(
 /**
  * Crea il prodotto BOZZA dall'import rivisto dal gestore: attivo=false,
  * disponibilita_su_richiesta=true, categoria opzionale, una variante per taglia
- * (colore null, stock 0, SKU dal codice base o dallo slug). MAI auto-pubblicare
+ * (col colore della scheda, stock 0, SKU dal codice base o dallo slug). MAI auto-pubblicare
  * da qui: l'eventuale pubblicazione e un passo esplicito e separato del client.
  * `duplicato=true` nell'esito segnala il caso "codice gia a catalogo", che nel
  * flusso massivo e un salto pulito e non un errore.
@@ -529,6 +531,7 @@ export async function creaProdottoDaImportAction(input: {
   descrizione: string;
   prezzoCents: number;
   taglie: string[];
+  colore?: string | null;
   categoriaId?: string | null;
   /** Articolo non presente in negozio: badge "Solo online" in vetrina. */
   soloOnline?: boolean;
@@ -560,6 +563,10 @@ export async function creaProdottoDaImportAction(input: {
     return { ok: false, error: "Inserisci un prezzo valido maggiore di zero." };
   }
   const categoriaId = (input.categoriaId ?? "").trim() || null;
+  // Colore unico della scheda (dal fornitore o scelto in revisione), riportato
+  // sulla palette del negozio; null = variante senza colore.
+  const coloreRaw = (input.colore ?? "").trim();
+  const colore = coloreRaw ? coloreCanonico(coloreRaw) : null;
 
   // Taglie: set canonico + libere corte, max 15, senza duplicati.
   const taglie: string[] = [];
@@ -640,15 +647,15 @@ export async function creaProdottoDaImportAction(input: {
       return { ok: false, error: "Slug gia in uso: rinomina il prodotto." };
     }
 
-    // Varianti: una per taglia, colore null, stock 0, SKU dal codice base
-    // (o dallo slug) secondo il modello condiviso di skuVariante.
+    // Varianti: una per taglia col colore della scheda (o null), stock 0, SKU
+    // dal codice base (o dallo slug) secondo il modello condiviso di skuVariante.
     const skuUsati = new Set<string>();
     const varianti = taglie.map((taglia) => {
-      let sku = skuVariante(codice || slug, null, taglia);
+      let sku = skuVariante(codice || slug, colore, taglia);
       let n = 2;
-      while (skuUsati.has(sku)) sku = `${skuVariante(codice || slug, null, taglia)}-${n++}`;
+      while (skuUsati.has(sku)) sku = `${skuVariante(codice || slug, colore, taglia)}-${n++}`;
       skuUsati.add(sku);
-      return { prodotto_id: prodottoId, taglia, colore: null, sku, stock: 0 };
+      return { prodotto_id: prodottoId, taglia, colore, sku, stock: 0 };
     });
     const { error: errVar } = await supabase.from("varianti").insert(varianti);
     if (errVar) {

@@ -17,6 +17,7 @@ export interface ProdottoBlt {
   prezzoConsigliatoCents: number | null; // prezzo consigliato al pubblico, se visibile
   foto: string[]; //                URL assoluti, deduplicati, in ordine galleria
   taglie: string[]; //              [] se non rilevabili
+  colore: string | null; //         un solo colore per scheda (ogni URL = un colore); null se non rilevato
   attributi: { chiave: string; valore: string }[];
   descrizioneFornitore: string; //  testo descrizione/dettagli se presente, anche ""
 }
@@ -396,6 +397,44 @@ function estraiTaglie(html: string): string[] {
   return [...taglie].sort((a, b) => rangoTaglia(a) - rangoTaglia(b));
 }
 
+// --- Colore -------------------------------------------------------------------------
+
+/**
+ * Colore della scheda: ogni URL del fornitore e un solo colore (il suffisso SKU
+ * ".NR"/".BI"/...). Due fonti leggibili sulla pagina LOGGATA, in ordine di
+ * fiducia: (1) il JSON di tracking `productData` con la chiave "color":"Nero";
+ * (2) il sottotitolo `<div class="product_detail_sku target">Bambino - Nero</div>`
+ * (formato "Target - Colore"). Ritorna il NOME grezzo del colore (es. "Nero",
+ * "Verde") o null; la mappatura sulla palette del negozio la fa l'import
+ * (coloreCanonico). Verificato dal vivo: il JSON productData porta il colore
+ * anche sugli articoli adulti (dove il div "target" e vuoto), quindi la fonte #1
+ * copre praticamente sempre; null solo se manca del tutto (si sceglie a mano in
+ * revisione). NON si deduce dal suffisso SKU: i codici a 2 lettere (BN, ...) sono
+ * ambigui e un colore sbagliato e peggio di nessun colore.
+ */
+function estraiColore(html: string): string | null {
+  // 1. JSON productData: {..., "color":"Nero"}. La chiave "color" compare solo
+  //    li (finestra corta ancorata a productData, per non pescare altri JSON).
+  const prod = html.indexOf("productData");
+  if (prod !== -1) {
+    const finestra = html.slice(prod, prod + 800);
+    const m = finestra.match(/"color"\s*:\s*"([^"]{1,40})"/);
+    if (m) {
+      const c = decodificaEntita(m[1]).replace(/\s+/g, " ").trim();
+      if (c) return c;
+    }
+  }
+  // 2. Sottotitolo "Target - Colore": si prende la parte dopo l'ultimo " - ".
+  const div = html.match(/product_detail_sku target"[^>]*>\s*([^<]{1,80}?)\s*</);
+  if (div) {
+    const testo = decodificaEntita(div[1]).replace(/\s+/g, " ").trim();
+    const parti = testo.split(/\s[-–]\s/);
+    const c = parti.length > 1 ? parti[parti.length - 1].trim() : "";
+    if (c) return c;
+  }
+  return null;
+}
+
 // --- Attributi e descrizione -----------------------------------------------------------
 
 /** Coppie chiave/valore dalla tabella "Maggiori Informazioni" del prodotto. */
@@ -451,6 +490,7 @@ export function parseProdottoBlt(html: string, url: string): ProdottoBlt {
     prezzoConsigliatoCents: estraiPrezzoConsigliatoCents(html, attributi),
     foto: estraiFoto(html),
     taglie: estraiTaglie(html),
+    colore: estraiColore(html),
     attributi,
     descrizioneFornitore: estraiDescrizione(html),
   };

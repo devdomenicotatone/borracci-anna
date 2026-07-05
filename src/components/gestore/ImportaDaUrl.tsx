@@ -192,6 +192,7 @@ export default function ImportaDaUrl({ categorie }: { categorie: Categoria[] }) 
           descrizione: dati.descrizione,
           prezzoCents: dati.prezzoCents,
           taglie: dati.taglie,
+          colore: dati.colore,
           categoriaId: dati.categoriaId,
           soloOnline: dati.soloOnline,
         });

@@ -12,7 +12,7 @@ import type { BozzaImport } from "@/lib/gestore/import-actions";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
-import { TAGLIE } from "@/lib/catalogo";
+import { COLORI, TAGLIE, coloreChiaro, coloreHex } from "@/lib/catalogo";
 import type { Categoria } from "@/lib/types";
 
 const inputCls =
@@ -29,6 +29,8 @@ export interface DatiRevisione {
   prezzoCents: number;
   descrizione: string;
   taglie: string[];
+  /** Colore unico della scheda (dal fornitore o scelto qui); null = senza colore. */
+  colore: string | null;
   /** Foto da importare, nell'ordine di selezione (la prima e la copertina). */
   fotoSel: string[];
   categoriaId: string | null;
@@ -81,6 +83,16 @@ export default function RevisioneBozza({
     ...bozza.taglie.filter((t) => !TAGLIE_CHIP.includes(t)),
   ]);
   const [taglie, setTaglie] = useState<string[]>(bozza.taglie);
+  const [colore, setColore] = useState<string>(bozza.colore ?? "");
+  // Opzioni colore = palette del negozio + eventuale colore rilevato fuori
+  // palette (non lo perdiamo). Init lazy: la bozza e stabile per il mount.
+  const [opzioniColore] = useState<string[]>(() => {
+    const nomi = COLORI.map((c) => c.nome);
+    const det = bozza.colore?.trim();
+    return det && !nomi.some((n) => n.toLowerCase() === det.toLowerCase())
+      ? [det, ...nomi]
+      : nomi;
+  });
   const [categoriaId, setCategoriaId] = useState(categoriaIniziale);
   const [soloOnline, setSoloOnline] = useState(soloOnlineIniziale);
 
@@ -115,6 +127,7 @@ export default function RevisioneBozza({
       prezzoCents,
       descrizione,
       taglie,
+      colore: colore.trim() || null,
       fotoSel,
       categoriaId: categoriaId || null,
       soloOnline,
@@ -332,6 +345,59 @@ export default function RevisioneBozza({
             />
           </span>
         </button>
+
+        {/* Colore: uno per scheda (rilevato dal fornitore), modificabile o
+            azzerabile. Swatch + select della palette. */}
+        <Campo
+          label="Colore"
+          htmlFor="r-colore"
+          hint="Rilevato dal fornitore; le varianti avranno questo colore."
+        >
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className={[
+                "grid h-9 w-9 shrink-0 place-items-center rounded-full",
+                !colore || coloreChiaro(coloreHex(colore))
+                  ? "ring-1 ring-line"
+                  : "",
+              ].join(" ")}
+              style={colore ? { backgroundColor: coloreHex(colore) } : undefined}
+            >
+              {!colore && <span className="text-xs font-bold text-muted">—</span>}
+            </span>
+            <div className="relative flex-1">
+              <select
+                id="r-colore"
+                value={colore}
+                onChange={(e) => setColore(e.target.value)}
+                disabled={busy}
+                className={`${inputCls} cursor-pointer appearance-none pr-10`}
+              >
+                <option value="">Nessun colore</option>
+                {opzioniColore.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-muted">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </Campo>
 
         {/* Taglie: chip toggle, una variante per taglia. */}
         <div className="flex flex-col gap-1.5">
