@@ -33,6 +33,7 @@ import RevisioneBozza, {
 } from "@/components/gestore/RevisioneBozza";
 import { useToast } from "@/components/gestore/Toaster";
 import { slugify } from "@/lib/gestore/slug";
+import { dividiTagliePerPubblico } from "@/lib/catalogo";
 import type { Categoria } from "@/lib/types";
 
 const inputCls =
@@ -122,7 +123,12 @@ export default function ImportaBatch({
 
   // --- Configurazione -------------------------------------------------------
   const [categorieList, setCategorieList] = useState<Categoria[]>(categorie);
-  const [categoriaId, setCategoriaId] = useState("");
+  // Categorie di destinazione: una per pubblico. Un prodotto misto (uomo+bambino)
+  // crea DUE schede, ognuna nella sua categoria. Spegnere un pubblico lo esclude.
+  const [catAdulto, setCatAdulto] = useState("");
+  const [catBambino, setCatBambino] = useState("");
+  const [importaAdulto, setImportaAdulto] = useState(true);
+  const [importaBambino, setImportaBambino] = useState(true);
   const [modalita, setModalita] = useState<"auto" | "revisione">("auto");
   const [pubblica, setPubblica] = useState(false);
   const [riscriviAI, setRiscriviAI] = useState(true);
@@ -317,6 +323,107 @@ export default function ImportaBatch({
     return true;
   }
 
+  /**
+   * Split per pubblico: un prodotto misto (uomo+bambino) diventa DUE schede —
+   * taglie lettera all'adulto, taglie eta/numero al bambino (codice -B, cosi il
+   * dedup non le confonde). Con un solo pubblico presente o importabile resta
+   * una scheda. Richiama creaConFoto per ogni pubblico e aggrega lo stato finale
+   * dell'item (l'ultima chiamata lascerebbe solo il proprio esito).
+   */
+  async function creaConSplit(
+    idx: number,
+    base: {
+      nome: string;
+      codice: string | null;
+      prezzoCents: number;
+      descrizione: string;
+      colore: string | null;
+      fotoSel: string[];
+      soloOnline: boolean;
+    },
+    taglie: string[],
+    adultoOpt: { importa: boolean; categoriaId: string | null },
+    bambinoOpt: { importa: boolean; categoriaId: string | null },
+  ): Promise<boolean> {
+    const { adulto, bambino } = dividiTagliePerPubblico(taglie);
+    const faAdulto = adulto.length > 0 && adultoOpt.importa;
+    const faBambino = bambino.length > 0 && bambinoOpt.importa;
+    const entrambi = faAdulto && faBambino;
+    const jobs: {
+      taglie: string[];
+      codice: string | null;
+      categoriaId: string | null;
+      pubblico: string;
+    }[] = [];
+    if (faAdulto) {
+      jobs.push({
+        taglie: adulto,
+        codice: base.codice,
+        categoriaId: adultoOpt.categoriaId,
+        pubblico: "Adulto",
+      });
+    }
+    if (faBambino) {
+      jobs.push({
+        taglie: bambino,
+        codice: entrambi && base.codice ? `${base.codice}-B` : base.codice,
+        categoriaId: bambinoOpt.categoriaId,
+        pubblico: "Bambino",
+      });
+    }
+    if (jobs.length === 0) {
+      aggiornaItem(idx, {
+        stato: "saltato",
+        nota: "Nessun pubblico da importare per questo prodotto.",
+      });
+      return false;
+    }
+
+    let creato = false;
+    let pubblicato = false;
+    let tuttiDup = true;
+    let primoId: string | undefined;
+    const note: string[] = [];
+    for (const j of jobs) {
+      const ok = await creaConFoto(idx, {
+        nome: base.nome,
+        codice: j.codice,
+        prezzoCents: base.prezzoCents,
+        descrizione: base.descrizione,
+        taglie: j.taglie,
+        colore: base.colore,
+        fotoSel: base.fotoSel,
+        categoriaId: j.categoriaId,
+        soloOnline: base.soloOnline,
+      });
+      const cur = itemsRef.current[idx];
+      if (ok) {
+        creato = true;
+        if (!primoId) primoId = cur.prodottoId;
+        if (cur.stato === "pubblicato") pubblicato = true;
+        if (jobs.length > 1 && cur.nota) note.push(`${j.pubblico}: ${cur.nota}`);
+      } else {
+        if (cur.stato !== "duplicato") tuttiDup = false;
+        note.push(
+          `${j.pubblico}: ${cur.nota ?? (cur.stato === "duplicato" ? "già a catalogo" : "errore")}`,
+        );
+      }
+    }
+
+    aggiornaItem(idx, {
+      stato: creato
+        ? pubblicato
+          ? "pubblicato"
+          : "fatto"
+        : tuttiDup
+          ? "duplicato"
+          : "errore",
+      prodottoId: primoId,
+      nota: note.length ? note.join(" · ") : undefined,
+    });
+    return creato;
+  }
+
   // --- Motore automatico -------------------------------------------------------
 
   async function processaAuto(
@@ -345,17 +452,21 @@ export default function ImportaBatch({
       return { bloccato: false };
     }
     const b = r.bozza;
-    await creaConFoto(idx, {
-      nome: b.nome,
-      codice: b.codice ?? item.sku,
-      prezzoCents: b.prezzoCents,
-      descrizione: b.descrizione,
-      taglie: b.taglie,
-      colore: b.colore,
-      fotoSel: b.foto,
-      categoriaId: categoriaId || null,
-      soloOnline,
-    });
+    await creaConSplit(
+      idx,
+      {
+        nome: b.nome,
+        codice: b.codice ?? item.sku,
+        prezzoCents: b.prezzoCents,
+        descrizione: b.descrizione,
+        colore: b.colore,
+        fotoSel: b.foto,
+        soloOnline,
+      },
+      b.taglie,
+      { importa: importaAdulto, categoriaId: catAdulto || null },
+      { importa: importaBambino, categoriaId: catBambino || null },
+    );
     return { bloccato: false };
   }
 
@@ -518,7 +629,21 @@ export default function ImportaBatch({
     if (idx === null || creandoItem) return;
     setCreandoItem(true);
     try {
-      const creata = await creaConFoto(idx, dati);
+      const creata = await creaConSplit(
+        idx,
+        {
+          nome: dati.nome,
+          codice: dati.codice,
+          prezzoCents: dati.prezzoCents,
+          descrizione: dati.descrizione,
+          colore: dati.colore,
+          fotoSel: dati.fotoSel,
+          soloOnline: dati.soloOnline,
+        },
+        dati.taglie,
+        { importa: true, categoriaId: dati.categoriaAdulto },
+        { importa: true, categoriaId: dati.categoriaBambino },
+      );
       if (!creata) {
         const item = itemsRef.current[idx];
         if (item.stato === "errore") {
@@ -601,7 +726,9 @@ export default function ImportaBatch({
         }
         setCategorieList(r.categorie);
         const nuova = r.categorie.find((c) => !prima.has(c.id));
-        if (nuova) setCategoriaId(nuova.id);
+        // Assegna la nuova categoria al primo pubblico ATTIVO (il bambino se
+        // l'import adulto e spento), non a un setter fisso.
+        if (nuova) (importaAdulto ? setCatAdulto : setCatBambino)(nuova.id);
         setNuovaCatAperta(false);
         setNuovaCatNome("");
         mostra("Categoria creata.", "ok");
@@ -661,15 +788,13 @@ export default function ImportaBatch({
             )}
           </section>
 
-          {/* Categoria di destinazione */}
-          <section className="flex flex-col gap-1.5">
+          {/* Categorie di destinazione: una per pubblico. Un prodotto misto
+              (uomo+bambino) crea due schede, una per pubblico. */}
+          <section className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-2">
-              <label
-                htmlFor="b-categoria"
-                className="font-display text-sm font-bold text-foreground"
-              >
-                Categoria per tutti i prodotti
-              </label>
+              <span className="font-display text-sm font-bold text-foreground">
+                Categorie di destinazione
+              </span>
               <button
                 type="button"
                 onClick={() => setNuovaCatAperta((v) => !v)}
@@ -678,15 +803,61 @@ export default function ImportaBatch({
                 {nuovaCatAperta ? "Chiudi" : "+ Nuova categoria"}
               </button>
             </div>
-            <CategoriaSelect
-              id="b-categoria"
-              categorie={categorieList}
-              value={categoriaId}
-              onChange={setCategoriaId}
-            />
+
+            <div className="flex flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line">
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  htmlFor="b-cat-adulto"
+                  className="font-display text-sm font-bold text-foreground"
+                >
+                  Adulto{" "}
+                  <span className="font-medium text-muted">· taglie S-XXL</span>
+                </label>
+                <SwitchMini
+                  on={importaAdulto}
+                  onClick={() => setImportaAdulto((v) => !v)}
+                  label="Importa i prodotti adulto"
+                />
+              </div>
+              <CategoriaSelect
+                id="b-cat-adulto"
+                categorie={categorieList}
+                value={catAdulto}
+                onChange={setCatAdulto}
+                disabled={!importaAdulto}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line">
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  htmlFor="b-cat-bambino"
+                  className="font-display text-sm font-bold text-foreground"
+                >
+                  Bambino{" "}
+                  <span className="font-medium text-muted">
+                    · taglie 3-4…14-15
+                  </span>
+                </label>
+                <SwitchMini
+                  on={importaBambino}
+                  onClick={() => setImportaBambino((v) => !v)}
+                  label="Importa i prodotti bambino"
+                />
+              </div>
+              <CategoriaSelect
+                id="b-cat-bambino"
+                categorie={categorieList}
+                value={catBambino}
+                onChange={setCatBambino}
+                disabled={!importaBambino}
+              />
+            </div>
+
             <p className="text-xs text-muted">
-              In modalità &ldquo;con revisione&rdquo; potrai comunque cambiarla
-              prodotto per prodotto.
+              Un prodotto con entrambe le taglie diventa due schede (la bambino
+              col codice «-B»). Spegni un pubblico per non importarlo. In «con
+              revisione» puoi cambiare tutto prodotto per prodotto.
             </p>
             {nuovaCatAperta && (
               <div className="mt-1 flex flex-col gap-2 rounded-2xl bg-surface-2 p-3 ring-1 ring-line sm:flex-row sm:items-center">
@@ -833,7 +1004,8 @@ export default function ImportaBatch({
           bozza={bozzaCorrente}
           codiceFallback={items[correnteIdx].sku}
           categorie={categorieList}
-          categoriaIniziale={categoriaId}
+          categoriaAdultoIniziale={catAdulto}
+          categoriaBambinoIniziale={catBambino}
           soloOnlineIniziale={soloOnline}
           intestazione={
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -1216,6 +1388,37 @@ function OpzioneToggle({
           }`}
         />
       </span>
+    </button>
+  );
+}
+
+/** Interruttore compatto (accanto a una label), per "importa questo pubblico". */
+function SwitchMini({
+  on,
+  onClick,
+  label,
+}: {
+  on: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onClick}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+        on ? "bg-sea" : "bg-line"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all ${
+          on ? "left-6" : "left-1"
+        }`}
+      />
     </button>
   );
 }

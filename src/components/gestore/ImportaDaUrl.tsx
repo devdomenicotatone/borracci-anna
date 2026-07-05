@@ -29,6 +29,7 @@ import RevisioneBozza, {
 } from "@/components/gestore/RevisioneBozza";
 import { useToast } from "@/components/gestore/Toaster";
 import { slugify } from "@/lib/gestore/slug";
+import { dividiTagliePerPubblico } from "@/lib/catalogo";
 import type { Categoria } from "@/lib/types";
 
 const inputCls =
@@ -183,58 +184,87 @@ export default function ImportaDaUrl({ categorie }: { categorie: Categoria[] }) 
 
   function creaSingolo(dati: DatiRevisione) {
     startCrea(async () => {
-      try {
-        // 1) Crea il prodotto bozza (attivo=false) con le varianti taglia.
-        const r = await creaProdottoDaImportAction({
-          nome: dati.nome,
-          slug: slugify(dati.nome),
+      // Un prodotto misto (uomo+bambino) diventa DUE schede: le taglie lettera
+      // vanno all'adulto, quelle a eta/numero al bambino (codice -B). Con un
+      // solo pubblico resta una scheda. Le foto si importano su ciascuna.
+      const { adulto, bambino } = dividiTagliePerPubblico(dati.taglie);
+      const entrambi = adulto.length > 0 && bambino.length > 0;
+      const jobs: {
+        taglie: string[];
+        codice: string | null;
+        categoriaId: string | null;
+      }[] = [];
+      if (adulto.length > 0) {
+        jobs.push({
+          taglie: adulto,
           codice: dati.codice,
-          descrizione: dati.descrizione,
-          prezzoCents: dati.prezzoCents,
-          taglie: dati.taglie,
-          colore: dati.colore,
-          categoriaId: dati.categoriaId,
-          soloOnline: dati.soloOnline,
+          categoriaId: dati.categoriaAdulto,
         });
-        if (!r.ok || !r.prodottoId) {
-          mostra(r.error ?? "Creazione non riuscita.", "errore");
-          return;
-        }
-        // La bozza può nascere con un intoppo (es. varianti non salvate):
-        // il server lo segnala con ok:true + error, come in GeneraDaFoto.
-        const avvisoServer = r.error ?? null;
-
-        // 2) Importa le foto selezionate una alla volta (ordine di selezione);
-        //    un errore su una foto — anche di rete — non blocca le successive:
-        //    da qui in poi la bozza ESISTE e si arriva sempre alla fase "fatto".
-        let erroriFoto = 0;
-        for (let i = 0; i < dati.fotoSel.length; i++) {
-          setProgresso(`Foto ${i + 1} di ${dati.fotoSel.length}…`);
-          try {
-            const f = await importaFotoDaUrlAction(
-              r.prodottoId,
-              dati.fotoSel[i],
-              url.trim(),
-            );
-            if (!f.ok) erroriFoto++;
-          } catch {
-            erroriFoto++;
+      }
+      if (bambino.length > 0) {
+        jobs.push({
+          taglie: bambino,
+          codice: entrambi && dati.codice ? `${dati.codice}-B` : dati.codice,
+          categoriaId: dati.categoriaBambino,
+        });
+      }
+      try {
+        let primoId: string | undefined;
+        let fotoOk = 0;
+        let fotoErr = 0;
+        const avvisi: string[] = [];
+        for (const j of jobs) {
+          const r = await creaProdottoDaImportAction({
+            nome: dati.nome,
+            slug: slugify(dati.nome),
+            codice: j.codice,
+            descrizione: dati.descrizione,
+            prezzoCents: dati.prezzoCents,
+            taglie: j.taglie,
+            colore: dati.colore,
+            categoriaId: j.categoriaId,
+            soloOnline: dati.soloOnline,
+          });
+          if (!r.ok || !r.prodottoId) {
+            avvisi.push(r.error ?? "Creazione non riuscita.");
+            continue;
+          }
+          if (!primoId) primoId = r.prodottoId;
+          if (r.error) avvisi.push(r.error); // ok:true + error = intoppo parziale
+          // Foto una alla volta; un errore (anche di rete) non blocca le altre.
+          for (let i = 0; i < dati.fotoSel.length; i++) {
+            setProgresso(`Foto ${i + 1} di ${dati.fotoSel.length}…`);
+            try {
+              const f = await importaFotoDaUrlAction(
+                r.prodottoId,
+                dati.fotoSel[i],
+                url.trim(),
+              );
+              if (f.ok) fotoOk++;
+              else fotoErr++;
+            } catch {
+              fotoErr++;
+            }
           }
         }
-
-        setEsito({
-          id: r.prodottoId,
-          fotoOk: dati.fotoSel.length - erroriFoto,
-          fotoErr: erroriFoto,
-          avviso: avvisoServer,
-        });
+        if (!primoId) {
+          mostra(avvisi[0] ?? "Creazione non riuscita.", "errore");
+          return;
+        }
+        const avviso = avvisi.join(" ") || null;
+        setEsito({ id: primoId, fotoOk, fotoErr, avviso });
         setFase("fatto");
-        if (avvisoServer) {
-          mostra(avvisoServer, "errore");
-        } else if (erroriFoto > 0) {
-          mostra(`Bozza creata, ma ${erroriFoto} foto non importate.`, "errore");
+        if (avviso) {
+          mostra(avviso, "errore");
+        } else if (fotoErr > 0) {
+          mostra(`Bozza creata, ma ${fotoErr} foto non importate.`, "errore");
         } else {
-          mostra("Bozza creata. Rivedi e pubblica.", "ok");
+          mostra(
+            jobs.length > 1
+              ? "Create 2 schede (adulto e bambino). Rivedi e pubblica."
+              : "Bozza creata. Rivedi e pubblica.",
+            "ok",
+          );
         }
       } catch {
         mostra("Creazione non riuscita: riprova.", "errore");

@@ -12,7 +12,13 @@ import type { BozzaImport } from "@/lib/gestore/import-actions";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
-import { COLORI, TAGLIE, coloreChiaro, coloreHex } from "@/lib/catalogo";
+import {
+  COLORI,
+  TAGLIE,
+  coloreChiaro,
+  coloreHex,
+  dividiTagliePerPubblico,
+} from "@/lib/catalogo";
 import type { Categoria } from "@/lib/types";
 
 const inputCls =
@@ -33,7 +39,10 @@ export interface DatiRevisione {
   colore: string | null;
   /** Foto da importare, nell'ordine di selezione (la prima e la copertina). */
   fotoSel: string[];
-  categoriaId: string | null;
+  /** Categoria della scheda ADULTO (taglie lettere); null = nessuna. */
+  categoriaAdulto: string | null;
+  /** Categoria della scheda BAMBINO (taglie eta/numero, scheda separata); null = nessuna. */
+  categoriaBambino: string | null;
   /** Articolo non presente in negozio: badge "Solo online" in vetrina. */
   soloOnline: boolean;
 }
@@ -42,7 +51,8 @@ export default function RevisioneBozza({
   bozza,
   codiceFallback = null,
   categorie,
-  categoriaIniziale = "",
+  categoriaAdultoIniziale = "",
+  categoriaBambinoIniziale = "",
   soloOnlineIniziale = false,
   intestazione,
   busy,
@@ -55,7 +65,8 @@ export default function RevisioneBozza({
   /** Codice di riserva se la scheda non lo espone (es. SKU dalla card listing). */
   codiceFallback?: string | null;
   categorie: Categoria[];
-  categoriaIniziale?: string;
+  categoriaAdultoIniziale?: string;
+  categoriaBambinoIniziale?: string;
   /** Preimpostazione del flag "Solo online" (es. dall'opzione del batch). */
   soloOnlineIniziale?: boolean;
   /** Riga di contesto sopra il form (es. "Prodotto 3 di 60"). */
@@ -93,10 +104,14 @@ export default function RevisioneBozza({
       ? [det, ...nomi]
       : nomi;
   });
-  const [categoriaId, setCategoriaId] = useState(categoriaIniziale);
+  const [catAdulto, setCatAdulto] = useState(categoriaAdultoIniziale);
+  const [catBambino, setCatBambino] = useState(categoriaBambinoIniziale);
   const [soloOnline, setSoloOnline] = useState(soloOnlineIniziale);
 
   const prezzoCents = useMemo(() => parsePrezzoCents(prezzoInput), [prezzoInput]);
+  // Divisione taglie per pubblico: guida quali selettori categoria mostrare (un
+  // prodotto misto uomo+bambino diventa due schede, una per pubblico).
+  const split = useMemo(() => dividiTagliePerPubblico(taglie), [taglie]);
 
   function toggleFoto(u: string) {
     setFotoSel((sel) =>
@@ -129,7 +144,8 @@ export default function RevisioneBozza({
       taglie,
       colore: colore.trim() || null,
       fotoSel,
-      categoriaId: categoriaId || null,
+      categoriaAdulto: catAdulto || null,
+      categoriaBambino: catBambino || null,
       soloOnline,
     });
   }
@@ -300,19 +316,47 @@ export default function RevisioneBozza({
           </p>
         </div>
 
-        <Campo
-          label="Categoria"
-          htmlFor="r-categoria"
-          hint="Puoi cambiarla in ogni momento dalla scheda prodotto."
-        >
-          <CategoriaSelect
-            id="r-categoria"
-            categorie={categorie}
-            value={categoriaId}
-            onChange={setCategoriaId}
-            disabled={busy}
-          />
-        </Campo>
+        {/* Categorie: una per pubblico. Un prodotto misto (uomo+bambino)
+            diventa due schede — le taglie lettera vanno all'adulto, quelle a
+            eta/numero al bambino (scheda separata, codice -B). */}
+        {split.adulto.length > 0 && (
+          <Campo
+            label={split.bambino.length > 0 ? "Categoria adulto" : "Categoria"}
+            htmlFor="r-cat-adulto"
+            hint={
+              split.bambino.length > 0
+                ? `Per le taglie ${split.adulto.join(", ")}.`
+                : "Puoi cambiarla in ogni momento dalla scheda prodotto."
+            }
+          >
+            <CategoriaSelect
+              id="r-cat-adulto"
+              categorie={categorie}
+              value={catAdulto}
+              onChange={setCatAdulto}
+              disabled={busy}
+            />
+          </Campo>
+        )}
+        {split.bambino.length > 0 && (
+          <Campo
+            label={split.adulto.length > 0 ? "Categoria bambino" : "Categoria"}
+            htmlFor="r-cat-bambino"
+            hint={
+              split.adulto.length > 0
+                ? `Per le taglie ${split.bambino.join(", ")} — scheda separata (codice -B).`
+                : "Puoi cambiarla in ogni momento dalla scheda prodotto."
+            }
+          >
+            <CategoriaSelect
+              id="r-cat-bambino"
+              categorie={categorie}
+              value={catBambino}
+              onChange={setCatBambino}
+              disabled={busy}
+            />
+          </Campo>
+        )}
 
         {/* Solo online: articolo non presente in negozio (badge in vetrina). */}
         <button

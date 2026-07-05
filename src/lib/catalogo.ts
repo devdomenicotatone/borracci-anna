@@ -71,6 +71,34 @@ export function ordinaTaglie(taglie: Iterable<string>): string[] {
   return [...new Set(taglie)].sort((a, b) => ordineTaglia(a) - ordineTaglia(b));
 }
 
+/**
+ * True se la taglia e da BAMBINO (range per eta "5-6"/"9-11", numero singolo
+ * "6".."16", o "N anni"); false per la scala adulto XXS-6XL e per l'ignoto. E la
+ * regola condivisa "fino a 14-15 = bambino, lettere = adulto" usata per dividere
+ * un prodotto misto (fornitore) tra scheda adulto e scheda bambino.
+ */
+export function eTagliaBambino(t: string | null | undefined): boolean {
+  const s = (t ?? "").trim();
+  if (!s) return false;
+  if ((TAGLIE as readonly string[]).includes(s.toUpperCase())) return false;
+  return (
+    /^\d{1,2}\s*anni$/i.test(s) ||
+    /^\d{1,2}\s*[-/]\s*\d{1,2}$/.test(s) ||
+    /^\d{1,2}$/.test(s)
+  );
+}
+
+/** Divide un elenco di taglie nei due pubblici, preservando l'ordine d'ingresso. */
+export function dividiTagliePerPubblico(taglie: Iterable<string>): {
+  adulto: string[];
+  bambino: string[];
+} {
+  const adulto: string[] = [];
+  const bambino: string[] = [];
+  for (const t of taglie) (eTagliaBambino(t) ? bambino : adulto).push(t);
+  return { adulto, bambino };
+}
+
 // ===========================================================================
 // COLORI — palette fissa con campioni. I nomi seguono i dati reali (femminili
 // dove concordano con "polo": Bianca, Grigia). Per un colore fuori palette il
