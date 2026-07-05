@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
@@ -42,6 +42,21 @@ export const metadata: Metadata = {
     title: TITOLO,
     description: DESCRIZIONE,
   },
+};
+
+// Viewport globale. `viewportFit: "cover"` e' l'opt-in che rende reali le
+// env(safe-area-inset-*) su iPhone con notch/home-indicator: senza di esso
+// valgono 0 e le barre azioni sticky del gestore (pb-safe) finiscono sotto la
+// home bar. `themeColor` tinta il chrome del browser col blu mare del brand.
+// `colorScheme: "light"` dichiara il tema unico chiaro: cosi i controlli nativi
+// (scrollbar, popup dei <select>, autofill) non si rendono scuri quando l'OS e'
+// in dark mode. Niente maximum-scale/user-scalable: il pinch-zoom resta attivo.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0077c8",
+  colorScheme: "light",
 };
 
 // Root layout MINIMALE: emette solo <html>/<body> + font + metadata globale.

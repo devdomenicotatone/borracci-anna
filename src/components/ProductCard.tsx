@@ -2,6 +2,7 @@
 // Mostra immagine (tile gradiente pop con icona indumento se mancante), nome,
 // prezzo formattato e rimanda alla PDP /prodotti/[slug].
 
+import Image from "next/image";
 import Link from "next/link";
 import type { Prodotto } from "@/lib/types";
 import { formatPrezzo } from "@/lib/format";
@@ -59,12 +60,17 @@ export default function ProductCard({ prodotto }: { prodotto: Prodotto }) {
           </span>
         )}
         {prodotto.immagine_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- url esterne arbitrarie dal DB
-          <img
+          // Le copertine sono sempre url del bucket Supabase Storage (whitelisted
+          // in next.config.ts): next/image negozia AVIF/WebP e genera lo srcset
+          // responsive. `sizes` rispecchia la griglia 2/3/4 colonne, cosi in 2-col
+          // mobile si scarica ~50vw invece del master pieno.
+          <Image
             src={prodotto.immagine_url}
             alt={prodotto.nome}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            quality={75}
+            className="object-cover transition-transform duration-300 group-hover:scale-[1.04]"
           />
         ) : (
           // Tile gradiente pop + icona indumento + nome in basso.

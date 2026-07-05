@@ -89,11 +89,16 @@ const CHIP: Record<StatoOrdine, { label: string; cls: string }> = {
 };
 
 function dataIt(iso: string): string {
+  // timeZone fissa: senza, l'output dipende dal fuso del runtime (server UTC vs
+  // browser CEST) e la stringa renderizzata in SSR differisce da quella del
+  // client -> hydration mismatch. Fissando Europe/Rome e' deterministica e
+  // mostra l'ora locale corretta.
   return new Date(iso).toLocaleDateString("it-IT", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Rome",
   });
 }
 

@@ -196,6 +196,17 @@ export default async function PaginaProdotto({ params }: PdpProps) {
   // Dati strutturati (schema.org Product): su Google il prodotto puo mostrare
   // prezzo e disponibilita nei risultati.
   const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  // La disponibilita del rich result deve rispecchiare il contenuto della
+  // pagina (altrimenti Google segnala structured data incoerente): stessa
+  // logica del blocco acquisto/richiesta (vedi ProdottoDettaglio).
+  const suRichiesta = prodotto.disponibilita_su_richiesta ?? true;
+  const senzaVarianti = prodotto.varianti.length === 0;
+  const esaurito = !senzaVarianti && prodotto.varianti.every((v) => v.stock <= 0);
+  const disponibilitaSchema = suRichiesta
+    ? "https://schema.org/LimitedAvailability" // acquistabile solo su richiesta
+    : esaurito
+      ? "https://schema.org/OutOfStock"
+      : "https://schema.org/InStock";
   const datiStrutturati = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -207,7 +218,7 @@ export default async function PaginaProdotto({ params }: PdpProps) {
       "@type": "Offer",
       price: (prodotto.prezzo_cents / 100).toFixed(2),
       priceCurrency: prodotto.valuta ?? "EUR",
-      availability: "https://schema.org/InStock",
+      availability: disponibilitaSchema,
       ...(SITE ? { url: `${SITE}/prodotti/${prodotto.slug}` } : {}),
     },
   };
