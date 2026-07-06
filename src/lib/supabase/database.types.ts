@@ -474,6 +474,44 @@ export interface Database {
         Args: { p_ordine_id: string };
         Returns: undefined;
       };
+      cerca_prodotti_gestore: {
+        Args: {
+          p_q?: string;
+          p_stato?: string;
+          p_categorie?: string[] | null;
+          p_senza_categoria?: boolean;
+          p_ordina?: string;
+          p_offset?: number;
+          p_limit?: number;
+        };
+        Returns: {
+          id: string;
+          slug: string;
+          nome: string;
+          prezzo_cents: number;
+          valuta: string;
+          immagine_url: string | null;
+          attivo: boolean;
+          disponibilita_su_richiesta: boolean;
+          categoria_id: string | null;
+          num_varianti: number;
+          stock_totale: number;
+          totale: number;
+        }[];
+      };
+      ids_prodotti_gestore: {
+        Args: {
+          p_q?: string;
+          p_stato?: string;
+          p_categorie?: string[] | null;
+          p_senza_categoria?: boolean;
+        };
+        Returns: { id: string }[];
+      };
+      conteggi_categorie_gestore: {
+        Args: Record<string, never>;
+        Returns: { categoria_id: string | null; n: number }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

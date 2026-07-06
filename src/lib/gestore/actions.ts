@@ -12,7 +12,23 @@ import { redirect } from "next/navigation";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
+import { caricaCategorie } from "@/lib/categorie";
+import { idsProdottiGestore } from "@/lib/gestore/prodotti-lista";
+import type { FiltriGestore } from "@/lib/filtri-gestore";
 import type { VarianteInput } from "@/lib/types";
+
+/**
+ * Spezza gli id in blocchi per le operazioni bulk con `.in(...)`: da quando la
+ * lista carica i prodotti a pagine (server-side), il "Seleziona tutti i N" puo
+ * raccogliere MIGLIAIA di id, che in un unico `.in()` gonfierebbero l'URL
+ * PostgREST oltre i limiti (414). 200 id/blocco stanno ampiamente al sicuro.
+ */
+const BLOCCO_BULK = 200;
+function aBlocchi<T>(arr: T[], dim: number): T[][] {
+  const blocchi: T[][] = [];
+  for (let i = 0; i < arr.length; i += dim) blocchi.push(arr.slice(i, i + dim));
+  return blocchi;
+}
 
 /** Esito generico di un'azione che non redirige. */
 export interface EsitoAzione {
@@ -731,25 +747,30 @@ export async function assegnaCategoriaBulkAction(
   }
 
   try {
-    const { data, error } = await sessione.supabase
-      .from("prodotti")
-      .update({ categoria_id: categoriaId })
-      .in("id", unici)
-      .select("id");
-    if (error) {
-      // 23503 = categoria cancellata tra il render della lista e il submit.
-      if (error.code === "23503") {
-        return {
-          ok: false,
-          error: "La categoria selezionata non esiste più. Aggiorna la pagina.",
-        };
+    // A blocchi: un unico .in() con migliaia di id sforerebbe l'URL PostgREST.
+    let aggiornati = 0;
+    for (const blocco of aBlocchi(unici, BLOCCO_BULK)) {
+      const { data, error } = await sessione.supabase
+        .from("prodotti")
+        .update({ categoria_id: categoriaId })
+        .in("id", blocco)
+        .select("id");
+      if (error) {
+        // 23503 = categoria cancellata tra il render della lista e il submit.
+        if (error.code === "23503") {
+          return {
+            ok: false,
+            error: "La categoria selezionata non esiste più. Aggiorna la pagina.",
+          };
+        }
+        return { ok: false, error: error.message };
       }
-      return { ok: false, error: error.message };
+      aggiornati += data?.length ?? 0;
     }
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
-    return { ok: true, aggiornati: data?.length ?? 0 };
+    return { ok: true, aggiornati };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
   }
@@ -780,15 +801,17 @@ export async function eliminaProdottiBulkAction(
 
   try {
     // Quali sono stati venduti (compaiono in ordine_righe) -> soft delete.
-    const { data: righe, error: erRighe } = await supabase
-      .from("ordine_righe")
-      .select("prodotto_id")
-      .in("prodotto_id", unici);
-    if (erRighe) return { ok: false, error: erRighe.message };
+    // A blocchi: la selezione "tutti i N" puo portare migliaia di id.
+    const venduti = new Set<string>();
+    for (const blocco of aBlocchi(unici, BLOCCO_BULK)) {
+      const { data: righe, error: erRighe } = await supabase
+        .from("ordine_righe")
+        .select("prodotto_id")
+        .in("prodotto_id", blocco);
+      if (erRighe) return { ok: false, error: erRighe.message };
+      for (const r of righe ?? []) if (r.prodotto_id) venduti.add(r.prodotto_id);
+    }
 
-    const venduti = new Set(
-      (righe ?? []).map((r) => r.prodotto_id).filter(Boolean),
-    );
     const daNascondere = unici.filter((id) => venduti.has(id));
     const daEliminare = unici.filter((id) => !venduti.has(id));
 
@@ -796,21 +819,22 @@ export async function eliminaProdottiBulkAction(
     // `.select("id")` ritorna le righe DAVVERO toccate (non la lunghezza
     // dell'input): un id gia sparito da una lista stantia non gonfia il conteggio.
     let nNascosti = 0;
-    if (daNascondere.length > 0) {
+    for (const blocco of aBlocchi(daNascondere, BLOCCO_BULK)) {
       const { data, error } = await supabase
         .from("prodotti")
         .update({ attivo: false })
-        .in("id", daNascondere)
+        .in("id", blocco)
         .select("id");
       if (error) return { ok: false, error: error.message };
-      nNascosti = data?.length ?? 0;
+      nNascosti += data?.length ?? 0;
     }
 
-    // Hard: cleanup foto (best effort, cartella per prodotto) + delete unico.
+    // Hard: per blocco, cleanup foto (best effort, cartella per prodotto) +
+    // delete. Il blocco limita anche la concorrenza delle chiamate a Storage.
     let nEliminati = 0;
-    if (daEliminare.length > 0) {
+    for (const blocco of aBlocchi(daEliminare, BLOCCO_BULK)) {
       await Promise.all(
-        daEliminare.map(async (id) => {
+        blocco.map(async (id) => {
           const { data: files } = await supabase.storage
             .from("prodotti")
             .list(id);
@@ -824,15 +848,36 @@ export async function eliminaProdottiBulkAction(
       const { data, error } = await supabase
         .from("prodotti")
         .delete()
-        .in("id", daEliminare)
+        .in("id", blocco)
         .select("id");
       if (error) return { ok: false, error: error.message };
-      nEliminati = data?.length ?? 0;
+      nEliminati += data?.length ?? 0;
     }
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
     return { ok: true, eliminati: nEliminati, nascosti: nNascosti };
+  } catch {
+    return { ok: false, error: "Errore di rete. Riprova." };
+  }
+}
+
+/**
+ * Tutti gli id dei prodotti che rispettano i filtri correnti (senza paginazione).
+ * Alimenta il "Seleziona tutti i N" della lista quando i match superano la pagina
+ * caricata: si spostano gli id (leggeri), non le righe. L'espansione categoria ai
+ * discendenti avviene server-side (idsProdottiGestore) sull'albero appena letto.
+ */
+export async function idsProdottiFiltratiAction(
+  filtri: FiltriGestore,
+): Promise<{ ok: boolean; ids?: string[]; error?: string }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+
+  try {
+    const categorie = await caricaCategorie(sessione.supabase);
+    const ids = await idsProdottiGestore(sessione.supabase, { filtri, categorie });
+    return { ok: true, ids };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
   }

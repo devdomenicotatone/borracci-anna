@@ -1,11 +1,22 @@
 "use client";
 
 // Lista prodotti del gestore: ricerca, filtro stato, filtro categoria,
-// ordinamento e selezione multipla con assegnazione categoria in blocco.
-// Filtri e ordinamento girano client-side sui dati gia caricati dal server
-// component padre (fino a 1000 righe: istantaneo, niente round-trip).
+// ordinamento, paginazione e selezione multipla con azioni in blocco.
+// Ricerca/filtri/ordinamento/paginazione girano LATO SERVER (RPC) con lo stato
+// nell'URL: la pagina server (prodotti/page.tsx) legge i searchParams, carica la
+// pagina di risultati col totale e la passa qui gia pronta. Cosi il browser non
+// riceve piu l'intero catalogo (ne gli sku di tutte le varianti). La selezione e
+// le azioni bulk restano client.
 
-import { Fragment, useMemo, useRef, useState, useTransition } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -18,12 +29,26 @@ import {
 import {
   assegnaCategoriaBulkAction,
   eliminaProdottiBulkAction,
+  idsProdottiFiltratiAction,
 } from "@/lib/gestore/actions";
 import type { Categoria } from "@/lib/types";
+import {
+  ETICHETTE_ORDINAMENTO_GESTORE,
+  ORDINAMENTI_GESTORE,
+  PAGINA_MAX_GESTORE,
+  contaFiltriGestoreAttivi,
+  serializzaFiltriGestore,
+  type ConteggiCategorie,
+  type FiltriGestore,
+  type OrdinamentoGestore,
+  type StatoProdotto,
+} from "@/lib/filtri-gestore";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import ToggleAttivo from "@/components/gestore/ToggleAttivo";
 import { useToast } from "@/components/gestore/Toaster";
 
+/** Una riga della lista, gia proiettata dal server (niente sku/codice: la
+ *  ricerca e lato DB, quindi non serve spedirli al browser). */
 export interface ProdottoLista {
   id: string;
   slug: string;
@@ -36,130 +61,97 @@ export interface ProdottoLista {
   categoriaId: string | null;
   numVarianti: number;
   stockTotale: number;
-  /** Codice prodotto (base SKU) e SKU delle varianti: alimentano la ricerca. */
-  codice: string | null;
-  skus: string[];
 }
-
-type FiltroStato = "tutti" | "attivi" | "nascosti";
-
-/** Valore del filtro categoria: "" tutte, "none" senza categoria, altrimenti id. */
-type FiltroCategoria = string;
-
-const ORDINAMENTI_LISTA = [
-  { valore: "recenti", etichetta: "Più recenti" },
-  { valore: "nome", etichetta: "Nome (A-Z)" },
-  { valore: "prezzo-asc", etichetta: "Prezzo: dal più basso" },
-  { valore: "prezzo-desc", etichetta: "Prezzo: dal più alto" },
-  { valore: "scorte", etichetta: "Scorte: prima le basse" },
-] as const;
-
-type OrdinamentoLista = (typeof ORDINAMENTI_LISTA)[number]["valore"];
 
 /** Soglia sotto la quale si segnala "scorte basse". */
 const SOGLIA_SCORTE = 5;
 
+const BASE_PATH = "/gestore/prodotti";
+
 export default function ListaProdotti({
   prodotti,
+  totale,
+  filtri,
+  pagina,
   categorie,
+  conteggi,
 }: {
+  /** Pagina di risultati (cumulativa fino a `pagina`), gia filtrata/ordinata. */
   prodotti: ProdottoLista[];
+  /** Totale prodotti che rispettano i filtri (oltre la pagina corrente). */
+  totale: number;
+  /** Filtri correnti, gia interpretati dal server dai searchParams. */
+  filtri: FiltriGestore;
+  pagina: number;
   categorie: Categoria[];
+  /** Conteggi per categoria (intero catalogo), per i numeri del menu. */
+  conteggi: ConteggiCategorie;
 }) {
-  const [query, setQuery] = useState("");
-  const [filtro, setFiltro] = useState<FiltroStato>("tutti");
-  const [filtroCategoria, setFiltroCategoria] = useState<FiltroCategoria>("");
-  const [ordina, setOrdina] = useState<OrdinamentoLista>("recenti");
+  const router = useRouter();
+  const [navPending, startNav] = useTransition();
+  const { mostra } = useToast();
 
-  // Selezione multipla per l'assegnazione categoria in blocco.
-  const [selezionati, setSelezionati] = useState<ReadonlySet<string>>(
-    new Set(),
+  /** Naviga con i filtri aggiornati. Ometti `pagina` = torna alla prima pagina
+   *  (ogni cambio di filtro riparte da capo); passala solo per "Mostra altri". */
+  const naviga = useCallback(
+    (nuovi: Partial<FiltriGestore>, opts?: { pagina?: number }) => {
+      const params = new URLSearchParams(
+        serializzaFiltriGestore({ ...filtri, ...nuovi }),
+      );
+      if (opts?.pagina && opts.pagina > 1) {
+        params.set("pagina", String(opts.pagina));
+      }
+      const qs = params.toString();
+      startNav(() =>
+        router.replace(qs ? `${BASE_PATH}?${qs}` : BASE_PATH, { scroll: false }),
+      );
+    },
+    [filtri, router, startNav],
   );
+
+  // --- Ricerca: input reattivo (focus mai perso) + push all'URL con debounce ---
+  // Il campo e stato locale (digitazione fluida); l'URL si aggiorna in ritardo.
+  // `ultimoPushQ` = ultimo valore sincronizzato con l'URL: distingue le NOSTRE
+  // push dai cambi esterni (Azzera, back/forward) senza calpestare la digitazione
+  // in corso. Il ref si scrive solo dentro effetti/handler, mai durante il render.
+  const [q, setQ] = useState(filtri.q);
+  const ultimoPushQ = useRef(filtri.q);
+
+  useEffect(() => {
+    if (q === ultimoPushQ.current) return;
+    const t = setTimeout(() => {
+      ultimoPushQ.current = q;
+      naviga({ q: q.trim() });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, naviga]);
+
+  useEffect(() => {
+    if (filtri.q === ultimoPushQ.current) return; // e' una nostra push: ignora
+    ultimoPushQ.current = filtri.q;
+    setQ(filtri.q);
+  }, [filtri.q]);
+
+  // --- Selezione multipla (client) --------------------------------------------
+  // La selezione e un insieme di id: puo coprire piu della pagina caricata
+  // (vedi selezionaTuttiFiltrati). Persiste tra le navigazioni: il componente
+  // resta montato mentre il server ri-renderizza la lista.
+  const [selezionati, setSelezionati] = useState<ReadonlySet<string>>(new Set());
+  const [selezionandoTutti, setSelezionandoTutti] = useState(false);
   const [bulkCategoria, setBulkCategoria] = useState("");
-  // Ancora per la selezione a intervalli con Shift; conferma inline dell'elimina.
   const [ancoraId, setAncoraId] = useState<string | null>(null);
   const shiftRef = useRef(false);
   const [confermaElimina, setConfermaElimina] = useState(false);
   const [inCorso, startTransition] = useTransition();
-  const { mostra } = useToast();
-  const router = useRouter();
 
   const gruppi = useMemo(() => gruppiCategorie(categorie), [categorie]);
-
-  // Conteggi per il dropdown categoria (sull'intero catalogo, non filtrato):
-  // diretti per ogni categoria + senza categoria.
-  const conteggi = useMemo(() => {
-    const perCategoria = new Map<string, number>();
-    let senza = 0;
-    for (const p of prodotti) {
-      if (p.categoriaId) {
-        perCategoria.set(
-          p.categoriaId,
-          (perCategoria.get(p.categoriaId) ?? 0) + 1,
-        );
-      } else {
-        senza++;
-      }
-    }
-    return { perCategoria, senza };
-  }, [prodotti]);
-
   const conteggioCon = (ids: string[]) =>
-    ids.reduce((s, id) => s + (conteggi.perCategoria.get(id) ?? 0), 0);
+    ids.reduce((s, id) => s + (conteggi.perCategoria[id] ?? 0), 0);
 
-  const visibili = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    // Filtro per macro = macro + figlie (stessa semantica della vetrina).
-    const idsCategoria =
-      filtroCategoria && filtroCategoria !== "none"
-        ? new Set(idConDiscendenti(categorie, filtroCategoria))
-        : null;
-
-    const filtrati = prodotti.filter((p) => {
-      if (filtro === "attivi" && !p.attivo) return false;
-      if (filtro === "nascosti" && p.attivo) return false;
-      if (filtroCategoria === "none" && p.categoriaId) return false;
-      if (idsCategoria && (!p.categoriaId || !idsCategoria.has(p.categoriaId)))
-        return false;
-      if (!q) return true;
-      return (
-        p.nome.toLowerCase().includes(q) ||
-        p.slug.toLowerCase().includes(q) ||
-        (p.codice?.toLowerCase().includes(q) ?? false) ||
-        p.skus.some((sku) => sku.toLowerCase().includes(q))
-      );
-    });
-
-    // "recenti" = ordine dal server (creato_il desc): niente ri-sort.
-    if (ordina === "recenti") return filtrati;
-    const copia = [...filtrati];
-    switch (ordina) {
-      case "nome":
-        copia.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
-        break;
-      case "prezzo-asc":
-        copia.sort((a, b) => a.prezzo_cents - b.prezzo_cents);
-        break;
-      case "prezzo-desc":
-        copia.sort((a, b) => b.prezzo_cents - a.prezzo_cents);
-        break;
-      case "scorte":
-        copia.sort((a, b) => a.stockTotale - b.stockTotale);
-        break;
-    }
-    return copia;
-  }, [prodotti, query, filtro, filtroCategoria, ordina, categorie]);
-
-  const filtriAttivi =
-    (query.trim() ? 1 : 0) +
-    (filtro !== "tutti" ? 1 : 0) +
-    (filtroCategoria ? 1 : 0);
+  const attivi = contaFiltriGestoreAttivi(filtri);
 
   function azzeraFiltri() {
-    setQuery("");
-    setFiltro("tutti");
-    setFiltroCategoria("");
-    setOrdina("recenti");
+    naviga({ q: "", stato: "tutti", categoria: "", ordina: "recenti" });
   }
 
   function toggleSelezione(id: string) {
@@ -171,20 +163,20 @@ export default function ListaProdotti({
     });
   }
 
-  // Click su una checkbox riga. Con Shift SELEZIONA (aggiunge) l'intervallo tra
-  // l'ultima riga cliccata (ancora) e questa, nell'ordine visibile — come Gmail
-  // o il Finder. Senza Shift: toggle singolo e nuova ancora. Il modificatore si
-  // legge nell'onClick (l'onChange non porta i tasti premuti) via shiftRef.
-  // L'ancora e un ID, non un indice: resta valida anche se i filtri cambiano.
+  // Click su una checkbox riga. Con Shift SELEZIONA l'intervallo tra l'ultima
+  // riga cliccata (ancora) e questa, nell'ordine visibile — come Gmail/Finder.
+  // Senza Shift: toggle singolo e nuova ancora. Il modificatore si legge
+  // nell'onClick (l'onChange non porta i tasti premuti) via shiftRef. L'ancora e
+  // un ID, non un indice: resta valida anche se i filtri cambiano.
   function selezionaClick(id: string) {
     if (shiftRef.current && ancoraId && ancoraId !== id) {
-      const a = visibili.findIndex((p) => p.id === ancoraId);
-      const b = visibili.findIndex((p) => p.id === id);
+      const a = prodotti.findIndex((p) => p.id === ancoraId);
+      const b = prodotti.findIndex((p) => p.id === id);
       if (a !== -1 && b !== -1) {
         const [da, fine] = a < b ? [a, b] : [b, a];
         setSelezionati((prev) => {
           const next = new Set(prev);
-          for (let i = da; i <= fine; i++) next.add(visibili[i].id);
+          for (let i = da; i <= fine; i++) next.add(prodotti[i].id);
           return next;
         });
         return; // ancora invariata: si puo continuare a estendere
@@ -195,28 +187,47 @@ export default function ListaProdotti({
   }
 
   const tuttiVisibiliSelezionati =
-    visibili.length > 0 && visibili.every((p) => selezionati.has(p.id));
+    prodotti.length > 0 && prodotti.every((p) => selezionati.has(p.id));
 
   function toggleTuttiVisibili() {
     setSelezionati((prev) => {
       if (tuttiVisibiliSelezionati) {
         const next = new Set(prev);
-        for (const p of visibili) next.delete(p.id);
+        for (const p of prodotti) next.delete(p.id);
         return next;
       }
       const next = new Set(prev);
-      for (const p of visibili) next.add(p.id);
+      for (const p of prodotti) next.add(p.id);
       return next;
     });
+  }
+
+  // Estende la selezione a TUTTI i prodotti che rispettano i filtri (oltre la
+  // pagina caricata): recupera i soli id dal server e li seleziona.
+  async function selezionaTuttiFiltrati() {
+    setSelezionandoTutti(true);
+    try {
+      const esito = await idsProdottiFiltratiAction(filtri);
+      if (esito.ok && esito.ids) {
+        setSelezionati(new Set(esito.ids));
+      } else {
+        mostra(esito.error ?? "Impossibile selezionare tutti i prodotti.", "errore");
+      }
+    } finally {
+      setSelezionandoTutti(false);
+    }
+  }
+
+  function svuotaSelezione() {
+    setSelezionati(new Set());
+    setConfermaElimina(false);
+    setAncoraId(null);
   }
 
   function applicaBulk() {
     const ids = [...selezionati];
     startTransition(async () => {
-      const esito = await assegnaCategoriaBulkAction(
-        ids,
-        bulkCategoria || null,
-      );
+      const esito = await assegnaCategoriaBulkAction(ids, bulkCategoria || null);
       if (esito.ok) {
         const n = esito.aggiornati ?? ids.length;
         mostra(
@@ -253,12 +264,14 @@ export default function ListaProdotti({
         msg = `${el} ${el === 1 ? "eliminato" : "eliminati"}, ${na} ${na === 1 ? "nascosto" : "nascosti"} (già venduti, mantenuti per lo storico).`;
       }
       mostra(msg);
-      setSelezionati(new Set());
-      setConfermaElimina(false);
-      setAncoraId(null);
+      svuotaSelezione();
       router.refresh();
     });
   }
+
+  const puoMostrareAltri =
+    prodotti.length < totale && pagina < PAGINA_MAX_GESTORE;
+  const cappato = prodotti.length < totale && pagina >= PAGINA_MAX_GESTORE;
 
   return (
     <div className="mx-auto max-w-3xl lg:max-w-5xl">
@@ -329,21 +342,21 @@ export default function ListaProdotti({
               type="search"
               inputMode="search"
               placeholder="Cerca per nome, slug o SKU…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
               className="h-12 w-full rounded-full bg-white pl-11 pr-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
             />
           </div>
           <div className="flex gap-1 rounded-full bg-surface-2 p-1 text-sm lg:w-auto">
-            {(["tutti", "attivi", "nascosti"] as FiltroStato[]).map((f) => (
+            {(["tutti", "attivi", "nascosti"] as StatoProdotto[]).map((f) => (
               <button
                 key={f}
                 type="button"
-                aria-pressed={filtro === f}
-                onClick={() => setFiltro(f)}
+                aria-pressed={filtri.stato === f}
+                onClick={() => naviga({ stato: f })}
                 className={[
                   "flex-1 rounded-full py-2 font-display font-bold capitalize transition-all lg:flex-none lg:px-5",
-                  filtro === f
+                  filtri.stato === f
                     ? "bg-sea text-white shadow-sea"
                     : "text-muted hover:text-foreground",
                 ].join(" ")}
@@ -359,11 +372,11 @@ export default function ListaProdotti({
           <label className="relative min-w-0 flex-1 sm:flex-none">
             <span className="sr-only">Filtra per categoria</span>
             <select
-              value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
+              value={filtri.categoria}
+              onChange={(e) => naviga({ categoria: e.target.value })}
               className={[
                 "h-11 w-full appearance-none rounded-full bg-white pl-4 pr-9 font-display text-sm font-bold outline-none ring-1 transition-shadow sm:w-auto",
-                filtroCategoria
+                filtri.categoria
                   ? "text-sea ring-sea"
                   : "text-foreground ring-line hover:ring-sea",
               ].join(" ")}
@@ -373,7 +386,7 @@ export default function ListaProdotti({
               {gruppi.map(({ radice, figlie }) =>
                 figlie.length === 0 ? (
                   <option key={radice.id} value={radice.id}>
-                    {radice.nome} ({conteggi.perCategoria.get(radice.id) ?? 0})
+                    {radice.nome} ({conteggi.perCategoria[radice.id] ?? 0})
                   </option>
                 ) : (
                   <optgroup key={radice.id} label={radice.nome}>
@@ -384,7 +397,7 @@ export default function ListaProdotti({
                     {figlie.map(({ figlia, nipoti }) =>
                       nipoti.length === 0 ? (
                         <option key={figlia.id} value={figlia.id}>
-                          {figlia.nome} ({conteggi.perCategoria.get(figlia.id) ?? 0})
+                          {figlia.nome} ({conteggi.perCategoria[figlia.id] ?? 0})
                         </option>
                       ) : (
                         <Fragment key={figlia.id}>
@@ -394,8 +407,8 @@ export default function ListaProdotti({
                           </option>
                           {nipoti.map((n) => (
                             <option key={n.id} value={n.id}>
-                              {"   "}
-                              {n.nome} ({conteggi.perCategoria.get(n.id) ?? 0})
+                              {"   "}
+                              {n.nome} ({conteggi.perCategoria[n.id] ?? 0})
                             </option>
                           ))}
                         </Fragment>
@@ -412,26 +425,33 @@ export default function ListaProdotti({
           <label className="relative min-w-0 flex-1 sm:flex-none">
             <span className="sr-only">Ordina per</span>
             <select
-              value={ordina}
-              onChange={(e) => setOrdina(e.target.value as OrdinamentoLista)}
+              value={filtri.ordina}
+              onChange={(e) =>
+                naviga({ ordina: e.target.value as OrdinamentoGestore })
+              }
               className="h-11 w-full appearance-none rounded-full bg-white pl-4 pr-9 font-display text-sm font-bold text-foreground outline-none ring-1 ring-line transition-shadow hover:ring-sea sm:w-auto"
             >
-              {ORDINAMENTI_LISTA.map((o) => (
-                <option key={o.valore} value={o.valore}>
-                  {o.etichetta}
+              {ORDINAMENTI_GESTORE.map((o) => (
+                <option key={o} value={o}>
+                  {ETICHETTE_ORDINAMENTO_GESTORE[o]}
                 </option>
               ))}
             </select>
             <ChevronSelect />
           </label>
 
-          <span className="ml-auto text-sm tabular-nums text-muted">
-            {visibili.length === prodotti.length
-              ? `${prodotti.length} prodotti`
-              : `${visibili.length} di ${prodotti.length}`}
+          <span
+            aria-live="polite"
+            className="ml-auto text-sm tabular-nums text-muted"
+          >
+            {navPending
+              ? "Aggiorno…"
+              : prodotti.length >= totale
+                ? `${totale} ${totale === 1 ? "prodotto" : "prodotti"}`
+                : `${prodotti.length} di ${totale}`}
           </span>
 
-          {filtriAttivi > 0 && (
+          {attivi > 0 && (
             <button
               type="button"
               onClick={azzeraFiltri}
@@ -443,8 +463,31 @@ export default function ListaProdotti({
         </div>
       </div>
 
-      {visibili.length === 0 ? (
-        <StatoVuoto haProdotti={prodotti.length > 0} />
+      {/* Tutti i caricati selezionati e ce ne sono altri oltre la pagina: offri
+          di selezionare l'INTERO set dei match (id presi dal server). Sparisce
+          quando sono gia tutti selezionati. */}
+      {tuttiVisibiliSelezionati &&
+        totale > prodotti.length &&
+        selezionati.size < totale && (
+          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-sea/10 px-4 py-2.5 text-center text-sm text-foreground">
+            <span>
+              Selezionati i{" "}
+              <span className="font-bold tabular-nums">{prodotti.length}</span> in
+              questa vista.
+            </span>
+            <button
+              type="button"
+              onClick={selezionaTuttiFiltrati}
+              disabled={selezionandoTutti}
+              className="font-display font-bold text-sea hover:text-sea/80 disabled:opacity-60"
+            >
+              {selezionandoTutti ? "Seleziono…" : `Seleziona tutti i ${totale}`}
+            </button>
+          </div>
+        )}
+
+      {prodotti.length === 0 ? (
+        <StatoVuoto conFiltri={attivi > 0} onAzzera={azzeraFiltri} />
       ) : (
         // A lg la lista diventa una "tabella in card": sotto restano le card di sempre.
         <div className="lg:overflow-hidden lg:rounded-2xl lg:bg-white lg:shadow-soft lg:ring-1 lg:ring-line">
@@ -463,7 +506,7 @@ export default function ListaProdotti({
             <span className="text-right">In vendita</span>
           </div>
           <ul className="flex flex-col gap-2.5 lg:gap-0 lg:divide-y lg:divide-line">
-            {visibili.map((p) => {
+            {prodotti.map((p) => {
               const selezionato = selezionati.has(p.id);
               return (
                 <li
@@ -548,7 +591,30 @@ export default function ListaProdotti({
         </div>
       )}
 
-      {/* Barra assegnazione in blocco (sopra la bottom-nav mobile). */}
+      {/* Paginazione "Mostra altri" (cumulativa, come la vetrina) */}
+      {puoMostrareAltri && (
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <p className="text-sm tabular-nums text-muted">
+            Hai visto {prodotti.length} di {totale}
+          </p>
+          <button
+            type="button"
+            onClick={() => naviga({}, { pagina: pagina + 1 })}
+            disabled={navPending}
+            className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:opacity-60"
+          >
+            {navPending ? "Carico…" : "Mostra altri"}
+          </button>
+        </div>
+      )}
+      {cappato && (
+        <p className="mt-6 text-center text-sm text-muted">
+          Visualizzati {prodotti.length} prodotti su {totale}. Affina la ricerca o
+          i filtri per trovare gli altri.
+        </p>
+      )}
+
+      {/* Barra azioni in blocco (sopra la bottom-nav mobile). */}
       {selezionati.size > 0 && (
         <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 md:inset-x-auto md:bottom-6 md:left-1/2 md:w-auto md:-translate-x-1/2">
           <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2.5 rounded-3xl bg-foreground p-3 text-white shadow-[0_18px_50px_-12px_rgba(10,31,51,0.55)] md:flex-nowrap md:rounded-full md:py-2.5 md:pl-5">
@@ -626,11 +692,7 @@ export default function ListaProdotti({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelezionati(new Set());
-                    setConfermaElimina(false);
-                    setAncoraId(null);
-                  }}
+                  onClick={svuotaSelezione}
                   disabled={inCorso}
                   aria-label="Annulla selezione"
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
@@ -790,7 +852,13 @@ function BadgeStock({
   return <span className="text-xs text-muted">{stock} pz</span>;
 }
 
-function StatoVuoto({ haProdotti }: { haProdotti: boolean }) {
+function StatoVuoto({
+  conFiltri,
+  onAzzera,
+}: {
+  conFiltri: boolean;
+  onAzzera: () => void;
+}) {
   return (
     <div className="rounded-3xl bg-surface px-6 py-12 text-center ring-1 ring-dashed ring-line">
       <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-surface-2 text-sea">
@@ -804,11 +872,19 @@ function StatoVuoto({ haProdotti }: { haProdotti: boolean }) {
         </svg>
       </span>
       <p className="text-sm text-muted">
-        {haProdotti
+        {conFiltri
           ? "Nessun prodotto corrisponde ai filtri."
           : "Non ci sono ancora prodotti."}
       </p>
-      {!haProdotti && (
+      {conFiltri ? (
+        <button
+          type="button"
+          onClick={onAzzera}
+          className="mt-4 inline-flex h-11 items-center rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5"
+        >
+          Azzera i filtri
+        </button>
+      ) : (
         <Link
           href="/gestore/prodotti/nuovo"
           className="mt-4 inline-flex h-11 items-center rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5"
