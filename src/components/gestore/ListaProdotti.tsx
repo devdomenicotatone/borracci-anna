@@ -36,6 +36,9 @@ export interface ProdottoLista {
   categoriaId: string | null;
   numVarianti: number;
   stockTotale: number;
+  /** Codice prodotto (base SKU) e SKU delle varianti: alimentano la ricerca. */
+  codice: string | null;
+  skus: string[];
 }
 
 type FiltroStato = "tutti" | "attivi" | "nascosti";
@@ -120,7 +123,10 @@ export default function ListaProdotti({
         return false;
       if (!q) return true;
       return (
-        p.nome.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)
+        p.nome.toLowerCase().includes(q) ||
+        p.slug.toLowerCase().includes(q) ||
+        (p.codice?.toLowerCase().includes(q) ?? false) ||
+        p.skus.some((sku) => sku.toLowerCase().includes(q))
       );
     });
 
@@ -322,7 +328,7 @@ export default function ListaProdotti({
             <input
               type="search"
               inputMode="search"
-              placeholder="Cerca per nome o slug…"
+              placeholder="Cerca per nome, slug o SKU…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="h-12 w-full rounded-full bg-white pl-11 pr-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"

@@ -4,7 +4,8 @@ import ListaProdotti, {
   type ProdottoLista,
 } from "@/components/gestore/ListaProdotti";
 
-// Forma grezza della riga letta da Supabase (varianti embeddate per il conteggio).
+// Forma grezza della riga letta da Supabase (varianti embeddate per conteggio,
+// stock e SKU: questi ultimi alimentano la ricerca lato client).
 interface RigaProdottoGrezza {
   id: string;
   slug: string;
@@ -15,8 +16,9 @@ interface RigaProdottoGrezza {
   attivo: boolean;
   disponibilita_su_richiesta: boolean;
   categoria_id: string | null;
+  codice: string | null;
   creato_il: string;
-  varianti: { stock: number }[] | null;
+  varianti: { stock: number; sku: string }[] | null;
 }
 
 // Lista prodotti del gestore. La pagina e dinamica perche requireGestore()
@@ -31,7 +33,7 @@ export default async function ProdottiPage() {
     supabase
       .from("prodotti")
       .select(
-        "id, slug, nome, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, creato_il, varianti(stock)",
+        "id, slug, nome, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, codice, creato_il, varianti(stock, sku)",
       )
       .order("creato_il", { ascending: false })
       .limit(1000),
@@ -51,6 +53,10 @@ export default async function ProdottiPage() {
     categoriaId: p.categoria_id,
     numVarianti: p.varianti?.length ?? 0,
     stockTotale: (p.varianti ?? []).reduce((s, v) => s + (v.stock ?? 0), 0),
+    codice: p.codice,
+    skus: (p.varianti ?? [])
+      .map((v) => v.sku)
+      .filter((s): s is string => Boolean(s)),
   }));
 
   return <ListaProdotti prodotti={prodotti} categorie={categorie} />;
