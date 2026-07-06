@@ -15,6 +15,7 @@ import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import {
   COLORI,
+  TAGLIA_UNICA,
   TAGLIE,
   coloreChiaro,
   coloreHex,
@@ -25,9 +26,10 @@ import type { Categoria } from "@/lib/types";
 const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
-// Chip taglia = scala del negozio (fonte unica src/lib/catalogo.ts); le taglie
-// proposte dal server fuori scala (es. "8 anni") diventano chip extra.
-const TAGLIE_CHIP: string[] = [...TAGLIE];
+// Chip taglia = scala del negozio (fonte unica src/lib/catalogo.ts) + "Taglia
+// unica" per gli accessori; le taglie proposte dal server fuori scala (es.
+// "8 anni") diventano chip extra.
+const TAGLIE_CHIP: string[] = [...TAGLIE, TAGLIA_UNICA];
 
 // Etichetta del target dichiarato dal fornitore (bozza.target), mostrata come
 // suggerimento sotto il selettore categoria.

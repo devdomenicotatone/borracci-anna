@@ -27,7 +27,7 @@ import { revalidatePath } from "next/cache";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
-import { coloreCanonico, skuVariante } from "@/lib/catalogo";
+import { TAGLIA_UNICA, coloreCanonico, skuVariante } from "@/lib/catalogo";
 import {
   ACCEPT_ENCODING_FORNITORE,
   ErroreFornitore,
@@ -55,6 +55,19 @@ const MODELLO = "claude-sonnet-5";
 // Proposta di default quando il parser non rileva taglie sul sito.
 // Solo taglie della scala del negozio (catalogo usa "2XL", non "XXL").
 const TAGLIE_DEFAULT = ["S", "M", "L", "XL", "2XL"];
+
+// Tipologie del fornitore che sono a TAGLIA UNICA (nessuna variante taglia):
+// copricapi e accessori. Es. il berretto FIGC espone "Tipologia prodotto:
+// Berretti" e zero taglie. Best effort: se non combacia si ripiega su S-XXL e il
+// gestore corregge in revisione (il chip "Taglia unica" e sempre disponibile).
+const TIPOLOGIE_TAGLIA_UNICA =
+  /berrett|cappell|cuffi|sciarp|scaldacollo|fascia|marsup|zain|bors[ae]|portachiav|bandier|braccial/i;
+
+/** True se la tipologia dichiarata dal fornitore e un accessorio a taglia unica. */
+function eAccessorioTagliaUnica(prodotto: ProdottoBlt): boolean {
+  const tip = prodotto.attributi.find((a) => /tipologia/i.test(a.chiave));
+  return tip !== undefined && TIPOLOGIE_TAGLIA_UNICA.test(tip.valore);
+}
 
 // Set canonico ammesso senza riserve; oltre a queste si accettano taglie
 // "libere corte" (es. "6 anni", "Unica") fino a 12 caratteri.
@@ -494,8 +507,16 @@ export async function analizzaUrlFornitoreAction(
     };
   }
 
-  const taglie = prodotto.taglie.length > 0 ? prodotto.taglie : TAGLIE_DEFAULT;
-  if (prodotto.taglie.length === 0) {
+  // Taglie: quelle rilevate; se assenti, "Taglia unica" per gli accessori
+  // (berretti, cappelli, ...) riconosciuti dalla tipologia, altrimenti S-XXL.
+  let taglie: string[];
+  if (prodotto.taglie.length > 0) {
+    taglie = prodotto.taglie;
+  } else if (eAccessorioTagliaUnica(prodotto)) {
+    taglie = [TAGLIA_UNICA];
+    avvisi.push('Accessorio senza taglie: proposta "Taglia unica".');
+  } else {
+    taglie = TAGLIE_DEFAULT;
     avvisi.push("Taglie non rilevate dal fornitore: proposta la scala S–XXL.");
   }
 

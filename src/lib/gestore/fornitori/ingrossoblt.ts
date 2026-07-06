@@ -318,6 +318,12 @@ function normalizzaTaglia(grezza: string): string | null {
   if ((TAGLIE_CANONICHE as readonly string[]).includes(maiuscola)) {
     return maiuscola;
   }
+  // Taglia unica esposta dal fornitore ("Unica", "Taglia unica", "TU", "One
+  // size"): normalizzata sull'etichetta del negozio (TAGLIA_UNICA in
+  // lib/catalogo). Un solo valore, mai una scala.
+  if (/^(taglia\s*)?unica$|^tu$|^one[\s-]?size$/i.test(testo)) {
+    return "Taglia unica";
+  }
   const anni = maiuscola.match(/^(\d{1,2})\s*ANNI$/);
   if (anni) return `${parseInt(anni[1], 10)} anni`;
   // Bambino: range per eta ("3-4", "9-11", anche con "/").
@@ -341,6 +347,7 @@ function rangoTaglia(t: string): number {
   if (range) return parseInt(range[1], 10) * 10 + 1;
   const num = t.match(/^(\d{1,2})$/);
   if (num) return parseInt(num[1], 10) * 10;
+  if (t.toLowerCase() === "taglia unica") return 20_000;
   const i = (TAGLIE_CANONICHE as readonly string[]).indexOf(t.toUpperCase());
   return i === -1 ? 100_000 : 10_000 + i;
 }

@@ -41,11 +41,16 @@ export const TAGLIE_BAMBINO_ETA = [
 ] as const;
 export const TAGLIE_BAMBINO_NUM = ["6", "8", "10", "12", "14", "16"] as const;
 
+// Taglia unica: accessori senza scala (berretti, cappelli, sciarpe, ...). Una
+// sola variante per il prodotto; nel selettore vetrina resta l'unica scelta.
+export const TAGLIA_UNICA = "Taglia unica";
+
 /**
  * Indice di ordinamento di una taglia. Le taglie BAMBINO (range "A-B", numero
  * singolo, o "N anni") si ordinano per eta e vengono PRIMA della scala adulto
- * XXS→6XL; le sconosciute vanno in fondo. Il fattore ×10 lascia spazio perche
- * range e numero della stessa eta (es. "5-6" e "6") restino vicini e stabili.
+ * XXS→6XL; "Taglia unica" sta subito dopo la scala adulto; le sconosciute vanno
+ * in fondo. Il fattore ×10 lascia spazio perche range e numero della stessa eta
+ * (es. "5-6" e "6") restino vicini e stabili.
  */
 export function ordineTaglia(t: string | null | undefined): number {
   const s = (t ?? "").trim();
@@ -60,6 +65,8 @@ export function ordineTaglia(t: string | null | undefined): number {
   if (range) return parseInt(range[1], 10) * 10 + 1;
   const num = s.match(/^(\d{1,2})$/);
   if (num) return parseInt(num[1], 10) * 10;
+  // Taglia unica: dopo la scala adulto, prima delle sconosciute.
+  if (s.toLowerCase() === TAGLIA_UNICA.toLowerCase()) return 20_000;
   return 1_000_000; // sconosciute in fondo
 }
 

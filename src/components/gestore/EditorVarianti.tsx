@@ -10,6 +10,7 @@
 
 import {
   COLORI,
+  TAGLIA_UNICA,
   TAGLIE,
   TAGLIE_BAMBINO_ETA,
   TAGLIE_BAMBINO_NUM,
@@ -244,6 +245,19 @@ export default function EditorVarianti({
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {TAGLIE_BAMBINO_NUM.map(chipTaglia)}
+        </div>
+
+        {/* Taglia unica: accessori senza scala (berretti, cappelli, ...). */}
+        <div className="mt-4 px-1">
+          <span className="font-display text-xs font-bold text-foreground">
+            Taglia unica{" "}
+            <span className="font-medium normal-case text-muted">
+              · accessori
+            </span>
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {chipTaglia(TAGLIA_UNICA)}
         </div>
 
         <p className="mt-3 px-1 text-xs text-muted">
