@@ -26,21 +26,34 @@ interface RigaProdottoGrezza {
 export default async function ProdottiPage() {
   const { supabase } = await requireGestore();
 
-  // Prodotti + categorie in parallelo: le categorie alimentano filtro, badge
-  // di riga e assegnazione in blocco. Limite alzato a 1000 (cap PostgREST):
-  // filtri e ricerca girano client-side e restano istantanei a queste scale.
-  const [{ data }, categorie] = await Promise.all([
-    supabase
-      .from("prodotti")
-      .select(
-        "id, slug, nome, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, codice, creato_il, varianti(stock, sku)",
-      )
-      .order("creato_il", { ascending: false })
-      .limit(1000),
+  // Prodotti + categorie in parallelo. I prodotti si caricano a BLOCCHI di 1000
+  // (cap PostgREST per singola richiesta) finche non sono tutti: con oltre 1000
+  // articoli una query sola ne perderebbe una parte. L'ordinamento ha un
+  // tie-break su `id` per una paginazione STABILE — i `creato_il` degli import
+  // massivi sono quasi identici e senza tie-break i blocchi si sovrappongono.
+  // Filtri e ricerca restano client-side (istantanei a queste scale).
+  const DIM_BLOCCO = 1000;
+  const [righe, categorie] = await Promise.all([
+    (async () => {
+      const tutte: RigaProdottoGrezza[] = [];
+      for (let da = 0; da < 50_000; da += DIM_BLOCCO) {
+        const { data, error } = await supabase
+          .from("prodotti")
+          .select(
+            "id, slug, nome, prezzo_cents, valuta, immagine_url, attivo, disponibilita_su_richiesta, categoria_id, codice, creato_il, varianti(stock, sku)",
+          )
+          .order("creato_il", { ascending: false })
+          .order("id", { ascending: false })
+          .range(da, da + DIM_BLOCCO - 1);
+        if (error) break;
+        const blocco = (data as unknown as RigaProdottoGrezza[] | null) ?? [];
+        tutte.push(...blocco);
+        if (blocco.length < DIM_BLOCCO) break; // ultimo blocco raggiunto
+      }
+      return tutte;
+    })(),
     caricaCategorie(supabase),
   ]);
-
-  const righe = (data as unknown as RigaProdottoGrezza[] | null) ?? [];
   const prodotti: ProdottoLista[] = righe.map((p) => ({
     id: p.id,
     slug: p.slug,
