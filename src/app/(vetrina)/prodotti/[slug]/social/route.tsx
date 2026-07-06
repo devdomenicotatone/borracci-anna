@@ -3,12 +3,30 @@ import { ImageResponse } from "next/og";
 import { fontOg } from "@/lib/og-fonts";
 import { caricaProdottoCard, qrDataUrl } from "@/lib/social-card";
 
-// Poster verticale (1080x1920, formato storia/post Instagram) del prodotto, con
-// QR ben visibile: pensato per essere SCARICATO e pubblicato/stampato, li dove il
-// link non e cliccabile (storie/feed IG, vetrina, volantini). Rotta pubblica come
-// l'opengraph-image (solo catalogo attivo); il gestore la scarica con <a download>.
+// Immagine social verticale del prodotto, con QR ben visibile: pensata per
+// essere SCARICATA e pubblicata/stampata, li dove il link non e cliccabile
+// (storie/feed IG, vetrina, volantini). Due formati via ?formato=:
+//   story (default) = 1080x1920 (9:16, storia)   post = 1080x1350 (4:5, feed)
+// Rotta pubblica come l'opengraph-image (solo catalogo attivo); il gestore la
+// scarica con <a download>.
+
+// Misure per formato: entrambi larghi 1080, cambia l'altezza (e quindi la foto)
+// e la scala di testo/QR, cosi il pannello resta bilanciato in ognuno.
+const FORMATI = {
+  story: {
+    altezza: 1920, foto: 1120, padY: 64,
+    brand: 60, nome: 82, prezzo: 72, cta: 44, tagline: 33,
+    qrChip: 320, qrImg: 268, qrPad: 26, logo: 64, logoRosso: 52, logoA: 32, logoTop: 128,
+  },
+  post: {
+    altezza: 1350, foto: 760, padY: 52,
+    brand: 52, nome: 64, prezzo: 56, cta: 38, tagline: 29,
+    qrChip: 240, qrImg: 196, qrPad: 22, logo: 48, logoRosso: 38, logoA: 24, logoTop: 96,
+  },
+} as const;
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
@@ -16,6 +34,11 @@ export async function GET(
 
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const qr = await qrDataUrl(`${site}/prodotti/${slug}`, 400);
+
+  const formato =
+    new URL(request.url).searchParams.get("formato") === "post" ? "post" : "story";
+  const c = FORMATI[formato];
+  const pannello = c.altezza - c.foto;
 
   return new ImageResponse(
     (
@@ -34,7 +57,7 @@ export async function GET(
             display: "flex",
             position: "relative",
             width: 1080,
-            height: 1120,
+            height: c.foto,
             alignItems: "center",
             justifyContent: "center",
             background: "linear-gradient(135deg, #0077c8 0%, #00b4d8 100%)",
@@ -55,13 +78,13 @@ export async function GET(
               src={immagine}
               alt=""
               width={1080}
-              height={1120}
+              height={c.foto}
               style={{
                 position: "absolute",
                 top: 0,
                 left: 0,
                 width: 1080,
-                height: 1120,
+                height: c.foto,
                 objectFit: "cover",
               }}
             />
@@ -75,34 +98,34 @@ export async function GET(
             flexDirection: "column",
             justifyContent: "space-between",
             width: 1080,
-            height: 800,
-            padding: "68px 72px",
+            height: pannello,
+            padding: `${c.padY}px 72px`,
             background: "linear-gradient(160deg, #073a5e 0%, #0a1f33 100%)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "baseline", fontSize: 60, fontWeight: 700 }}>
+          <div style={{ display: "flex", alignItems: "baseline", fontSize: c.brand, fontWeight: 700 }}>
             <span style={{ color: "#ff5c5c" }}>Anna</span>
             <span style={{ color: "#ffffff", marginLeft: 14 }}>Shop</span>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", fontSize: 82, fontWeight: 700, color: "#ffffff", lineHeight: 1.04 }}>
+            <div style={{ display: "flex", fontSize: c.nome, fontWeight: 700, color: "#ffffff", lineHeight: 1.04 }}>
               {nome}
             </div>
             {prezzo ? (
-              <div style={{ display: "flex", marginTop: 22, fontSize: 72, fontWeight: 700, color: "#ffd166" }}>
+              <div style={{ display: "flex", marginTop: 20, fontSize: c.prezzo, fontWeight: 700, color: "#ffd166" }}>
                 {prezzo}
               </div>
             ) : null}
           </div>
 
-          {/* Riga in basso: invito all'azione a sinistra, QR grande a destra. */}
-          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", flexDirection: "column", paddingBottom: 8 }}>
-              <div style={{ display: "flex", fontSize: 44, fontWeight: 700, color: "#ffffff" }}>
+          {/* Riga in basso: invito a sinistra (va a capo, non spinge il QR), QR a destra. */}
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 32 }}>
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, paddingBottom: 8 }}>
+              <div style={{ display: "flex", fontSize: c.cta, fontWeight: 700, color: "#ffffff" }}>
                 Inquadra e acquista
               </div>
-              <div style={{ display: "flex", marginTop: 14, fontSize: 33, fontWeight: 600, color: "rgba(255,255,255,0.74)" }}>
+              <div style={{ display: "flex", marginTop: 12, fontSize: c.tagline, fontWeight: 600, color: "rgba(255,255,255,0.74)" }}>
                 online o in negozio · Rimini
               </div>
             </div>
@@ -111,24 +134,25 @@ export async function GET(
               <div
                 style={{
                   display: "flex",
+                  flexShrink: 0,
                   position: "relative",
-                  width: 320,
-                  height: 320,
-                  padding: 26,
+                  width: c.qrChip,
+                  height: c.qrChip,
+                  padding: c.qrPad,
                   borderRadius: 32,
                   background: "#ffffff",
                 }}
               >
-                <img src={qr} alt="" width={268} height={268} style={{ display: "flex" }} />
+                <img src={qr} alt="" width={c.qrImg} height={c.qrImg} style={{ display: "flex" }} />
                 {/* Logo brand al centro del QR (la correzione errori Q lo assorbe). */}
                 <div
                   style={{
                     display: "flex",
                     position: "absolute",
-                    top: 128,
-                    left: 128,
-                    width: 64,
-                    height: 64,
+                    top: c.logoTop,
+                    left: c.logoTop,
+                    width: c.logo,
+                    height: c.logo,
                     borderRadius: 16,
                     background: "#ffffff",
                     alignItems: "center",
@@ -138,14 +162,14 @@ export async function GET(
                   <div
                     style={{
                       display: "flex",
-                      width: 52,
-                      height: 52,
+                      width: c.logoRosso,
+                      height: c.logoRosso,
                       borderRadius: 13,
                       background: "#ff5c5c",
                       alignItems: "center",
                       justifyContent: "center",
                       color: "#ffffff",
-                      fontSize: 32,
+                      fontSize: c.logoA,
                       fontWeight: 700,
                     }}
                   >
@@ -158,6 +182,6 @@ export async function GET(
         </div>
       </div>
     ),
-    { width: 1080, height: 1920, fonts: await fontOg() },
+    { width: 1080, height: c.altezza, fonts: await fontOg() },
   );
 }

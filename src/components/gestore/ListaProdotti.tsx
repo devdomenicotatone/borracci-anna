@@ -593,16 +593,42 @@ export default function ListaProdotti({
                       suRichiesta={p.suRichiesta}
                     />
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <span
-                      className={[
-                        "font-display text-xs font-bold lg:hidden",
-                        p.attivo ? "text-sea" : "text-muted",
-                      ].join(" ")}
-                    >
-                      {p.attivo ? "In vendita" : "Nascosto"}
-                    </span>
-                    <ToggleAttivo id={p.id} attivo={p.attivo} />
+                  <div className="flex items-center justify-end gap-2">
+                    {/* Scarica l'immagine social (storia). Solo per gli attivi:
+                        il poster legge il catalogo attivo. Fuori dal Link riga. */}
+                    {p.attivo && (
+                      <a
+                        href={`/prodotti/${p.slug}/social`}
+                        download={`anna-shop-${p.slug}-storia.png`}
+                        title="Scarica immagine per social"
+                        aria-label={`Scarica immagine social di ${p.nome}`}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted ring-1 ring-line transition-colors hover:text-sea hover:ring-sea"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                        </svg>
+                      </a>
+                    )}
+                    <div className="flex flex-col items-end gap-2">
+                      <span
+                        className={[
+                          "font-display text-xs font-bold lg:hidden",
+                          p.attivo ? "text-sea" : "text-muted",
+                        ].join(" ")}
+                      >
+                        {p.attivo ? "In vendita" : "Nascosto"}
+                      </span>
+                      <ToggleAttivo id={p.id} attivo={p.attivo} />
+                    </div>
                   </div>
                 </li>
               );
