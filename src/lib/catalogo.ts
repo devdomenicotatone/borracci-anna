@@ -26,7 +26,7 @@ export type Taglia = (typeof TAGLIE)[number];
 
 // Taglie BAMBINO. Il fornitore usa DUE sistemi che convivono (verificato sul
 // sito): range per eta ("5-6", "9-11", ...) sulle t-shirt a licenza, e numeri
-// singoli ("6", "8", ...) sullo sportswear (es. Ferrari). Li teniamo VERBATIM:
+// singoli ("2", "4", "6", ...) sullo sportswear (es. Ferrari). Li teniamo VERBATIM:
 // una etichetta del fornitore = una taglia, mai spezzata (cosi l'import mappa
 // 1:1 e i filtri non mostrano doppioni). NB: "9-11" salta a 3 anni — e cosi sul
 // fornitore, non un refuso; per questo NON e una scala uniforme a 2 anni.
@@ -39,7 +39,7 @@ export const TAGLIE_BAMBINO_ETA = [
   "12-13",
   "14-15",
 ] as const;
-export const TAGLIE_BAMBINO_NUM = ["6", "8", "10", "12", "14", "16"] as const;
+export const TAGLIE_BAMBINO_NUM = ["2", "4", "6", "8", "10", "12", "14", "16"] as const;
 
 // Taglia unica: accessori senza scala (berretti, cappelli, sciarpe, ...). Una
 // sola variante per il prodotto; nel selettore vetrina resta l'unica scelta.
