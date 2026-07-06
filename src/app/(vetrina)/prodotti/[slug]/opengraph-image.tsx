@@ -1,9 +1,7 @@
 import { ImageResponse } from "next/og";
-import { createClient } from "@supabase/supabase-js";
-import QRCode from "qrcode";
 
 import { fontOg } from "@/lib/og-fonts";
-import { formatPrezzo } from "@/lib/format";
+import { caricaProdottoCard, qrDataUrl } from "@/lib/social-card";
 
 // Card di anteprima per la singola scheda prodotto: foto del capo a sinistra,
 // pannello brand con nome + prezzo a destra. E quello che si vede condividendo
@@ -19,50 +17,11 @@ export default async function Image({
 }) {
   const { slug } = await params;
 
-  let nome = "Anna Shop";
-  let prezzo: string | null = null;
-  let immagine: string | null = null;
+  const { nome, prezzo, immagine } = await caricaProdottoCard(slug);
 
-  // Lettura pubblica senza cookie (cacheable): RLS consente l'anon sui prodotti attivi.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (url && anon) {
-    try {
-      const supabase = createClient(url, anon);
-      const { data } = await supabase
-        .from("prodotti")
-        .select("nome, prezzo_cents, valuta, immagine_url")
-        .eq("slug", slug)
-        .eq("attivo", true)
-        .maybeSingle();
-      if (data) {
-        nome = (data.nome as string) ?? nome;
-        immagine = (data.immagine_url as string | null) ?? null;
-        if (typeof data.prezzo_cents === "number") {
-          prezzo = formatPrezzo(data.prezzo_cents, (data.valuta as string) ?? "EUR");
-        }
-      }
-    } catch {
-      // degrada a card brand senza dati prodotto
-    }
-  }
-
-  // QR dell'URL prodotto (PNG data URL) da mostrare nella card. Correzione errori
-  // Q (25%): assorbe comodamente il piccolo logo "A" al centro (~6% dell'area)
-  // restando meno denso di H, quindi piu leggibile da lontano/in stampa.
-  // Degrada a null (card senza QR) se manca l'URL del sito o la generazione fallisce.
+  // QR dell'URL prodotto (moduli navy + logo "A" centrale). Vedi qrDataUrl.
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  let qr: string | null = null;
-  try {
-    qr = await QRCode.toDataURL(`${site}/prodotti/${slug}`, {
-      margin: 0,
-      errorCorrectionLevel: "Q",
-      width: 264,
-      color: { dark: "#0a1f33", light: "#ffffff" },
-    });
-  } catch {
-    qr = null;
-  }
+  const qr = await qrDataUrl(`${site}/prodotti/${slug}`);
 
   return new ImageResponse(
     (
@@ -128,9 +87,11 @@ export default async function Image({
             ) : null}
           </div>
 
-          {/* Riga in basso: tagline (+ invito) a sinistra, QR a destra. */}
-          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Riga in basso: testo a sinistra (flex:1 + minWidth:0 = va a capo
+              invece di spingere il QR contro il bordo), QR a destra a margine
+              costante. */}
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 28 }}>
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
               {qr ? (
                 <div style={{ display: "flex", fontSize: 25, fontWeight: 600, color: "rgba(255,255,255,0.92)" }}>
                   Inquadra per aprire
@@ -153,6 +114,7 @@ export default async function Image({
               <div
                 style={{
                   display: "flex",
+                  flexShrink: 0,
                   position: "relative",
                   width: 150,
                   height: 150,
@@ -162,7 +124,7 @@ export default async function Image({
                 }}
               >
                 <img src={qr} alt="" width={122} height={122} style={{ display: "flex" }} />
-                {/* Logo brand al centro del QR (la correzione errori H lo assorbe). */}
+                {/* Logo brand al centro del QR (la correzione errori Q lo assorbe). */}
                 <div
                   style={{
                     display: "flex",
