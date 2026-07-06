@@ -27,6 +27,7 @@ import {
   spostaCategoriaAction,
   riordinaCategorieAction,
   eliminaCategoriaAction,
+  rigeneraSlugCategorieAction,
   type EsitoCategorie,
 } from "@/lib/gestore/categorie-actions";
 import { useToast } from "@/components/gestore/Toaster";
@@ -57,6 +58,7 @@ export default function GestoreCategorie({
   const [righe, setRighe] = useState<Categoria[]>(iniziali);
   const [pending, startTransition] = useTransition();
   const [daEliminare, setDaEliminare] = useState<Categoria | null>(null);
+  const [confermaRigenera, setConfermaRigenera] = useState(false);
   const [nuovaRadice, setNuovaRadice] = useState("");
   const [annuncio, setAnnuncio] = useState("");
   const occupato = pending;
@@ -229,6 +231,14 @@ export default function GestoreCategorie({
     applica(() => eliminaCategoriaAction(cat.id), "Categoria eliminata.");
   }
 
+  function rigeneraConfermato() {
+    setConfermaRigenera(false);
+    applica(
+      () => rigeneraSlugCategorieAction(),
+      "Indirizzi delle categorie rigenerati.",
+    );
+  }
+
   function messaggioElimina(cat: Categoria): string {
     const nProd = conteggiProdotti[cat.id] ?? 0;
     const nFigli = righe.filter((c) => c.parent_id === cat.id).length;
@@ -394,6 +404,33 @@ export default function GestoreCategorie({
         categoria” e le sottocategorie risalgono di un livello.
       </p>
 
+      {righe.length > 0 && (
+        <div className="mt-8 border-t border-line pt-6">
+          <button
+            type="button"
+            onClick={() => setConfermaRigenera(true)}
+            disabled={occupato}
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-sea ring-1 ring-line transition-colors hover:bg-surface-2 disabled:opacity-50"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+              <path d="M3 21v-5h5" />
+            </svg>
+            Rigenera indirizzi
+          </button>
+          <p className="mt-2 max-w-prose text-xs text-muted">
+            Riassegna a ogni categoria un indirizzo leggibile dal percorso (es.{" "}
+            <span className="font-semibold text-foreground">
+              uomo-t-shirt-anime-manga
+            </span>
+            ). Utile dopo aver riorganizzato la tassonomia. I vecchi indirizzi
+            smettono di funzionare: usala finche il sito non e pubblicato.
+          </p>
+        </div>
+      )}
+
       <div aria-live="polite" role="status" className="sr-only">
         {annuncio}
       </div>
@@ -406,6 +443,16 @@ export default function GestoreCategorie({
         inCorso={pending}
         onConferma={eliminaConfermato}
         onAnnulla={() => setDaEliminare(null)}
+      />
+
+      <ConfermaDialog
+        aperto={confermaRigenera}
+        titolo="Rigenerare gli indirizzi?"
+        messaggio='Tutte le categorie riceveranno un indirizzo leggibile dal percorso (es. "/categoria/uomo-t-shirt-anime-manga"). I vecchi indirizzi smetteranno di funzionare: fallo solo finche il sito non e pubblicato o indicizzato.'
+        etichettaConferma="Rigenera"
+        inCorso={pending}
+        onConferma={rigeneraConfermato}
+        onAnnulla={() => setConfermaRigenera(false)}
       />
     </div>
   );

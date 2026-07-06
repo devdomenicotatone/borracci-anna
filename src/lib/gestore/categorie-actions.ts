@@ -15,8 +15,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { percorsoCategoria } from "@/lib/categorie-albero";
 import { verifySession } from "@/lib/gestore/auth";
-import { slugify } from "@/lib/gestore/slug";
+import { slugGerarchico, slugify } from "@/lib/gestore/slug";
 import type { Categoria } from "@/lib/types";
 
 /** Esito di un'azione categorie: su `ok` ritorna la lista canonica aggiornata. */
@@ -113,8 +114,10 @@ function revalida(): void {
 /**
  * Crea una categoria. `parentId` null = categoria principale; valorizzato =
  * figlia o nipote. Anti-4o-livello: il padre deve stare al massimo al 2o livello.
- * Slug univoco garantito dal DB (intercetta 23505 e ritenta col suffisso,
- * niente pre-check soggetto a race).
+ * Slug LEGGIBILE dal percorso completo (es. "uomo-t-shirt-anime-manga"), reso
+ * univoco dal vincolo DB: si parte dal primo suffisso libero e si ritenta sul
+ * conflitto 23505. Rami diversi danno basi diverse (collisioni rare); due
+ * omonime sotto lo stesso padre restano disambiguate dal suffisso numerico.
  */
 export async function creaCategoriaAction(input: {
   nome: string;
@@ -126,22 +129,44 @@ export async function creaCategoriaAction(input: {
 
   const nome = (input?.nome ?? "").trim();
   if (!nome) return { ok: false, error: "Il nome e obbligatorio." };
-  const slugBase = slugify(nome);
-  if (!slugBase) return { ok: false, error: "Nome non valido." };
+  if (!slugify(nome)) return { ok: false, error: "Nome non valido." };
   const parentId = input.parentId ?? null;
 
   try {
+    // Tutte le categorie in un colpo: servono sia per il percorso (da cui lo
+    // slug gerarchico) sia per gli slug gia presi. Poche righe -> costo minimo.
+    const categorie = await leggiCategorie(supabase);
+
+    // Percorso dei nomi dalla radice al nuovo nodo. La profondita del padre
+    // (lunghezza del suo percorso) fa da guardia anti-4o-livello lato app; il
+    // trigger DB categorie_max_tre_livelli resta la barriera autoritativa.
+    let nomiPercorso = [nome];
     if (parentId !== null) {
-      const profonditaPadre = await profonditaCategoria(supabase, parentId);
-      if (profonditaPadre === null) return { ok: false, error: PADRE_SPARITO };
-      if (profonditaPadre >= 3) return { ok: false, error: QUARTO_LIVELLO };
+      const percorsoPadre = percorsoCategoria(categorie, parentId);
+      if (percorsoPadre.length === 0) return { ok: false, error: PADRE_SPARITO };
+      if (percorsoPadre.length >= 3) return { ok: false, error: QUARTO_LIVELLO };
+      nomiPercorso = [...percorsoPadre.map((c) => c.nome), nome];
     }
+    // Slug leggibile dal percorso completo, es. "uomo-t-shirt-anime-manga".
+    const slugBase = slugGerarchico(nomiPercorso);
 
     const ordine = await prossimoOrdine(supabase, parentId);
 
+    // Suffisso numerico (0 => "base", k>=1 => "base-(k+1)") solo per disambiguare
+    // eventuali omonime sotto lo stesso padre: rami diversi danno gia basi
+    // diverse. Si parte dal primo libero (slug in memoria); l'unicita la
+    // garantisce il vincolo DB, quindi sul conflitto si ritenta col successivo.
+    const slugConSuffisso = (k: number) =>
+      k === 0 ? slugBase : `${slugBase}-${k + 1}`;
+    const presi = new Set(categorie.map((c) => c.slug));
+    let inizio = 0;
+    while (presi.has(slugConSuffisso(inizio))) inizio++;
+
     let creato = false;
-    for (let tent = 0; tent < 6; tent++) {
-      const slug = tent === 0 ? slugBase : `${slugBase}-${tent + 1}`;
+    // Margine di ritentativi oltre il primo libero: assorbe un'eventuale insert
+    // concorrente che occupa lo slug tra la lettura e la nostra insert (race).
+    for (let tent = 0; tent < 20; tent++) {
+      const slug = slugConSuffisso(inizio + tent);
       const { error } = await supabase
         .from("categorie")
         .insert({ slug, nome, parent_id: parentId, ordine });
@@ -155,12 +180,84 @@ export async function creaCategoriaAction(input: {
       return { ok: false, error: error.message };
     }
     if (!creato) {
-      return { ok: false, error: "Nome troppo simile a una categoria esistente." };
+      return {
+        ok: false,
+        error: "Conflitto nell'assegnare l'indirizzo della categoria. Riprova.",
+      };
     }
 
-    const categorie = await leggiCategorie(supabase);
+    const aggiornate = await leggiCategorie(supabase);
     revalida();
-    return { ok: true, categorie };
+    return { ok: true, categorie: aggiornate };
+  } catch {
+    return ERRORE_RETE;
+  }
+}
+
+/**
+ * Rigenera in blocco gli slug di TUTTE le categorie in forma gerarchica
+ * leggibile (es. "uomo-t-shirt-anime-manga"), riflettendo la struttura attuale.
+ * Operazione MANUALE una-tantum: le rinomine/spostamenti normali NON toccano lo
+ * slug (resta stabile), qui invece si riallinea di proposito tutta la tassonomia.
+ * Non crea redirect dai vecchi indirizzi -> usare finche il sito non e pubblicato.
+ *
+ * Due passate per non violare il vincolo UNIQUE mentre gli slug si "incrociano":
+ * prima uno slug temporaneo unico per riga (l'id UUID non collide con slug
+ * reali), poi quello finale.
+ */
+export async function rigeneraSlugCategorieAction(): Promise<EsitoCategorie> {
+  const sessione = await verifySession();
+  if (!sessione) return NON_AUTORIZZATO;
+  const { supabase } = sessione;
+
+  try {
+    const categorie = await leggiCategorie(supabase);
+
+    // Nuovo slug gerarchico per ogni categoria, unico a livello globale.
+    const presi = new Set<string>();
+    const nuovoPerId = new Map<string, string>();
+    for (const c of categorie) {
+      const base =
+        slugGerarchico(percorsoCategoria(categorie, c.id).map((x) => x.nome)) ||
+        "categoria";
+      let k = 0;
+      let slug = base;
+      while (presi.has(slug)) {
+        k++;
+        slug = `${base}-${k + 1}`;
+      }
+      presi.add(slug);
+      nuovoPerId.set(c.id, slug);
+    }
+
+    // Solo dove lo slug cambia davvero (evita update inutili e passate a vuoto).
+    const daAggiornare = categorie.filter((c) => nuovoPerId.get(c.id) !== c.slug);
+
+    // Passata 1: slug temporaneo unico, per liberare i nomi finali prima di
+    // riassegnarli (due categorie possono scambiarsi lo slug senza collidere).
+    for (const c of daAggiornare) {
+      const { error } = await supabase
+        .from("categorie")
+        .update({ slug: `tmp-${c.id}` })
+        .eq("id", c.id);
+      if (error) {
+        return { ok: false, error: error.message, categorie: await leggiCategorie(supabase) };
+      }
+    }
+    // Passata 2: slug finale.
+    for (const c of daAggiornare) {
+      const { error } = await supabase
+        .from("categorie")
+        .update({ slug: nuovoPerId.get(c.id)! })
+        .eq("id", c.id);
+      if (error) {
+        return { ok: false, error: error.message, categorie: await leggiCategorie(supabase) };
+      }
+    }
+
+    const aggiornate = await leggiCategorie(supabase);
+    revalida();
+    return { ok: true, categorie: aggiornate };
   } catch {
     return ERRORE_RETE;
   }
