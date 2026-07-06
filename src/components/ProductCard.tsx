@@ -44,7 +44,7 @@ export default function ProductCard({
   return (
     <Link
       href={`/prodotti/${prodotto.slug}`}
-      className="group relative block rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea"
+      className="group relative isolate block rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea"
       aria-label={`Vedi ${prodotto.nome}`}
     >
       <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl">
