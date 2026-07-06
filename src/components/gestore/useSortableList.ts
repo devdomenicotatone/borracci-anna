@@ -4,14 +4,36 @@
 // code-path). Scelto al posto di una libreria DnD per zero rischio compat con
 // React 19 e bundle minimo: le liste categorie sono cortissime.
 //
-//  - drag CONFINATO alla lista passata (un gruppo di fratelli): il cambio di
-//    gruppo (reparent) passa da una <select>, mai dal drag;
+//  - riordino LOCALE fluido tra fratelli, commit UNA volta a pointerup;
+//  - nidificazione OPZIONALE (`nest`): trascinando sopra un'altra riga
+//    dell'albero (registro globale) la si mette DENTRO quella riga (reparent);
+//    senza `nest` il drag resta confinato ai fratelli, come prima;
 //  - handle dedicato con touch-action:none cosi il resto resta scrollabile;
-//  - riordino LOCALE fluido durante il drag, commit UNA volta a pointerup;
 //  - `muovi(delta)` per bottoni su/giu e frecce da tastiera (stesso commit);
 //  - nessun revert custom: su errore il chiamante riallinea con lo stato canonico.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+/** Fascia verticale della riga sotto il puntatore (per distinguere dentro/riordino). */
+export type FasciaRiga = "alto" | "centro" | "basso";
+
+/**
+ * Nidificazione ad albero (opzionale). `registro` mappa OGNI riga dell'albero al
+ * suo elemento (box della sola riga, non del sottoalbero). `decidi` sceglie tra
+ * mettere la trascinata DENTRO il bersaglio ("nest"), riordinarla tra i fratelli
+ * ("reorder") o ignorare (null). `onNest` esegue il reparent.
+ */
+export interface NestSortable {
+  registro: React.RefObject<Map<string, HTMLElement>>;
+  decidi: (
+    trascinatoId: string,
+    bersaglioId: string,
+    fascia: FasciaRiga,
+  ) => "nest" | "reorder" | null;
+  onNest: (trascinatoId: string, bersaglioId: string) => void;
+  setBersaglio: (id: string | null) => void;
+  bersaglioRef: React.RefObject<string | null>;
+}
 
 export interface ContestoRiga {
   /** Posizione nella lista (0-based). */
@@ -31,11 +53,29 @@ export interface ContestoRiga {
   muovi: (delta: number) => void;
 }
 
+/** Riga dell'albero sotto il puntatore + fascia verticale, o null. */
+function rigaSottoPuntatore(
+  registro: Map<string, HTMLElement>,
+  x: number,
+  y: number,
+): { id: string; fascia: FasciaRiga } | null {
+  for (const [id, el] of registro) {
+    const r = el.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      const rel = (y - r.top) / r.height;
+      const fascia: FasciaRiga = rel < 0.28 ? "alto" : rel > 0.72 ? "basso" : "centro";
+      return { id, fascia };
+    }
+  }
+  return null;
+}
+
 export function useSortableList<T extends { id: string }>(
   items: T[],
   onCommit: (idsInOrdine: string[]) => void,
   disabilitato = false,
   annuncia?: (item: T, nuovoIndice: number, totale: number) => void,
+  nest?: NestSortable,
 ) {
   const [ordine, setOrdine] = useState<T[]>(items);
   const [snapshot, setSnapshot] = useState<T[]>(items);
@@ -45,6 +85,13 @@ export function useSortableList<T extends { id: string }>(
   const trascinatoRef = useRef<string | null>(null);
   const pointerRef = useRef<number | null>(null);
   const righeRef = useRef(new Map<string, HTMLElement>());
+  // `nest` cambia identita a ogni render (chiusure sull'albero corrente): lo
+  // tengo in un ref (aggiornato in commit, non in render) cosi i pointer handler
+  // restano stabili ma leggono sempre l'ultimo `nest`, mai una chiusura stale.
+  const nestRef = useRef(nest);
+  useEffect(() => {
+    nestRef.current = nest;
+  });
 
   // Quando cambiano gli items dal canonico (refetch dopo una mutazione,
   // promozione di un figlio a radice, ecc.) e NON si sta trascinando, riallineo
@@ -74,6 +121,7 @@ export function useSortableList<T extends { id: string }>(
 
   const ripristina = useCallback(() => {
     pointerRef.current = null;
+    nestRef.current?.setBersaglio(null);
     setTrascinatoSync(null);
     setOrdine(items);
     ordineRef.current = items;
@@ -82,8 +130,18 @@ export function useSortableList<T extends { id: string }>(
   const commit = useCallback(() => {
     pointerRef.current = null;
     const idCorrente = trascinatoRef.current;
+    const nestCorrente = nestRef.current;
+    const bersaglioNest = nestCorrente?.bersaglioRef.current ?? null;
     setTrascinatoSync(null);
+    nestCorrente?.setBersaglio(null);
     if (!idCorrente) return;
+    // Nidificazione: annulla ogni riordino locale e delega il reparent.
+    if (bersaglioNest && nestCorrente) {
+      setOrdine(items);
+      ordineRef.current = items;
+      nestCorrente.onNest(idCorrente, bersaglioNest);
+      return;
+    }
     const nuovi = ordineRef.current.map((c) => c.id);
     const originali = items.map((c) => c.id);
     if (nuovi.join("|") !== originali.join("|")) {
@@ -107,6 +165,41 @@ export function useSortableList<T extends { id: string }>(
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (pointerRef.current === null || e.pointerId !== pointerRef.current) return;
+    const nestCorrente = nestRef.current;
+    const dragged = trascinatoRef.current;
+
+    // Nidificazione: cerca la riga sotto il puntatore in TUTTO l'albero.
+    if (nestCorrente && dragged) {
+      const hit = rigaSottoPuntatore(
+        nestCorrente.registro.current,
+        e.clientX,
+        e.clientY,
+      );
+      if (hit) {
+        const esito = nestCorrente.decidi(dragged, hit.id, hit.fascia);
+        if (esito === "nest") {
+          if (nestCorrente.bersaglioRef.current !== hit.id) {
+            nestCorrente.setBersaglio(hit.id);
+          }
+          // Congela il riordino locale: la trascinata resta al suo posto.
+          if (ordineRef.current !== items) {
+            ordineRef.current = items;
+            setOrdine(items);
+          }
+          return;
+        }
+        if (nestCorrente.bersaglioRef.current !== null) {
+          nestCorrente.setBersaglio(null);
+        }
+        // Riga di un ALTRO gruppo ma non un fratello di questa lista: niente
+        // riordino spurio (il riordino qui sotto vale solo per i fratelli).
+        if (!righeRef.current.has(hit.id)) return;
+      } else if (nestCorrente.bersaglioRef.current !== null) {
+        nestCorrente.setBersaglio(null);
+      }
+    }
+
+    // Riordino locale (confinato ai fratelli di questa lista).
     const corrente = ordineRef.current;
     const from = corrente.findIndex((c) => c.id === trascinatoRef.current);
     if (from < 0) return;
@@ -128,7 +221,7 @@ export function useSortableList<T extends { id: string }>(
       ordineRef.current = next;
       setOrdine(next);
     }
-  }, []);
+  }, [items]);
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {

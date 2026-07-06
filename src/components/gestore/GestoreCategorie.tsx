@@ -5,9 +5,15 @@
 // riallineato allo stato canonico che ogni server action ritorna — stesso pattern
 // di GestoreGalleria (`applica`): su errore niente revert custom, il prossimo
 // canonico corregge.
+//
+// Drag: riordino tra fratelli (trascinando sui BORDI di una riga) + nidificazione
+// (trascinando sul CENTRO di un'altra riga la si mette DENTRO = reparent, es. da
+// 2o a 3o livello). La legalita (max 3 livelli, niente cicli) e calcolata qui e
+// rispecchia la barriera DB/actions; il commit del reparent passa da `sposta`.
 
 import {
   Fragment,
+  useCallback,
   useMemo,
   useState,
   useTransition,
@@ -25,7 +31,11 @@ import {
 } from "@/lib/gestore/categorie-actions";
 import { useToast } from "@/components/gestore/Toaster";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
-import { useSortableList, type ContestoRiga } from "@/components/gestore/useSortableList";
+import {
+  useSortableList,
+  type ContestoRiga,
+  type NestSortable,
+} from "@/components/gestore/useSortableList";
 import type { Categoria } from "@/lib/types";
 
 const inputCls =
@@ -77,6 +87,98 @@ export default function GestoreCategorie({
   const contaNipoti = (id: string) =>
     figliDiretti(id).reduce((s, f) => s + figliDiretti(f.id).length, 0);
 
+  // Reparent invocato dal drag di nidificazione; letto da ref per non
+  // incapsulare una chiusura stale in `nestOpts` (memoizzato su `righe`).
+  const spostaRef = useRef<(id: string, parentId: string | null) => void>(
+    () => {},
+  );
+
+  // Registro globale di TUTTE le righe (box della SOLA riga, non del
+  // sottoalbero): il drag hit-testa qui per capire dentro quale categoria si
+  // sta rilasciando.
+  const registroRighe = useRef(new Map<string, HTMLElement>());
+  const registraRigaGlobale = useCallback(
+    (id: string, el: HTMLElement | null) => {
+      if (el) registroRighe.current.set(id, el);
+      else registroRighe.current.delete(id);
+    },
+    [],
+  );
+
+  // Bersaglio di nidificazione corrente (per evidenziare la riga di rilascio).
+  const [nestTarget, setNestTarget] = useState<string | null>(null);
+  const nestTargetRef = useRef<string | null>(null);
+  const setNestTargetSync = useCallback((id: string | null) => {
+    nestTargetRef.current = id;
+    setNestTarget(id);
+  }, []);
+
+  // Opzioni di nidificazione per le liste sortable. Legalita e decisione
+  // (dentro/riordino) calcolate sull'albero corrente: rispecchiano la barriera
+  // "max 3 livelli + niente cicli" di actions/trigger.
+  const nestOpts = useMemo<NestSortable>(() => {
+    const parentDi = new Map<string, string | null>();
+    const figliDi = new Map<string, string[]>();
+    for (const c of righe) {
+      parentDi.set(c.id, c.parent_id ?? null);
+      if (c.parent_id) {
+        const a = figliDi.get(c.parent_id);
+        if (a) a.push(c.id);
+        else figliDi.set(c.parent_id, [c.id]);
+      }
+    }
+    const livello = (id: string) => {
+      let l = 1;
+      let p = parentDi.get(id) ?? null;
+      let g = 0;
+      while (p && g++ < 5) {
+        l++;
+        p = parentDi.get(p) ?? null;
+      }
+      return l;
+    };
+    const altezza = (id: string, g = 0): number => {
+      if (g > 4) return 1;
+      const f = figliDi.get(id) ?? [];
+      let max = 0;
+      for (const x of f) max = Math.max(max, altezza(x, g + 1));
+      return 1 + max;
+    };
+    // È lecito mettere `dragged` DENTRO `bersaglio`?
+    const consentito = (dragged: string, bersaglio: string) => {
+      if (dragged === bersaglio) return false;
+      if ((parentDi.get(dragged) ?? null) === bersaglio) return false; // già dentro
+      // Il bersaglio non deve essere un discendente della trascinata (ciclo).
+      let p: string | null = bersaglio;
+      let g = 0;
+      while (p && g++ < 6) {
+        if (p === dragged) return false;
+        p = parentDi.get(p) ?? null;
+      }
+      return livello(bersaglio) + altezza(dragged) <= 3;
+    };
+    const decidi: NestSortable["decidi"] = (dragged, bersaglio, fascia) => {
+      if (dragged === bersaglio) return null;
+      const fratelli =
+        (parentDi.get(dragged) ?? null) === (parentDi.get(bersaglio) ?? null);
+      if (fratelli) {
+        // Fratello: centro = dentro (reparent), bordi = riordino tra fratelli.
+        return fascia === "centro" && consentito(dragged, bersaglio)
+          ? "nest"
+          : "reorder";
+      }
+      // Riga di un altro gruppo: tutta la riga nidifica, se lecito.
+      return consentito(dragged, bersaglio) ? "nest" : null;
+    };
+    return {
+      registro: registroRighe,
+      decidi,
+      onNest: (dragged, bersaglio) => spostaRef.current(dragged, bersaglio),
+      setBersaglio: setNestTargetSync,
+      bersaglioRef: nestTargetRef,
+    };
+  }, [righe, setNestTargetSync]);
+
   function applica(azione: () => Promise<EsitoCategorie>, successo?: string) {
     startTransition(async () => {
       const esito = await azione();
@@ -114,6 +216,11 @@ export default function GestoreCategorie({
   function sposta(id: string, parentId: string | null) {
     applica(() => spostaCategoriaAction(id, parentId), "Categoria spostata.");
   }
+  // `nestOpts` legge il reparent da qui: aggiorno in commit (non in render) cosi
+  // punta sempre all'ultima `sposta`, mai a una chiusura stale.
+  useEffect(() => {
+    spostaRef.current = sposta;
+  });
 
   function riordinaGruppo(parentId: string | null, ids: string[]) {
     // Ottimistico: riassegno `ordine` ai membri del gruppo (i memo riordinano).
@@ -201,6 +308,7 @@ export default function GestoreCategorie({
           onCommitOrdine={(ids) => riordinaGruppo(null, ids)}
           occupato={occupato}
           onAnnuncio={annunciaSpostamento}
+          nestOpts={nestOpts}
           className="flex flex-col gap-4"
           renderItem={(radice, ctx) => (
             <div className="rounded-3xl bg-surface p-2.5 ring-1 ring-line">
@@ -214,6 +322,8 @@ export default function GestoreCategorie({
                 radici={radici}
                 figliDiretti={figliDiretti}
                 occupato={occupato}
+                registraRiga={registraRigaGlobale}
+                nestTarget={nestTarget}
                 onRinomina={rinomina}
                 onSposta={sposta}
                 onElimina={setDaEliminare}
@@ -224,6 +334,7 @@ export default function GestoreCategorie({
                   onCommitOrdine={(ids) => riordinaGruppo(radice.id, ids)}
                   occupato={occupato}
                   onAnnuncio={annunciaSpostamento}
+                  nestOpts={nestOpts}
                   className="flex flex-col gap-2"
                   renderItem={(figlio, cctx) => (
                     <div>
@@ -237,6 +348,8 @@ export default function GestoreCategorie({
                         radici={radici}
                         figliDiretti={figliDiretti}
                         occupato={occupato}
+                        registraRiga={registraRigaGlobale}
+                        nestTarget={nestTarget}
                         onRinomina={rinomina}
                         onSposta={sposta}
                         onElimina={setDaEliminare}
@@ -247,6 +360,7 @@ export default function GestoreCategorie({
                           onCommitOrdine={(ids) => riordinaGruppo(figlio.id, ids)}
                           occupato={occupato}
                           onAnnuncio={annunciaSpostamento}
+                          nestOpts={nestOpts}
                           className="flex flex-col gap-2"
                           renderItem={(nipote, nctx) => (
                             <RigaCategoria
@@ -259,6 +373,8 @@ export default function GestoreCategorie({
                               radici={radici}
                               figliDiretti={figliDiretti}
                               occupato={occupato}
+                              registraRiga={registraRigaGlobale}
+                              nestTarget={nestTarget}
                               onRinomina={rinomina}
                               onSposta={sposta}
                               onElimina={setDaEliminare}
@@ -282,10 +398,11 @@ export default function GestoreCategorie({
       )}
 
       <p className="mt-6 text-xs text-muted">
-        Trascina dalla maniglia per riordinare (o usa le frecce ↑↓ / i tasti
-        freccia). “Sposta” mette la categoria sotto un’altra, fino a 3 livelli
-        (es. Uomo › T-shirt › Manga). Eliminando una categoria i prodotti
-        restano “senza categoria” e le sottocategorie risalgono di un livello.
+        Trascina dalla maniglia: sui <strong>bordi</strong> di una riga per
+        riordinare, sul <strong>centro</strong> per metterla dentro (fino a 3
+        livelli, es. Uomo › T-shirt › Manga). In alternativa usa le frecce ↑↓ o
+        il menu “Sposta”. Eliminando una categoria i prodotti restano “senza
+        categoria” e le sottocategorie risalgono di un livello.
       </p>
 
       <div aria-live="polite" role="status" className="sr-only">
@@ -313,6 +430,7 @@ function ListaSortable<T extends { id: string }>({
   className,
   renderItem,
   onAnnuncio,
+  nestOpts,
 }: {
   items: T[];
   onCommitOrdine: (idsInOrdine: string[]) => void;
@@ -320,12 +438,14 @@ function ListaSortable<T extends { id: string }>({
   className?: string;
   renderItem: (item: T, ctx: ContestoRiga) => React.ReactNode;
   onAnnuncio?: (item: T, indice: number, totale: number) => void;
+  nestOpts?: NestSortable;
 }) {
   const { ordine, registraRiga, contestoRiga } = useSortableList(
     items,
     onCommitOrdine,
     occupato,
     onAnnuncio,
+    nestOpts,
   );
   if (ordine.length === 0) return null;
   return (
@@ -350,6 +470,8 @@ function RigaCategoria({
   radici,
   figliDiretti,
   occupato,
+  registraRiga,
+  nestTarget,
   onRinomina,
   onSposta,
   onElimina,
@@ -363,6 +485,8 @@ function RigaCategoria({
   radici: Categoria[];
   figliDiretti: (id: string) => Categoria[];
   occupato: boolean;
+  registraRiga: (id: string, el: HTMLElement | null) => void;
+  nestTarget: string | null;
   onRinomina: (id: string, nome: string) => void;
   onSposta: (id: string, parentId: string | null) => void;
   onElimina: (categoria: Categoria) => void;
@@ -440,13 +564,30 @@ function RigaCategoria({
     </select>
   );
 
+  const bersaglioNest = nestTarget === categoria.id;
+
   return (
     <div
+      ref={(el) => registraRiga(categoria.id, el)}
       className={[
-        "rounded-2xl bg-white p-2.5 shadow-soft ring-1 transition-shadow",
-        ctx.inTrascinamento ? "shadow-lg ring-sea" : "ring-line",
+        "relative rounded-2xl bg-white p-2.5 shadow-soft ring-1 transition-shadow",
+        bersaglioNest
+          ? "bg-sea/[0.06] ring-2 ring-sea shadow-lg"
+          : ctx.inTrascinamento
+            ? "shadow-lg ring-sea"
+            : "ring-line",
       ].join(" ")}
     >
+      {/* Indicatore "rilascia per mettere dentro" durante il drag di nidificazione. */}
+      {bersaglioNest && (
+        <span className="pointer-events-none absolute -top-2 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-sea px-2 py-0.5 text-[11px] font-bold text-white shadow-sea">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true">
+            <path d="M9 10 4 15l5 5" />
+            <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+          </svg>
+          dentro
+        </span>
+      )}
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -461,7 +602,7 @@ function RigaCategoria({
             }
           }}
           disabled={occupato}
-          aria-label={`Trascina per riordinare ${categoria.nome}; frecce su e giu per spostare`}
+          aria-label={`Trascina ${categoria.nome}: sui bordi di una riga per riordinare, sul centro per metterla dentro; frecce su e giu per riordinare`}
           className="grid h-11 w-11 flex-none touch-none cursor-grab select-none place-items-center rounded-lg text-muted transition-colors hover:bg-surface active:cursor-grabbing disabled:opacity-40"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
