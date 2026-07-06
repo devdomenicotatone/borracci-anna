@@ -1,8 +1,9 @@
 "use client";
 
 // Pannello "Condividi" del prodotto: QR scaricabile/stampabile + condivisione
-// nativa del telefono, copia link, WhatsApp ed email. Rende disponibile ai
-// clienti (e al gestore) cio che il browser fa dalla barra indirizzi.
+// nativa del telefono (con la FOTO, dove supportata), copia link, WhatsApp ed
+// email. Rende disponibile ai clienti (e al gestore) cio che il browser fa dalla
+// barra indirizzi.
 //
 // Due varianti d'innesto, stesso contenuto:
 //   - "pill"  (default): bottone testuale con popover ancorato. Usato nella PDP.
@@ -41,20 +42,39 @@ function IconaShare({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+/** Estensione file da MIME, per dare un nome sensato al file condiviso. */
+function estensione(mime: string): string {
+  if (mime.includes("webp")) return "webp";
+  if (mime.includes("png")) return "png";
+  return "jpg";
+}
+
+// Elementi tabbabili dentro il pannello: per il focus iniziale e il focus-trap.
+const FOCUSABILI =
+  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function CondividiProdotto({
   slug,
   nome,
+  immagine = null,
+  prezzo = null,
   variante = "pill",
 }: {
   slug: string;
   nome: string;
+  /** Foto del prodotto: inclusa nella condivisione nativa dove supportata. */
+  immagine?: string | null;
+  /** Prezzo gia formattato (es. "19,00 €"): arricchisce il testo condiviso. */
+  prezzo?: string | null;
   variante?: "pill" | "icona";
 }) {
   const [aperto, setAperto] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [qrErrore, setQrErrore] = useState(false);
-  const [copiato, setCopiato] = useState(false);
+  const [copia, setCopia] = useState<"idle" | "ok" | "errore">("idle");
   const contenitore = useRef<HTMLDivElement>(null);
+  const pannelloRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // URL canonico del prodotto, risolto su richiesta. In produzione la base
   // arriva da NEXT_PUBLIC_SITE_URL (inline lato client); in anteprima locale,
@@ -74,29 +94,69 @@ export default function CondividiProdotto({
   // `navigator` e definito e non c'e mismatch di idratazione.
   const nativoOk = typeof navigator !== "undefined" && !!navigator.share;
 
-  // Chiusura con Esc (sempre) e, nella variante popover, con click esterno. La
-  // modale gestisce il click fuori tramite l'overlay.
+  // Esc + focus-trap + focus-return + scroll-lock (modale) + click-esterno (pill).
   useEffect(() => {
     if (!aperto) return;
+    const trigger = triggerRef.current;
+    const cont = contenitore.current;
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setAperto(false);
+      if (e.key === "Escape") {
+        setAperto(false);
+        return;
+      }
+      // Focus-trap: solo nella MODALE (icona), che blocca la pagina. Nel popover
+      // non-modale il Tab deve poter uscire — e uscendo lo chiude (vedi focusout).
+      if (e.key !== "Tab" || variante !== "icona") return;
+      const p = pannelloRef.current;
+      if (!p) return;
+      const focusabili = [...p.querySelectorAll<HTMLElement>(FOCUSABILI)];
+      if (focusabili.length === 0) return;
+      const primo = focusabili[0];
+      const ultimo = focusabili[focusabili.length - 1];
+      if (e.shiftKey && document.activeElement === primo) {
+        e.preventDefault();
+        ultimo.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimo) {
+        e.preventDefault();
+        primo.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
+
+    // Popover (pill): niente trap. Si chiude al click fuori e quando il focus
+    // esce (Tab-out), cosi non resta aperto orfano dietro la navigazione.
     let onClick: ((e: MouseEvent) => void) | undefined;
-    if (variante === "pill") {
+    let onFocusOut: ((e: FocusEvent) => void) | undefined;
+    if (variante === "pill" && cont) {
       onClick = (e: MouseEvent) => {
-        if (
-          contenitore.current &&
-          !contenitore.current.contains(e.target as Node)
-        ) {
-          setAperto(false);
-        }
+        if (!cont.contains(e.target as Node)) setAperto(false);
       };
       document.addEventListener("mousedown", onClick);
+      onFocusOut = (e: FocusEvent) => {
+        if (!cont.contains(e.relatedTarget as Node | null)) setAperto(false);
+      };
+      cont.addEventListener("focusout", onFocusOut);
     }
+
+    // La modale copre la pagina: blocca lo scroll dietro finche e aperta.
+    const overflowPrec = document.body.style.overflow;
+    if (variante === "icona") document.body.style.overflow = "hidden";
+
+    // Sposta il focus dentro il pannello, gia montato a questo punto: l'effect
+    // gira dopo il commit (portale della modale incluso). Sincrono, senza rAF,
+    // cosi funziona anche quando la tab non e in primo piano.
+    const p = pannelloRef.current;
+    const primoFocus = p?.querySelector<HTMLElement>(FOCUSABILI);
+    (primoFocus ?? p)?.focus();
+
     return () => {
       document.removeEventListener("keydown", onKey);
       if (onClick) document.removeEventListener("mousedown", onClick);
+      if (onFocusOut) cont?.removeEventListener("focusout", onFocusOut);
+      if (variante === "icona") document.body.style.overflow = overflowPrec;
+      // Riporta il focus al trigger: chi naviga da tastiera non lo perde.
+      trigger?.focus();
     };
   }, [aperto, variante]);
 
@@ -128,9 +188,36 @@ export default function CondividiProdotto({
     a.remove();
   }
 
+  const url = risolviUrl();
+  // Testo brandizzato col prezzo: anteprima piu invogliante di nome+link secco.
+  const frase = `Guarda ${nome}${prezzo ? ` a ${prezzo}` : ""} su Anna Shop`;
+  const waHref = `https://wa.me/?text=${encodeURIComponent(`${frase}\n${url}`)}`;
+  const mailHref = `mailto:?subject=${encodeURIComponent(nome)}&body=${encodeURIComponent(`${frase}\n${url}`)}`;
+
   async function condividiNativo() {
+    const base: ShareData = { title: nome, text: frase, url };
     try {
-      await navigator.share({ title: nome, text: nome, url: risolviUrl() });
+      // Prova a includere la foto: WhatsApp/Instagram la mostrano in anteprima.
+      // Se non e recuperabile o non condivisibile, ripiega sul solo link.
+      if (immagine && typeof navigator.canShare === "function") {
+        try {
+          const resp = await fetch(immagine);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const file = new File([blob], `${slug}.${estensione(blob.type)}`, {
+              type: blob.type,
+            });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({ ...base, files: [file] });
+              setAperto(false);
+              return;
+            }
+          }
+        } catch {
+          // foto non recuperabile: procede con la condivisione del solo link
+        }
+      }
+      await navigator.share(base);
       setAperto(false);
     } catch {
       // condivisione annullata dall'utente: nessuna azione
@@ -139,17 +226,16 @@ export default function CondividiProdotto({
 
   async function copiaLink() {
     try {
-      await navigator.clipboard.writeText(risolviUrl());
-      setCopiato(true);
-      window.setTimeout(() => setCopiato(false), 2000);
+      await navigator.clipboard.writeText(url);
+      setCopia("ok");
+      // Lascia leggere il "copiato", poi chiudi.
+      window.setTimeout(() => setAperto(false), 900);
     } catch {
-      // clipboard non disponibile: restano gli altri canali (WhatsApp/email)
+      // clipboard non disponibile: segnala e lascia gli altri canali (WA/email)
+      setCopia("errore");
+      window.setTimeout(() => setCopia("idle"), 2500);
     }
   }
-
-  const url = risolviUrl();
-  const waHref = `https://wa.me/?text=${encodeURIComponent(`${nome} ${url}`)}`;
-  const mailHref = `mailto:?subject=${encodeURIComponent(nome)}&body=${encodeURIComponent(`${nome}\n${url}`)}`;
 
   // Contenuto condiviso da popover e modale: QR + canali di condivisione.
   const pannello = (
@@ -206,7 +292,12 @@ export default function CondividiProdotto({
           </button>
         )}
 
-        <button type="button" onClick={copiaLink} className={RIGA_AZIONE}>
+        <button
+          type="button"
+          onClick={copiaLink}
+          className={RIGA_AZIONE}
+          aria-live="polite"
+        >
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -214,19 +305,24 @@ export default function CondividiProdotto({
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-4 w-4 text-sea"
+            className={`h-4 w-4 ${copia === "errore" ? "text-coral" : "text-sea"}`}
             aria-hidden="true"
           >
             <rect x="9" y="9" width="13" height="13" rx="2" />
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
           </svg>
-          {copiato ? "Link copiato!" : "Copia link"}
+          {copia === "ok"
+            ? "Link copiato!"
+            : copia === "errore"
+              ? "Copia non riuscita"
+              : "Copia link"}
         </button>
 
         <a
           href={waHref}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => setAperto(false)}
           className={RIGA_AZIONE}
         >
           <svg
@@ -244,7 +340,7 @@ export default function CondividiProdotto({
           WhatsApp
         </a>
 
-        <a href={mailHref} className={RIGA_AZIONE}>
+        <a href={mailHref} onClick={() => setAperto(false)} className={RIGA_AZIONE}>
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -269,6 +365,7 @@ export default function CondividiProdotto({
     return (
       <>
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => (aperto ? setAperto(false) : apri())}
           aria-haspopup="dialog"
@@ -283,15 +380,17 @@ export default function CondividiProdotto({
         {aperto &&
           createPortal(
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+              className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
               onClick={() => setAperto(false)}
             >
               <div
+                ref={pannelloRef}
                 role="dialog"
                 aria-modal="true"
                 aria-label={`Condividi ${nome}`}
+                tabIndex={-1}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl ring-1 ring-line"
+                className="animate-pop-in w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl outline-none ring-1 ring-line"
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -306,7 +405,6 @@ export default function CondividiProdotto({
                     type="button"
                     onClick={() => setAperto(false)}
                     aria-label="Chiudi"
-                    autoFocus
                     className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-foreground"
                   >
                     <svg
@@ -336,6 +434,7 @@ export default function CondividiProdotto({
   return (
     <div ref={contenitore} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => (aperto ? setAperto(false) : apri())}
         aria-haspopup="dialog"
@@ -348,9 +447,11 @@ export default function CondividiProdotto({
 
       {aperto && (
         <div
+          ref={pannelloRef}
           role="dialog"
           aria-label="Condividi questo prodotto"
-          className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl bg-white p-4 text-left shadow-xl ring-1 ring-line"
+          tabIndex={-1}
+          className="animate-pop-in absolute right-0 top-full z-30 mt-2 w-72 origin-top-right rounded-2xl bg-white p-4 text-left shadow-xl outline-none ring-1 ring-line"
         >
           {pannello}
         </div>

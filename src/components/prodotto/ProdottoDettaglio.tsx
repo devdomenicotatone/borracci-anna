@@ -182,7 +182,12 @@ export default function ProdottoDettaglio({
             </svg>
             Dettaglio prodotto
           </span>
-          <CondividiProdotto slug={prodotto.slug} nome={prodotto.nome} />
+          <CondividiProdotto
+            slug={prodotto.slug}
+            nome={prodotto.nome}
+            immagine={prodotto.immagine_url}
+            prezzo={formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
+          />
         </div>
 
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">

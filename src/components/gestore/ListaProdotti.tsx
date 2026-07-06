@@ -603,6 +603,8 @@ export default function ListaProdotti({
                         <CondividiProdotto
                           slug={p.slug}
                           nome={p.nome}
+                          immagine={p.immagine_url}
+                          prezzo={formatPrezzo(p.prezzo_cents, p.valuta)}
                           variante="icona"
                         />
                         <a
