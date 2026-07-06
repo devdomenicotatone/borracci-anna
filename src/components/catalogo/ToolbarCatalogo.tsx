@@ -313,6 +313,14 @@ function DrawerFiltri({
 }) {
   const pannelloRef = useRef<HTMLDivElement>(null);
   const elementoPrecedenteRef = useRef<HTMLElement | null>(null);
+  // onChiudi letta via ref: l'effetto di setup gira SOLO al mount, ma la ESC
+  // deve sempre chiamare l'ultima onChiudi. Senza questo, mettere onChiudi tra
+  // le dipendenze rieseguirebbe l'effetto a ogni render (a ogni tasto digitato
+  // il focus tornava al primo elemento = la X).
+  const onChiudiRef = useRef(onChiudi);
+  useEffect(() => {
+    onChiudiRef.current = onChiudi;
+  }, [onChiudi]);
 
   // Scroll-lock, focus iniziale, ESC e focus-trap (pattern del CartDrawer).
   useEffect(() => {
@@ -332,7 +340,7 @@ function DrawerFiltri({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onChiudi();
+        onChiudiRef.current();
         return;
       }
       if (e.key === "Tab") {
@@ -357,7 +365,9 @@ function DrawerFiltri({
       document.body.style.overflow = overflowPrecedente;
       elementoPrecedenteRef.current?.focus?.();
     };
-  }, [onChiudi]);
+    // Solo al mount/unmount: il focus iniziale non deve ripetersi a ogni render,
+    // altrimenti ogni tasto digitato riporta il focus al primo elemento (la X).
+  }, []);
 
   const placeholderMin =
     facette.prezzoMinCents != null
