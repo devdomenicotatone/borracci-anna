@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 
 import BloccoAcquisto from "@/components/prodotto/BloccoAcquisto";
 import BloccoRichiesta from "@/components/prodotto/BloccoRichiesta";
+import CondividiProdotto from "@/components/prodotto/CondividiProdotto";
 import GalleriaProdotto, {
   type FotoGalleria,
 } from "@/components/prodotto/GalleriaProdotto";
@@ -164,22 +165,25 @@ export default function ProdottoDettaglio({
 
       {/* Dettagli e acquisto */}
       <div className="flex flex-col md:sticky md:top-6">
-        <span className="mb-2 inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
-          <svg
-            className="h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
-            <circle cx="12" cy="12" r="3.4" />
-          </svg>
-          Dettaglio prodotto
-        </span>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-sea">
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+              <circle cx="12" cy="12" r="3.4" />
+            </svg>
+            Dettaglio prodotto
+          </span>
+          <CondividiProdotto slug={prodotto.slug} nome={prodotto.nome} />
+        </div>
 
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           {prodotto.nome}

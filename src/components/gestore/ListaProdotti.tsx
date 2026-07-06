@@ -45,6 +45,7 @@ import {
 } from "@/lib/filtri-gestore";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import ToggleAttivo from "@/components/gestore/ToggleAttivo";
+import CondividiProdotto from "@/components/prodotto/CondividiProdotto";
 import { useToast } from "@/components/gestore/Toaster";
 
 /** Una riga della lista, gia proiettata dal server (niente sku/codice: la
@@ -594,29 +595,37 @@ export default function ListaProdotti({
                     />
                   </div>
                   <div className="flex items-center justify-end gap-2">
-                    {/* Scarica l'immagine social (storia). Solo per gli attivi:
-                        il poster legge il catalogo attivo. Fuori dal Link riga. */}
+                    {/* Condivisione (QR/link) e download immagine social. Solo
+                        per gli attivi: la PDP e il poster leggono il catalogo
+                        attivo, quindi per un nascosto porterebbero a un 404. */}
                     {p.attivo && (
-                      <a
-                        href={`/prodotti/${p.slug}/social`}
-                        download={`anna-shop-${p.slug}-storia.png`}
-                        title="Scarica immagine per social"
-                        aria-label={`Scarica immagine social di ${p.nome}`}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted ring-1 ring-line transition-colors hover:text-sea hover:ring-sea"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                          aria-hidden="true"
+                      <>
+                        <CondividiProdotto
+                          slug={p.slug}
+                          nome={p.nome}
+                          variante="icona"
+                        />
+                        <a
+                          href={`/prodotti/${p.slug}/social`}
+                          download={`anna-shop-${p.slug}-storia.png`}
+                          title="Scarica immagine per social"
+                          aria-label={`Scarica immagine social di ${p.nome}`}
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted ring-1 ring-line transition-colors hover:text-sea hover:ring-sea"
                         >
-                          <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                        </svg>
-                      </a>
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                          </svg>
+                        </a>
+                      </>
                     )}
                     <div className="flex flex-col items-end gap-2">
                       <span
