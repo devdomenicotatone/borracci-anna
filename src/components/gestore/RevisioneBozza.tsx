@@ -9,6 +9,7 @@
 import { useMemo, useState } from "react";
 
 import type { BozzaImport } from "@/lib/gestore/import-actions";
+import type { TargetBlt } from "@/lib/gestore/fornitori/ingrossoblt";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
@@ -27,6 +28,15 @@ const inputCls =
 // Chip taglia = scala del negozio (fonte unica src/lib/catalogo.ts); le taglie
 // proposte dal server fuori scala (es. "8 anni") diventano chip extra.
 const TAGLIE_CHIP: string[] = [...TAGLIE];
+
+// Etichetta del target dichiarato dal fornitore (bozza.target), mostrata come
+// suggerimento sotto il selettore categoria.
+const LABEL_TARGET: Record<TargetBlt, string> = {
+  uomo: "Uomo",
+  donna: "Donna",
+  bambino: "Bambino",
+  unisex: "Unisex",
+};
 
 /** Dati confermati dal gestore, pronti per creaProdottoDaImportAction. */
 export interface DatiRevisione {
@@ -112,6 +122,11 @@ export default function RevisioneBozza({
   // Divisione taglie per pubblico: guida quali selettori categoria mostrare (un
   // prodotto misto uomo+bambino diventa due schede, una per pubblico).
   const split = useMemo(() => dividiTagliePerPubblico(taglie), [taglie]);
+  // Target dichiarato dal fornitore: contesto per la scelta della categoria,
+  // mostrato nel suggerimento del primo selettore visibile.
+  const notaTarget = bozza.target
+    ? `Il fornitore lo classifica «${LABEL_TARGET[bozza.target]}».`
+    : "";
 
   function toggleFoto(u: string) {
     setFotoSel((sel) =>
@@ -323,11 +338,14 @@ export default function RevisioneBozza({
           <Campo
             label={split.bambino.length > 0 ? "Categoria adulto" : "Categoria"}
             htmlFor="r-cat-adulto"
-            hint={
+            hint={[
               split.bambino.length > 0
                 ? `Per le taglie ${split.adulto.join(", ")}.`
-                : "Puoi cambiarla in ogni momento dalla scheda prodotto."
-            }
+                : "Puoi cambiarla in ogni momento dalla scheda prodotto.",
+              notaTarget,
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             <CategoriaSelect
               id="r-cat-adulto"
@@ -345,7 +363,9 @@ export default function RevisioneBozza({
             hint={
               split.adulto.length > 0
                 ? `Per le taglie ${split.bambino.join(", ")} — scheda separata (codice -B).`
-                : "Puoi cambiarla in ogni momento dalla scheda prodotto."
+                : ["Puoi cambiarla in ogni momento dalla scheda prodotto.", notaTarget]
+                    .filter(Boolean)
+                    .join(" ")
             }
           >
             <CategoriaSelect

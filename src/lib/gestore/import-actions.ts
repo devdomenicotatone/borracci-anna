@@ -46,6 +46,7 @@ import {
   segnalaSuccessoFornitore,
   urlFornitoreValido,
   type ProdottoBlt,
+  type TargetBlt,
   type VoceListingBlt,
 } from "@/lib/gestore/fornitori/ingrossoblt";
 
@@ -142,6 +143,7 @@ export interface BozzaImport {
   foto: string[];
   taglie: string[]; //        proposte (default S-XXL se il parser non le trova)
   colore: string | null; //   un solo colore per scheda (dal fornitore), null se non rilevato
+  target: TargetBlt | null; // pubblico dichiarato dal fornitore: smista le categorie del batch
   avvisi: string[];
 }
 
@@ -509,6 +511,7 @@ export async function analizzaUrlFornitoreAction(
       foto: prodotto.foto,
       taglie,
       colore: prodotto.colore ? coloreCanonico(prodotto.colore) : null,
+      target: prodotto.target,
       avvisi,
     },
   };

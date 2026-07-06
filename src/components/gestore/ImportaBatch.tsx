@@ -2,9 +2,10 @@
 
 // Flusso massivo "Importa da fornitore": da una pagina categoria/listing di
 // Ingrosso BLT a N schede prodotto. Tre schermate:
-//   1) CONFIGURA: categoria di destinazione (con creazione sottocategoria al
-//      volo), modalita (automatica / con revisione), opzioni (riscrittura AI,
-//      pubblicazione a fine import), anteprima dei prodotti trovati.
+//   1) CONFIGURA: categorie di destinazione per TARGET del fornitore (Uomo/
+//      Donna/Bambino/Unisex, con creazione sottocategoria al volo), modalita
+//      (automatica / con revisione), opzioni (riscrittura AI, pubblicazione a
+//      fine import), anteprima dei prodotti trovati.
 //   2) LAVORA: il client orchestra UN prodotto alla volta riusando le action
 //      del flusso singolo (analizza -> crea bozza -> foto una alla volta ->
 //      eventuale pubblicazione). Un errore su un prodotto non ferma gli altri;
@@ -27,7 +28,10 @@ import {
 } from "@/lib/gestore/import-actions";
 import { toggleAttivoAction } from "@/lib/gestore/actions";
 import { creaCategoriaAction } from "@/lib/gestore/categorie-actions";
-import type { VoceListingBlt } from "@/lib/gestore/fornitori/ingrossoblt";
+import type {
+  TargetBlt,
+  VoceListingBlt,
+} from "@/lib/gestore/fornitori/ingrossoblt";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import RevisioneBozza, {
   type DatiRevisione,
@@ -56,6 +60,8 @@ interface ItemImport {
   url: string;
   sku: string | null;
   nome: string | null;
+  /** Target dalla card del listing; la scheda, se lo dichiara, ha precedenza. */
+  target: TargetBlt | null;
   stato: StatoItem;
   prodottoId?: string;
   fotoOk?: number;
@@ -85,6 +91,39 @@ const STATO_UI: Record<StatoItem, { label: string; cls: string; spin?: boolean }
   saltato: { label: "Saltato", cls: "bg-surface-2 text-muted" },
   errore: { label: "Errore", cls: "bg-coral/10 text-coral" },
 };
+
+// Righe di destinazione del batch: i quattro target del fornitore piu la riga
+// di riserva per i prodotti senza target leggibile. La scheda ADULTO di un
+// prodotto va nella riga del suo target (per un target "bambino" e la riga
+// Bambino); le taglie bimbo di un prodotto misto vanno SEMPRE alla riga
+// Bambino come scheda separata (codice -B). Spegnere una riga salta cio che
+// vi ricade.
+type ChiaveDest = TargetBlt | "senzaTarget";
+
+const CHIAVI_DEST: readonly ChiaveDest[] = [
+  "uomo",
+  "donna",
+  "bambino",
+  "unisex",
+  "senzaTarget",
+];
+
+const DEST_UI: Record<ChiaveDest, { label: string; nota?: string }> = {
+  uomo: { label: "Uomo" },
+  donna: { label: "Donna" },
+  bambino: { label: "Bambino", nota: "più le taglie bimbo dei prodotti misti" },
+  unisex: { label: "Unisex" },
+  senzaTarget: {
+    label: "Senza target",
+    nota: "il fornitore non dichiara il pubblico",
+  },
+};
+
+interface RigaDest {
+  importa: boolean;
+  /** Id della categoria di destinazione; "" = nessuna categoria. */
+  catId: string;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -124,12 +163,21 @@ export default function ImportaBatch({
 
   // --- Configurazione -------------------------------------------------------
   const [categorieList, setCategorieList] = useState<Categoria[]>(categorie);
-  // Categorie di destinazione: una per pubblico. Un prodotto misto (uomo+bambino)
-  // crea DUE schede, ognuna nella sua categoria. Spegnere un pubblico lo esclude.
-  const [catAdulto, setCatAdulto] = useState("");
-  const [catBambino, setCatBambino] = useState("");
-  const [importaAdulto, setImportaAdulto] = useState(true);
-  const [importaBambino, setImportaBambino] = useState(true);
+  // Categorie di destinazione: una riga per target del fornitore. Pre-compilate
+  // cercando tra le macro-categorie una con lo stesso nome del target (es.
+  // "uomo" -> macro "Uomo"): proposta trasparente, modificabile riga per riga.
+  const [dest, setDest] = useState<Record<ChiaveDest, RigaDest>>(() => {
+    const radici = categorie.filter((c) => !c.parent_id);
+    const perNome = (nome: string) =>
+      radici.find((c) => c.nome.trim().toLowerCase() === nome)?.id ?? "";
+    return {
+      uomo: { importa: true, catId: perNome("uomo") },
+      donna: { importa: true, catId: perNome("donna") },
+      bambino: { importa: true, catId: perNome("bambino") },
+      unisex: { importa: true, catId: perNome("unisex") },
+      senzaTarget: { importa: true, catId: "" },
+    };
+  });
   const [modalita, setModalita] = useState<"auto" | "revisione">("auto");
   const [pubblica, setPubblica] = useState(false);
   const [riscriviAI, setRiscriviAI] = useState(true);
@@ -151,6 +199,7 @@ export default function ImportaBatch({
       url: v.url,
       sku: v.sku,
       nome: v.nome,
+      target: v.target,
       stato: v.sku && esistenti.has(v.sku) ? "duplicato" : "attesa",
     })),
   );
@@ -186,6 +235,10 @@ export default function ImportaBatch({
       j === i ? { ...x, ...patch } : x,
     );
     setItems(itemsRef.current);
+  }
+
+  function aggiornaDest(chiave: ChiaveDest, patch: Partial<RigaDest>) {
+    setDest((d) => ({ ...d, [chiave]: { ...d[chiave], ...patch } }));
   }
 
   // Il lavoro va difeso dalla chiusura accidentale della scheda browser.
@@ -472,6 +525,11 @@ export default function ImportaBatch({
       return { bloccato: false };
     }
     const b = r.bozza;
+    // Smistamento: vale il target della scheda (autorevole) o, in riserva,
+    // quello della card del listing. La scheda adulto va nella riga del suo
+    // target; per un target "bambino" anche le eventuali taglie lettera vanno
+    // nella riga Bambino (lo split per taglie resta, cambia solo la categoria).
+    const rigaAdulto = dest[b.target ?? item.target ?? "senzaTarget"];
     await creaConSplit(
       idx,
       {
@@ -484,8 +542,11 @@ export default function ImportaBatch({
         soloOnline,
       },
       b.taglie,
-      { importa: importaAdulto, categoriaId: catAdulto || null },
-      { importa: importaBambino, categoriaId: catBambino || null },
+      { importa: rigaAdulto.importa, categoriaId: rigaAdulto.catId || null },
+      {
+        importa: dest.bambino.importa,
+        categoriaId: dest.bambino.catId || null,
+      },
     );
     return { bloccato: false };
   }
@@ -746,9 +807,15 @@ export default function ImportaBatch({
         }
         setCategorieList(r.categorie);
         const nuova = r.categorie.find((c) => !prima.has(c.id));
-        // Assegna la nuova categoria al primo pubblico ATTIVO (il bambino se
-        // l'import adulto e spento), non a un setter fisso.
-        if (nuova) (importaAdulto ? setCatAdulto : setCatBambino)(nuova.id);
+        // Assegna la nuova categoria alla prima riga ATTIVA ancora scoperta:
+        // e quasi sempre quella per cui la si sta creando. Se sono tutte
+        // assegnate non si tocca nulla: la si sceglie a mano nella riga giusta.
+        if (nuova) {
+          const scoperta = righeVisibili.find(
+            (k) => dest[k].importa && !dest[k].catId,
+          );
+          if (scoperta) aggiornaDest(scoperta, { catId: nuova.id });
+        }
         setNuovaCatAperta(false);
         setNuovaCatNome("");
         mostra("Categoria creata.", "ok");
@@ -772,6 +839,23 @@ export default function ImportaBatch({
   const errori = items.filter((x) => x.stato === "errore").length;
   const pct = totale > 0 ? Math.round((completati / totale) * 100) : 0;
   const radici = categorieList.filter((c) => !c.parent_id);
+  // Quanti prodotti del listing ricadono in ogni riga (dal target delle card):
+  // conteggio informativo — la scheda puo riclassificare qualche prodotto.
+  const conteggiTarget = useMemo(() => {
+    const n: Record<ChiaveDest, number> = {
+      uomo: 0,
+      donna: 0,
+      bambino: 0,
+      unisex: 0,
+      senzaTarget: 0,
+    };
+    for (const v of voci) n[v.target ?? "senzaTarget"]++;
+    return n;
+  }, [voci]);
+  // La riga "senza target" compare solo se nel listing ce ne sono davvero.
+  const righeVisibili = CHIAVI_DEST.filter(
+    (k) => k !== "senzaTarget" || conteggiTarget.senzaTarget > 0,
+  );
 
   // ==== FASE CONFIGURA ================================================================
   if (fase === "configura") {
@@ -824,59 +908,48 @@ export default function ImportaBatch({
               </button>
             </div>
 
-            <div className="flex flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line">
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  htmlFor="b-cat-adulto"
-                  className="font-display text-sm font-bold text-foreground"
+            {righeVisibili.map((k) => {
+              const riga = dest[k];
+              const ui = DEST_UI[k];
+              const n = conteggiTarget[k];
+              return (
+                <div
+                  key={k}
+                  className="flex flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line"
                 >
-                  Adulto{" "}
-                  <span className="font-medium text-muted">· taglie S-XXL</span>
-                </label>
-                <SwitchMini
-                  on={importaAdulto}
-                  onClick={() => setImportaAdulto((v) => !v)}
-                  label="Importa i prodotti adulto"
-                />
-              </div>
-              <CategoriaSelect
-                id="b-cat-adulto"
-                categorie={categorieList}
-                value={catAdulto}
-                onChange={setCatAdulto}
-                disabled={!importaAdulto}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-soft ring-1 ring-line">
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  htmlFor="b-cat-bambino"
-                  className="font-display text-sm font-bold text-foreground"
-                >
-                  Bambino{" "}
-                  <span className="font-medium text-muted">
-                    · taglie 3-4…14-15
-                  </span>
-                </label>
-                <SwitchMini
-                  on={importaBambino}
-                  onClick={() => setImportaBambino((v) => !v)}
-                  label="Importa i prodotti bambino"
-                />
-              </div>
-              <CategoriaSelect
-                id="b-cat-bambino"
-                categorie={categorieList}
-                value={catBambino}
-                onChange={setCatBambino}
-                disabled={!importaBambino}
-              />
-            </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor={`b-cat-${k}`}
+                      className="font-display text-sm font-bold text-foreground"
+                    >
+                      {ui.label}{" "}
+                      <span className="font-medium text-muted">
+                        · {n === 0 ? "nessuno" : n} nel listing
+                      </span>
+                    </label>
+                    <SwitchMini
+                      on={riga.importa}
+                      onClick={() => aggiornaDest(k, { importa: !riga.importa })}
+                      label={`Importa i prodotti ${ui.label}`}
+                    />
+                  </div>
+                  {ui.nota && <p className="text-xs text-muted">{ui.nota}</p>}
+                  <CategoriaSelect
+                    id={`b-cat-${k}`}
+                    categorie={categorieList}
+                    value={riga.catId}
+                    onChange={(v) => aggiornaDest(k, { catId: v })}
+                    disabled={!riga.importa}
+                  />
+                </div>
+              );
+            })}
 
             <p className="text-xs text-muted">
-              Un prodotto con entrambe le taglie diventa due schede (la bambino
-              col codice «-B»). Spegni un pubblico per non importarlo. In «con
+              Ogni prodotto va nella categoria del suo target, come dichiarato
+              dal fornitore. Un prodotto con taglie adulto e bambino diventa
+              due schede: quella bambino (codice «-B») segue la riga Bambino.
+              Spegni una riga per non importare quei prodotti. In «con
               revisione» puoi cambiare tutto prodotto per prodotto.
             </p>
             {nuovaCatAperta && (
@@ -1018,14 +1091,18 @@ export default function ImportaBatch({
   if (fase === "lavora" && modalita === "revisione") {
     const posizione = Math.min(completati + 1, totale);
     if (bozzaCorrente && correnteIdx !== null) {
+      // Preselezione dalla riga del target del prodotto (scheda, o card in
+      // riserva): nel form resta comunque tutto modificabile.
+      const rigaAdulto =
+        dest[bozzaCorrente.target ?? items[correnteIdx].target ?? "senzaTarget"];
       return (
         <RevisioneBozza
           key={items[correnteIdx].url}
           bozza={bozzaCorrente}
           codiceFallback={items[correnteIdx].sku}
           categorie={categorieList}
-          categoriaAdultoIniziale={catAdulto}
-          categoriaBambinoIniziale={catBambino}
+          categoriaAdultoIniziale={rigaAdulto.catId}
+          categoriaBambinoIniziale={dest.bambino.catId}
           soloOnlineIniziale={soloOnline}
           intestazione={
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -1288,6 +1365,7 @@ function RigaItem({
         </p>
         <p className="truncate font-mono text-[11px] text-muted">
           {item.sku ?? "—"}
+          {item.target ? ` · ${DEST_UI[item.target].label}` : ""}
           {item.nota ? ` · ${item.nota}` : ""}
         </p>
       </div>

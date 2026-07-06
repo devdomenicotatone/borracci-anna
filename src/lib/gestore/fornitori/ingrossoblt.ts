@@ -18,6 +18,7 @@ export interface ProdottoBlt {
   foto: string[]; //                URL assoluti, deduplicati, in ordine galleria
   taglie: string[]; //              [] se non rilevabili
   colore: string | null; //         un solo colore per scheda (ogni URL = un colore); null se non rilevato
+  target: TargetBlt | null; //      pubblico dichiarato dal fornitore; null se non rilevato
   attributi: { chiave: string; valore: string }[];
   descrizioneFornitore: string; //  testo descrizione/dettagli se presente, anche ""
 }
@@ -397,6 +398,49 @@ function estraiTaglie(html: string): string[] {
   return [...taglie].sort((a, b) => rangoTaglia(a) - rangoTaglia(b));
 }
 
+// --- Target (pubblico) ----------------------------------------------------------
+
+// Pubblico dichiarato dal fornitore: compare come "Target - Colore" nel div
+// `product_detail_sku target`, presente sia sulla scheda sia sulle card dei
+// listing (verificato dal vivo: tutte le 25 card di una pagina listing lo
+// avevano valorizzato). E la chiave dello smistamento per categoria del
+// flusso massivo di import.
+export type TargetBlt = "uomo" | "donna" | "bambino" | "unisex";
+
+/**
+ * Testo del sottotitolo "Target - Colore" (div `product_detail_sku target`),
+ * normalizzato negli spazi, o null se il div manca o e vuoto.
+ */
+function testoTargetColore(html: string): string | null {
+  const div = html.match(/product_detail_sku target"[^>]*>\s*([^<]{1,80}?)\s*</);
+  if (!div) return null;
+  const testo = decodificaEntita(div[1]).replace(/\s+/g, " ").trim();
+  return testo || null;
+}
+
+/** Normalizza il testo target sui quattro valori noti del fornitore, o null. */
+function normalizzaTarget(testo: string): TargetBlt | null {
+  const t = testo.trim().toLowerCase();
+  return t === "uomo" || t === "donna" || t === "bambino" || t === "unisex"
+    ? (t as TargetBlt)
+    : null;
+}
+
+/**
+ * Target dal sottotitolo "Target - Colore": la parte PRIMA del primo " - "
+ * (es. "Uomo - Grigio Antracite" -> "uomo"). Sulla scheda ci si ancora al
+ * blocco principale (product-info-main) quando c'e: anche le card dei prodotti
+ * correlati hanno un div target e la prima occorrenza del documento potrebbe
+ * essere la loro. Sui frammenti di card listing l'ancora manca e si cerca
+ * dall'inizio. Best effort: null se il div manca o il testo non e un target noto.
+ */
+function estraiTarget(html: string): TargetBlt | null {
+  const inizio = html.indexOf('class="product-info-main"');
+  const testo = testoTargetColore(inizio === -1 ? html : html.slice(inizio));
+  if (!testo) return null;
+  return normalizzaTarget(testo.split(/\s[-–]\s/)[0]);
+}
+
 // --- Colore -------------------------------------------------------------------------
 
 /**
@@ -425,12 +469,13 @@ function estraiColore(html: string): string | null {
     }
   }
   // 2. Sottotitolo "Target - Colore": si prende la parte dopo l'ultimo " - ".
-  const div = html.match(/product_detail_sku target"[^>]*>\s*([^<]{1,80}?)\s*</);
-  if (div) {
-    const testo = decodificaEntita(div[1]).replace(/\s+/g, " ").trim();
+  //    "Colore: Non definito" e il testo del fornitore per "nessun colore"
+  //    (verificato dal vivo): va scartato, non e un nome di colore.
+  const testo = testoTargetColore(html);
+  if (testo) {
     const parti = testo.split(/\s[-–]\s/);
     const c = parti.length > 1 ? parti[parti.length - 1].trim() : "";
-    if (c) return c;
+    if (c && !/non definito/i.test(c)) return c;
   }
   return null;
 }
@@ -491,6 +536,7 @@ export function parseProdottoBlt(html: string, url: string): ProdottoBlt {
     foto: estraiFoto(html),
     taglie: estraiTaglie(html),
     colore: estraiColore(html),
+    target: estraiTarget(html),
     attributi,
     descrizioneFornitore: estraiDescrizione(html),
   };
@@ -505,6 +551,8 @@ export interface VoceListingBlt {
   sku: string | null;
   /** Titolo della card, ripulito. */
   nome: string | null;
+  /** Pubblico dichiarato sulla card ("Uomo - Nero"), null se non leggibile. */
+  target: TargetBlt | null;
 }
 
 export interface ListingBlt {
@@ -551,7 +599,8 @@ export function paginaListingBlt(url: string, pagina: number): string {
  * Estrae le card prodotto da una pagina listing Magento. Best effort, mai
  * throw: ogni card e il blocco che inizia a `product-item-info`; dentro si
  * leggono il link scheda (anchor `product-item-link`, l'unico con quella
- * classe), il titolo e lo SKU della card (`product_detail_sku_inside`).
+ * classe), il titolo, lo SKU della card (`product_detail_sku_inside`) e il
+ * target (`product_detail_sku target`).
  */
 export function parseListingBlt(html: string): ListingBlt {
   // Totale dal toolbar ("Articoli 1-25 di 60", o "10 Articoli" su pagina
@@ -595,7 +644,7 @@ export function parseListingBlt(html: string): ListingBlt {
     const sku = skuMatch
       ? decodificaEntita(skuMatch[1]).trim().toUpperCase().slice(0, 40) || null
       : null;
-    voci.push({ url, sku, nome });
+    voci.push({ url, sku, nome, target: estraiTarget(finestra) });
   }
 
   // "Nessun prodotto": il banner "message info empty" compare nella SIDEBAR di
