@@ -1,12 +1,13 @@
 "use client";
 
-// Select gerarchico delle categorie (macro > figlie), condiviso dai flussi di
-// import. Stessa resa del campo categoria di FormProdotto: optgroup per macro,
-// voce "(tutto)" per assegnare la macro stessa.
+// Select gerarchico delle categorie (macro > figlie > nipoti), condiviso dai
+// flussi di import. Stessa resa del campo categoria di FormProdotto: optgroup
+// per macro, voce "(tutto)" per assegnare la categoria di raggruppamento.
 
 import { useMemo } from "react";
 
 import { gruppiCategorie } from "@/lib/categorie-albero";
+import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
 import type { Categoria } from "@/lib/types";
 
 export default function CategoriaSelect({
@@ -22,7 +23,7 @@ export default function CategoriaSelect({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
-  // Gerarchia a 2 livelli: macro (senza parent) con le loro figlie.
+  // Gerarchia a 3 livelli: macro (senza parent) con figlie e nipoti.
   const gruppi = useMemo(() => gruppiCategorie(categorie), [categorie]);
 
   return (
@@ -35,22 +36,7 @@ export default function CategoriaSelect({
         className="h-12 w-full appearance-none rounded-2xl bg-white px-4 pr-9 text-base text-foreground ring-1 ring-line outline-none transition-shadow disabled:opacity-50"
       >
         <option value="">Nessuna categoria</option>
-        {gruppi.map(({ radice, figlie }) =>
-          figlie.length === 0 ? (
-            <option key={radice.id} value={radice.id}>
-              {radice.nome}
-            </option>
-          ) : (
-            <optgroup key={radice.id} label={radice.nome}>
-              <option value={radice.id}>{radice.nome} (tutto)</option>
-              {figlie.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nome}
-                </option>
-              ))}
-            </optgroup>
-          ),
-        )}
+        <OpzioniCategorie gruppi={gruppi} />
       </select>
       <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
         <svg

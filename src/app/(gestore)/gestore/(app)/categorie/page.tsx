@@ -4,7 +4,7 @@ import type { Categoria } from "@/lib/types";
 
 // Pagina gestione categorie. Carica in parallelo la tassonomia e il conteggio
 // prodotti per categoria (un solo fetch dei categoria_id, ridotto qui: niente
-// N+1). Il raggruppamento radici/figli lo fa il client (come FormProdotto).
+// N+1). Il raggruppamento radici/figli/nipoti lo fa il client (come FormProdotto).
 export default async function CategoriePage() {
   const { supabase } = await requireGestore();
 
@@ -28,8 +28,9 @@ export default async function CategoriePage() {
     <div className="mx-auto max-w-xl pb-24 lg:max-w-4xl">
       <h1 className="mb-1 text-xl font-semibold text-foreground">Categorie</h1>
       <p className="mb-6 text-sm text-muted">
-        Organizza il catalogo: categorie principali e sottocategorie (2 livelli).
-        Riordina con un trascinamento e sposta dove vuoi.
+        Organizza il catalogo: categorie principali e sottocategorie, fino a 3
+        livelli (es. Uomo › T-shirt › Manga). Riordina con un trascinamento e
+        sposta dove vuoi.
       </p>
       <GestoreCategorie iniziali={categorie} conteggiProdotti={conteggiProdotti} />
     </div>

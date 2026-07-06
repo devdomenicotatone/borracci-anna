@@ -7,7 +7,10 @@ export interface Categoria {
   /** Slug url-friendly, univoco (es. "polo"). */
   slug: string;
   nome: string;
-  /** Categoria padre (macro). null = categoria di primo livello (es. Uomo/Donna). */
+  /**
+   * Categoria padre. null = primo livello (es. Uomo/Donna); con la gerarchia a
+   * 3 livelli il padre puo essere una macro o una figlia (es. Manga sotto T-shirt).
+   */
   parent_id?: string | null;
   /** Ordinamento in elenco/menu (ascendente). */
   ordine: number;

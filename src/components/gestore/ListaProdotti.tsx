@@ -5,7 +5,7 @@
 // Filtri e ordinamento girano client-side sui dati gia caricati dal server
 // component padre (fino a 1000 righe: istantaneo, niente round-trip).
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -375,11 +375,26 @@ export default function ListaProdotti({
                       {radice.nome} (tutto:{" "}
                       {conteggioCon(idConDiscendenti(categorie, radice.id))})
                     </option>
-                    {figlie.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.nome} ({conteggi.perCategoria.get(f.id) ?? 0})
-                      </option>
-                    ))}
+                    {figlie.map(({ figlia, nipoti }) =>
+                      nipoti.length === 0 ? (
+                        <option key={figlia.id} value={figlia.id}>
+                          {figlia.nome} ({conteggi.perCategoria.get(figlia.id) ?? 0})
+                        </option>
+                      ) : (
+                        <Fragment key={figlia.id}>
+                          <option value={figlia.id}>
+                            {figlia.nome} (tutto:{" "}
+                            {conteggioCon(idConDiscendenti(categorie, figlia.id))})
+                          </option>
+                          {nipoti.map((n) => (
+                            <option key={n.id} value={n.id}>
+                              {"   "}
+                              {n.nome} ({conteggi.perCategoria.get(n.id) ?? 0})
+                            </option>
+                          ))}
+                        </Fragment>
+                      ),
+                    )}
                   </optgroup>
                 ),
               )}

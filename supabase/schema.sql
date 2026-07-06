@@ -618,6 +618,80 @@ update public.categorie
   where slug in ('polo', 'coreane')
     and parent_id is null;
 
+-- Barriera "massimo 3 livelli" (stesso contenuto della migration
+-- 20260706150000_categorie_tre_livelli.sql): l'invariante vive nel DB perche i
+-- check applicativi sono read-then-write su round-trip separati.
+create or replace function public.categorie_max_tre_livelli()
+returns trigger
+language plpgsql
+as $$
+declare
+  nonno uuid;
+  bisnonno uuid;
+  ha_figli boolean;
+  ha_nipoti boolean;
+begin
+  if new.parent_id is null then
+    return new;
+  end if;
+
+  if new.parent_id = new.id then
+    raise exception
+      'Gerarchia categorie: una categoria non puo essere figlia di se stessa.'
+      using errcode = 'check_violation';
+  end if;
+
+  -- Serializza tutte le mutazioni di gerarchia (rilasciato a fine transazione):
+  -- chiude anche le race "a due salti" su rami diversi dell'albero.
+  perform pg_advisory_xact_lock(hashtext('public.categorie.gerarchia'));
+
+  -- (a) Se il padre e gia al 3o livello, la nuova figlia sarebbe un 4o livello.
+  select p.parent_id into nonno
+    from public.categorie p where p.id = new.parent_id;
+  if nonno is not null then
+    select n.parent_id into bisnonno
+      from public.categorie n where n.id = nonno;
+    if bisnonno is not null then
+      raise exception
+        'Gerarchia categorie: massimo 3 livelli (la categoria scelta e gia al terzo livello).'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+
+  -- (b) Chi ha figli puo stare solo sotto una radice; chi ha anche nipoti
+  --     deve restare radice.
+  select exists (
+    select 1 from public.categorie c where c.parent_id = new.id
+  ) into ha_figli;
+  if ha_figli then
+    if nonno is not null then
+      raise exception
+        'Gerarchia categorie: massimo 3 livelli (questa categoria ha sottocategorie: puo stare solo sotto una principale).'
+        using errcode = 'check_violation';
+    end if;
+    select exists (
+      select 1
+        from public.categorie c
+        join public.categorie f on f.parent_id = c.id
+       where c.parent_id = new.id
+    ) into ha_nipoti;
+    if ha_nipoti then
+      raise exception
+        'Gerarchia categorie: massimo 3 livelli (questa categoria ha gia due livelli sotto di se).'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_categorie_max_due_livelli on public.categorie;
+drop trigger if exists trg_categorie_max_tre_livelli on public.categorie;
+create trigger trg_categorie_max_tre_livelli
+  before insert or update of parent_id on public.categorie
+  for each row execute function public.categorie_max_tre_livelli();
+
 -- Riferimento categoria sul prodotto (set null on delete).
 alter table public.prodotti
   add column if not exists categoria_id uuid

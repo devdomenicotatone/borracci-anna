@@ -1,10 +1,11 @@
 "use server";
 
 // Server Actions per la gestione delle categorie (area gestore).
-// Gerarchia a 2 LIVELLI: radici (parent_id null, es. Uomo/Donna) + figli
-// (parent_id valorizzato, es. Polo/Coreane). I consumatori (vetrina, FormProdotto,
-// GeneraDaFoto) raggruppano per parent_id e ordinano per `ordine` asc: queste
-// action tengono coerenti `ordine` (per gruppo) e `parent_id` (mai un 3o livello).
+// Gerarchia a 3 LIVELLI: radici (parent_id null, es. Uomo/Donna), figli
+// (es. T-shirt/Polo) e nipoti (es. Manga/Calcio sotto T-shirt). I consumatori
+// (vetrina, FormProdotto, GeneraDaFoto) raggruppano per parent_id e ordinano per
+// `ordine` asc: queste action tengono coerenti `ordine` (per gruppo) e
+// `parent_id` (mai un 4o livello).
 //
 // Pattern obbligatorio (come actions.ts / galleria):
 //   1) verifySession() -> early-return { ok:false, error:"Non autorizzato." };
@@ -36,10 +37,39 @@ const NON_AUTORIZZATO: EsitoCategorie = { ok: false, error: "Non autorizzato." }
 const ERRORE_RETE: EsitoCategorie = { ok: false, error: "Errore di rete. Riprova." };
 const PADRE_SPARITO =
   "La categoria principale non esiste piu. Aggiorna la pagina.";
-const TERZO_LIVELLO = "Non puoi creare un terzo livello di categorie.";
-// Codice sollevato dal trigger DB categorie_max_due_livelli (check_violation):
-// barriera autoritativa contro un 3o livello creato da mutazioni concorrenti.
+const QUARTO_LIVELLO = "Non puoi creare un quarto livello di categorie.";
+// Codice sollevato dal trigger DB categorie_max_tre_livelli (check_violation):
+// barriera autoritativa contro un 4o livello creato da mutazioni concorrenti.
 const PG_CHECK_VIOLATION = "23514";
+
+/**
+ * Profondita di una categoria (1 = radice, 2 = figlia, 3 = nipote), risalendo
+ * i parent con due letture al massimo. Null se la categoria non esiste.
+ * Throw su errore di lettura (il try/catch del chiamante ritorna ok:false):
+ * un errore di rete non deve passare per "riga assente" o "radice".
+ */
+async function profonditaCategoria(
+  supabase: SupabaseGestore,
+  id: string,
+): Promise<number | null> {
+  const { data: riga, error: errRiga } = await supabase
+    .from("categorie")
+    .select("id, parent_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (errRiga) throw errRiga;
+  if (!riga) return null;
+  if (riga.parent_id === null) return 1;
+  const { data: padre, error: errPadre } = await supabase
+    .from("categorie")
+    .select("id, parent_id")
+    .eq("id", riga.parent_id)
+    .maybeSingle();
+  if (errPadre) throw errPadre;
+  // Padre sparito nel frattempo (FK on delete set null): trattala come radice.
+  if (!padre) return 1;
+  return padre.parent_id === null ? 2 : 3;
+}
 
 /** Legge tutte le categorie ordinate. Throw su errore (il try/catch ritorna ok:false). */
 async function leggiCategorie(supabase: SupabaseGestore): Promise<Categoria[]> {
@@ -81,9 +111,10 @@ function revalida(): void {
 }
 
 /**
- * Crea una categoria. `parentId` null = categoria principale; valorizzato = figlia.
- * Anti-3o-livello: il padre deve essere una radice. Slug univoco garantito dal DB
- * (intercetta 23505 e ritenta col suffisso, niente pre-check soggetto a race).
+ * Crea una categoria. `parentId` null = categoria principale; valorizzato =
+ * figlia o nipote. Anti-4o-livello: il padre deve stare al massimo al 2o livello.
+ * Slug univoco garantito dal DB (intercetta 23505 e ritenta col suffisso,
+ * niente pre-check soggetto a race).
  */
 export async function creaCategoriaAction(input: {
   nome: string;
@@ -101,13 +132,9 @@ export async function creaCategoriaAction(input: {
 
   try {
     if (parentId !== null) {
-      const { data: padre } = await supabase
-        .from("categorie")
-        .select("id, parent_id")
-        .eq("id", parentId)
-        .maybeSingle();
-      if (!padre) return { ok: false, error: PADRE_SPARITO };
-      if (padre.parent_id !== null) return { ok: false, error: TERZO_LIVELLO };
+      const profonditaPadre = await profonditaCategoria(supabase, parentId);
+      if (profonditaPadre === null) return { ok: false, error: PADRE_SPARITO };
+      if (profonditaPadre >= 3) return { ok: false, error: QUARTO_LIVELLO };
     }
 
     const ordine = await prossimoOrdine(supabase, parentId);
@@ -124,7 +151,7 @@ export async function creaCategoriaAction(input: {
       }
       if (error.code === "23505") continue; // slug gia in uso -> nuovo suffisso
       if (error.code === "23503") return { ok: false, error: PADRE_SPARITO };
-      if (error.code === PG_CHECK_VIOLATION) return { ok: false, error: TERZO_LIVELLO };
+      if (error.code === PG_CHECK_VIOLATION) return { ok: false, error: QUARTO_LIVELLO };
       return { ok: false, error: error.message };
     }
     if (!creato) {
@@ -171,8 +198,8 @@ export async function rinominaCategoriaAction(
 
 /**
  * Sposta una categoria nella gerarchia: nuovoParentId null = promuovi a principale;
- * valorizzato = rendi figlia di quella radice. Doppia barriera anti-3o-livello:
- * la categoria spostata non deve avere figli e il nuovo padre dev'essere una radice.
+ * valorizzato = rendi figlia di quella categoria (radice o 2o livello). Barriera
+ * anti-4o-livello: profondita(nuovo padre) + altezza(sottoalbero spostato) <= 3.
  */
 export async function spostaCategoriaAction(
   id: string,
@@ -202,20 +229,39 @@ export async function spostaCategoriaAction(
     }
 
     if (parentId !== null) {
-      const { count } = await supabase
+      const profonditaPadre = await profonditaCategoria(supabase, parentId);
+      if (profonditaPadre === null) return { ok: false, error: PADRE_SPARITO };
+      if (profonditaPadre >= 3) return { ok: false, error: QUARTO_LIVELLO };
+
+      // Figli e nipoti seguono la categoria spostata: l'altezza del suo
+      // sottoalbero decide dove puo andare senza sforare il 3o livello.
+      const { data: figli, error: errFigli } = await supabase
         .from("categorie")
-        .select("id", { count: "exact", head: true })
+        .select("id")
         .eq("parent_id", id);
-      if ((count ?? 0) > 0) {
-        return { ok: false, error: "Sposta o promuovi prima le sottocategorie." };
+      if (errFigli) return { ok: false, error: errFigli.message };
+      const idsFigli = (figli ?? []).map((f) => f.id);
+      if (idsFigli.length > 0) {
+        if (profonditaPadre >= 2) {
+          return {
+            ok: false,
+            error:
+              "Le sue sottocategorie finirebbero al quarto livello: puo stare solo sotto una categoria principale.",
+          };
+        }
+        const { count, error: errNipoti } = await supabase
+          .from("categorie")
+          .select("id", { count: "exact", head: true })
+          .in("parent_id", idsFigli);
+        if (errNipoti) return { ok: false, error: errNipoti.message };
+        if ((count ?? 0) > 0) {
+          return {
+            ok: false,
+            error:
+              "Ha gia due livelli di sottocategorie: puo restare solo principale.",
+          };
+        }
       }
-      const { data: padre } = await supabase
-        .from("categorie")
-        .select("id, parent_id")
-        .eq("id", parentId)
-        .maybeSingle();
-      if (!padre) return { ok: false, error: PADRE_SPARITO };
-      if (padre.parent_id !== null) return { ok: false, error: TERZO_LIVELLO };
     }
 
     const ordine = await prossimoOrdine(supabase, parentId);
@@ -225,7 +271,7 @@ export async function spostaCategoriaAction(
       .eq("id", id);
     if (error) {
       if (error.code === "23503") return { ok: false, error: PADRE_SPARITO };
-      if (error.code === PG_CHECK_VIOLATION) return { ok: false, error: TERZO_LIVELLO };
+      if (error.code === PG_CHECK_VIOLATION) return { ok: false, error: QUARTO_LIVELLO };
       return { ok: false, error: error.message };
     }
 
@@ -277,8 +323,10 @@ export async function riordinaCategorieAction(
 
 /**
  * Elimina una categoria (sempre hard-delete, a differenza dei prodotti): entrambe
- * le FK sono ON DELETE SET NULL, quindi i prodotti restano "senza categoria" e i
- * figli vengono promossi a radice dal DB. La conferma con l'impatto (prodotti +
+ * le FK sono ON DELETE SET NULL, quindi i prodotti restano "senza categoria".
+ * I figli risalgono di un livello (sotto il padre della eliminata; a radice se
+ * era una radice): il re-parent esplicito prima del delete evita che le nipoti
+ * saltino a principali via SET NULL. La conferma con l'impatto (prodotti +
  * sottocategorie) e UI lato client, non un secondo round-trip.
  */
 export async function eliminaCategoriaAction(id: string): Promise<EsitoCategorie> {
@@ -287,6 +335,38 @@ export async function eliminaCategoriaAction(id: string): Promise<EsitoCategorie
   const { supabase } = sessione;
 
   try {
+    // Errore di lettura esplicito: degradare a null promuoverebbe i figli a
+    // radice invece di farli risalire sotto il nonno.
+    const { data: riga, error: errRiga } = await supabase
+      .from("categorie")
+      .select("id, parent_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (errRiga) return { ok: false, error: errRiga.message };
+    const nuovoParent = riga?.parent_id ?? null;
+
+    const { data: figli, error: errFigli } = await supabase
+      .from("categorie")
+      .select("id")
+      .eq("parent_id", id)
+      .order("ordine", { ascending: true })
+      .order("id", { ascending: true });
+    if (errFigli) return { ok: false, error: errFigli.message };
+
+    // Accoda i figli al gruppo di destinazione conservando il loro ordine
+    // relativo. Non atomico col delete: se il delete poi fallisce i figli
+    // restano spostati, il canonico riallinea comunque la UI.
+    if (figli && figli.length > 0) {
+      const base = await prossimoOrdine(supabase, nuovoParent);
+      for (let i = 0; i < figli.length; i++) {
+        const { error } = await supabase
+          .from("categorie")
+          .update({ parent_id: nuovoParent, ordine: base + i })
+          .eq("id", figli[i].id);
+        if (error) return { ok: false, error: error.message };
+      }
+    }
+
     const { error } = await supabase.from("categorie").delete().eq("id", id);
     if (error) {
       if (error.code === "23503") {

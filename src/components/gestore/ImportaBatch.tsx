@@ -16,7 +16,14 @@
 // saltati; la garanzia vera resta il vincolo unique su prodotti.codice, che il
 // server segnala con `duplicato: true`.
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 
 import {
@@ -39,6 +46,7 @@ import RevisioneBozza, {
 import { useToast } from "@/components/gestore/Toaster";
 import { slugify } from "@/lib/gestore/slug";
 import { dividiTagliePerPubblico } from "@/lib/catalogo";
+import { gruppiCategorie } from "@/lib/categorie-albero";
 import type { Categoria } from "@/lib/types";
 
 const inputCls =
@@ -838,7 +846,13 @@ export default function ImportaBatch({
   const saltati = items.filter((x) => x.stato === "saltato").length;
   const errori = items.filter((x) => x.stato === "errore").length;
   const pct = totale > 0 ? Math.round((completati / totale) * 100) : 0;
-  const radici = categorieList.filter((c) => !c.parent_id);
+  // Destinazioni possibili per la nuova categoria al volo: radici e figlie
+  // (una nuova categoria sotto una figlia diventa il 3o livello, es. Manga
+  // sotto Uomo › T-shirt).
+  const gruppiPadre = useMemo(
+    () => gruppiCategorie(categorieList),
+    [categorieList],
+  );
   // Quanti prodotti del listing ricadono in ogni riga (dal target delle card):
   // conteggio informativo — la scheda puo riclassificare qualche prodotto.
   const conteggiTarget = useMemo(() => {
@@ -970,10 +984,15 @@ export default function ImportaBatch({
                     className="h-12 w-full appearance-none rounded-2xl bg-white px-4 pr-9 text-base text-foreground ring-1 ring-line outline-none"
                   >
                     <option value="">— macro —</option>
-                    {radici.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        Sotto {r.nome}
-                      </option>
+                    {gruppiPadre.map(({ radice, figlie }) => (
+                      <Fragment key={radice.id}>
+                        <option value={radice.id}>Sotto {radice.nome}</option>
+                        {figlie.map(({ figlia }) => (
+                          <option key={figlia.id} value={figlia.id}>
+                            Sotto {radice.nome} › {figlia.nome}
+                          </option>
+                        ))}
+                      </Fragment>
                     ))}
                   </select>
                   <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">

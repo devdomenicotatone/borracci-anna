@@ -1,7 +1,7 @@
 "use client";
 
 // Menu di navigazione mobile (hamburger nell'header): drawer da sinistra con
-// le pagine principali e l'albero categorie (macro + figlie indentate).
+// le pagine principali e l'albero categorie (macro + figlie e nipoti indentate).
 // Stessa accessibilita dei drawer esistenti: dialog modale, ESC, overlay,
 // scroll-lock, focus trap, focus ripristinato. Si chiude a ogni navigazione.
 
@@ -156,15 +156,30 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
                     </Link>
                     {figlie.length > 0 && (
                       <div className="ml-4 border-l-2 border-surface-2 pl-1">
-                        {figlie.map((f) => (
-                          <Link
-                            key={f.id}
-                            href={`/categoria/${f.slug}`}
-                            onClick={chiudi}
-                            className="block rounded-xl px-4 py-2.5 text-[15px] font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
-                          >
-                            {f.nome}
-                          </Link>
+                        {figlie.map(({ figlia, nipoti }) => (
+                          <div key={figlia.id}>
+                            <Link
+                              href={`/categoria/${figlia.slug}`}
+                              onClick={chiudi}
+                              className="block rounded-xl px-4 py-2.5 text-[15px] font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
+                            >
+                              {figlia.nome}
+                            </Link>
+                            {nipoti.length > 0 && (
+                              <div className="ml-4 border-l-2 border-surface-2 pl-1">
+                                {nipoti.map((n) => (
+                                  <Link
+                                    key={n.id}
+                                    href={`/categoria/${n.slug}`}
+                                    onClick={chiudi}
+                                    className="block rounded-xl px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
+                                  >
+                                    {n.nome}
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}

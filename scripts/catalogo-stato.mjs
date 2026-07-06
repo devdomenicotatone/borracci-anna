@@ -49,14 +49,21 @@ box("CATEGORIE");
 {
   const { data, error } = await admin
     .from("categorie")
-    .select("id, slug, nome, ordine")
+    .select("id, slug, nome, parent_id, ordine")
     .order("ordine", { ascending: true });
   if (error) {
     console.log(`(tabella categorie non leggibile: ${error.message})`);
   } else if (!data || data.length === 0) {
     console.log("(nessuna categoria)");
   } else {
-    for (const c of data) console.log(`- ${c.nome}  [${c.slug}]  id=${c.id}`);
+    // Albero indentato (fino a 3 livelli: macro > figlie > nipoti).
+    const figliDi = (id) => data.filter((c) => c.parent_id === id);
+    const stampa = (c, livello) => {
+      const rientro = "  ".repeat(livello);
+      console.log(`${rientro}- ${c.nome}  [${c.slug}]  id=${c.id}`);
+      for (const f of figliDi(c.id)) stampa(f, livello + 1);
+    };
+    for (const c of data.filter((c) => !c.parent_id)) stampa(c, 0);
   }
 }
 

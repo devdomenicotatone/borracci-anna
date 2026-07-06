@@ -20,8 +20,10 @@ import {
 } from "@/lib/gestore/ai-actions";
 import { aggiungiFotoGalleriaAction } from "@/lib/gestore/actions";
 import { useToast } from "@/components/gestore/Toaster";
+import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
 import { slugify } from "@/lib/gestore/slug";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
+import { gruppiCategorie } from "@/lib/categorie-albero";
 import type { Categoria } from "@/lib/types";
 
 interface FotoLocale {
@@ -107,17 +109,11 @@ export default function GeneraDaFoto({
 
   const prezzoCents = useMemo(() => parsePrezzoCents(prezzoInput), [prezzoInput]);
 
-  const categorieRaggruppate = useMemo(() => {
-    const radici = categorie
-      .filter((c) => !c.parent_id)
-      .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id));
-    return radici.map((radice) => ({
-      radice,
-      figli: categorie
-        .filter((c) => c.parent_id === radice.id)
-        .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id)),
-    }));
-  }, [categorie]);
+  // Gerarchia a 3 livelli: macro con figlie e nipoti (helper condiviso).
+  const categorieRaggruppate = useMemo(
+    () => gruppiCategorie(categorie),
+    [categorie],
+  );
 
   async function aggiungiFoto(
     e: React.ChangeEvent<HTMLInputElement>,
@@ -355,22 +351,7 @@ export default function GeneraDaFoto({
             className={`${inputCls} appearance-none`}
           >
             <option value="">Nessuna categoria</option>
-            {categorieRaggruppate.map(({ radice, figli }) =>
-              figli.length === 0 ? (
-                <option key={radice.id} value={radice.id}>
-                  {radice.nome}
-                </option>
-              ) : (
-                <optgroup key={radice.id} label={radice.nome}>
-                  <option value={radice.id}>{radice.nome} (tutto)</option>
-                  {figli.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}
-                    </option>
-                  ))}
-                </optgroup>
-              ),
-            )}
+            <OpzioniCategorie gruppi={categorieRaggruppate} />
           </select>
         </Campo>
 

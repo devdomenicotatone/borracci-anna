@@ -51,9 +51,12 @@ export async function generateMetadata({
   if (!cat) return { title: nomeDaSlug(slug) };
 
   const percorso = percorsoCategoria(categorie, cat.id);
-  // "Polo Uomo" per le figlie, "Uomo" per le macro: piu parlante nei risultati.
-  const titolo =
-    percorso.length === 2 ? `${cat.nome} ${percorso[0].nome}` : cat.nome;
+  // Percorso invertito: "Polo Uomo" per le figlie, "Manga T-shirt Uomo" per le
+  // nipoti, solo "Uomo" per le macro. Piu parlante nei risultati di ricerca.
+  const titolo = [...percorso]
+    .reverse()
+    .map((c) => c.nome)
+    .join(" ");
 
   return {
     title: titolo,
@@ -89,11 +92,13 @@ export default async function CategoriaPage({
 
   const percorsoDb = percorsoCategoria(categorie, cat.id);
   const percorso = percorsoDb.length > 0 ? percorsoDb : [cat];
-  const padre = percorso.length === 2 ? percorso[0] : null;
+  // Genitore diretto (penultimo del percorso): a 3 livelli e la figlia, non la macro.
+  const padre = percorso.length >= 2 ? percorso[percorso.length - 2] : null;
   const figlie = figlieDi(categorie, cat.id);
-  // Chip di navigazione: le figlie per una macro, le sorelle per una figlia.
+  // Chip di navigazione: le figlie dirette se ci sono (scendi), altrimenti le
+  // sorelle (naviga in orizzontale). Vale a ogni livello della gerarchia.
   const chips: Categoria[] = figlie.length > 0 ? figlie : padre ? figlieDi(categorie, padre.id) : [];
-  const radiceChips = padre ?? cat;
+  const radiceChips = figlie.length > 0 ? cat : (padre ?? cat);
 
   // Cambiando categoria dai chip si conservano filtri e ordinamento correnti.
   const qsCorrente = serializzaFiltri(filtri);

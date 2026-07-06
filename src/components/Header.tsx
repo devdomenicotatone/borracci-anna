@@ -70,21 +70,33 @@ export default async function Header() {
                 // pt-2 senza gap reale: il puntatore non "cade" tra trigger e
                 // pannello. Visibile su hover del gruppo o focus interno (Tab).
                 <div className="invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
-                  <div className="min-w-48 rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
+                  {/* max-h + scroll: con figlie e nipoti il pannello puo
+                      superare il viewport (header sticky a 4rem). */}
+                  <div className="max-h-[calc(100vh-6rem)] min-w-48 overflow-y-auto rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
                     <Link
                       href={`/categoria/${radice.slug}`}
                       className="block rounded-xl px-3.5 py-2.5 font-display text-sm font-bold text-sea transition-colors hover:bg-surface"
                     >
                       Tutto {radice.nome}
                     </Link>
-                    {figlie.map((f) => (
-                      <Link
-                        key={f.id}
-                        href={`/categoria/${f.slug}`}
-                        className="block rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface hover:text-sea"
-                      >
-                        {f.nome}
-                      </Link>
+                    {figlie.map(({ figlia, nipoti }) => (
+                      <div key={figlia.id}>
+                        <Link
+                          href={`/categoria/${figlia.slug}`}
+                          className="block rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface hover:text-sea"
+                        >
+                          {figlia.nome}
+                        </Link>
+                        {nipoti.map((n) => (
+                          <Link
+                            key={n.id}
+                            href={`/categoria/${n.slug}`}
+                            className="block rounded-xl py-2 pl-7 pr-3.5 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-sea"
+                          >
+                            {n.nome}
+                          </Link>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </div>

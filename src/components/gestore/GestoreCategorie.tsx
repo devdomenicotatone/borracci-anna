@@ -1,11 +1,19 @@
 "use client";
 
 // Gestione categorie (area gestore): CRUD + riordino drag/tastiera + gerarchia a
-// 2 livelli (radici + figli). Stato locale `righe` (fonte unica) riallineato allo
-// stato canonico che ogni server action ritorna — stesso pattern di GestoreGalleria
-// (`applica`): su errore niente revert custom, il prossimo canonico corregge.
+// 3 livelli (radici + figli + nipoti). Stato locale `righe` (fonte unica)
+// riallineato allo stato canonico che ogni server action ritorna — stesso pattern
+// di GestoreGalleria (`applica`): su errore niente revert custom, il prossimo
+// canonico corregge.
 
-import { useMemo, useState, useTransition, useRef, useEffect } from "react";
+import {
+  Fragment,
+  useMemo,
+  useState,
+  useTransition,
+  useRef,
+  useEffect,
+} from "react";
 
 import {
   creaCategoriaAction,
@@ -50,7 +58,9 @@ export default function GestoreCategorie({
         .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id)),
     [righe],
   );
-  const figliPerRadice = useMemo(() => {
+  // Figli diretti per ogni padre: copre sia i figli delle radici sia i nipoti
+  // (figli dei figli), la mappa e generica sul parent_id.
+  const figliPerPadre = useMemo(() => {
     const m = new Map<string, Categoria[]>();
     for (const c of righe) {
       if (!c.parent_id) continue;
@@ -63,6 +73,9 @@ export default function GestoreCategorie({
     }
     return m;
   }, [righe]);
+  const figliDiretti = (id: string) => figliPerPadre.get(id) ?? VUOTO;
+  const contaNipoti = (id: string) =>
+    figliDiretti(id).reduce((s, f) => s + figliDiretti(f.id).length, 0);
 
   function applica(azione: () => Promise<EsitoCategorie>, successo?: string) {
     startTransition(async () => {
@@ -123,6 +136,9 @@ export default function GestoreCategorie({
   function messaggioElimina(cat: Categoria): string {
     const nProd = conteggiProdotti[cat.id] ?? 0;
     const nFigli = righe.filter((c) => c.parent_id === cat.id).length;
+    const padre = cat.parent_id
+      ? righe.find((c) => c.id === cat.parent_id)
+      : null;
     const parti: string[] = [];
     if (nProd > 0) {
       parti.push(
@@ -132,10 +148,16 @@ export default function GestoreCategorie({
       );
     }
     if (nFigli > 0) {
+      // I figli risalgono di un livello: sotto il nonno, o a principali se
+      // la eliminata era una radice.
+      const dove = padre ? `passera sotto "${padre.nome}"` : "diventera principale";
+      const dovePlurale = padre
+        ? `passeranno sotto "${padre.nome}"`
+        : "diventeranno principali";
       parti.push(
         nFigli === 1
-          ? "1 sottocategoria diventera principale"
-          : `${nFigli} sottocategorie diventeranno principali`,
+          ? `1 sottocategoria ${dove}`
+          : `${nFigli} sottocategorie ${dovePlurale}`,
       );
     }
     const coda = parti.length ? ` ${parti.join(" e ")}.` : "";
@@ -187,8 +209,10 @@ export default function GestoreCategorie({
                 livello={1}
                 ctx={ctx}
                 conteggioProdotti={conteggiProdotti[radice.id] ?? 0}
-                numFigli={figliPerRadice.get(radice.id)?.length ?? 0}
+                numFigli={figliDiretti(radice.id).length}
+                numNipoti={contaNipoti(radice.id)}
                 radici={radici}
+                figliDiretti={figliDiretti}
                 occupato={occupato}
                 onRinomina={rinomina}
                 onSposta={sposta}
@@ -196,27 +220,61 @@ export default function GestoreCategorie({
               />
               <div className="ml-3 mt-2 border-l-2 border-line/70 pl-3">
                 <ListaSortable
-                  items={figliPerRadice.get(radice.id) ?? VUOTO}
+                  items={figliDiretti(radice.id)}
                   onCommitOrdine={(ids) => riordinaGruppo(radice.id, ids)}
                   occupato={occupato}
                   onAnnuncio={annunciaSpostamento}
                   className="flex flex-col gap-2"
                   renderItem={(figlio, cctx) => (
-                    <RigaCategoria
-                      categoria={figlio}
-                      livello={2}
-                      ctx={cctx}
-                      conteggioProdotti={conteggiProdotti[figlio.id] ?? 0}
-                      numFigli={0}
-                      radici={radici}
-                      occupato={occupato}
-                      onRinomina={rinomina}
-                      onSposta={sposta}
-                      onElimina={setDaEliminare}
-                    />
+                    <div>
+                      <RigaCategoria
+                        categoria={figlio}
+                        livello={2}
+                        ctx={cctx}
+                        conteggioProdotti={conteggiProdotti[figlio.id] ?? 0}
+                        numFigli={figliDiretti(figlio.id).length}
+                        numNipoti={0}
+                        radici={radici}
+                        figliDiretti={figliDiretti}
+                        occupato={occupato}
+                        onRinomina={rinomina}
+                        onSposta={sposta}
+                        onElimina={setDaEliminare}
+                      />
+                      <div className="ml-3 mt-2 border-l-2 border-line/50 pl-3">
+                        <ListaSortable
+                          items={figliDiretti(figlio.id)}
+                          onCommitOrdine={(ids) => riordinaGruppo(figlio.id, ids)}
+                          occupato={occupato}
+                          onAnnuncio={annunciaSpostamento}
+                          className="flex flex-col gap-2"
+                          renderItem={(nipote, nctx) => (
+                            <RigaCategoria
+                              categoria={nipote}
+                              livello={3}
+                              ctx={nctx}
+                              conteggioProdotti={conteggiProdotti[nipote.id] ?? 0}
+                              numFigli={0}
+                              numNipoti={0}
+                              radici={radici}
+                              figliDiretti={figliDiretti}
+                              occupato={occupato}
+                              onRinomina={rinomina}
+                              onSposta={sposta}
+                              onElimina={setDaEliminare}
+                            />
+                          )}
+                        />
+                        <AggiungiSotto
+                          parentId={figlio.id}
+                          occupato={occupato}
+                          onCrea={creaFiglio}
+                        />
+                      </div>
+                    </div>
                   )}
                 />
-                <AggiungiSotto radiceId={radice.id} occupato={occupato} onCrea={creaFiglio} />
+                <AggiungiSotto parentId={radice.id} occupato={occupato} onCrea={creaFiglio} />
               </div>
             </div>
           )}
@@ -225,9 +283,9 @@ export default function GestoreCategorie({
 
       <p className="mt-6 text-xs text-muted">
         Trascina dalla maniglia per riordinare (o usa le frecce ↑↓ / i tasti
-        freccia). “Sposta” cambia la categoria principale. Eliminando una
-        categoria i prodotti restano “senza categoria” e le sottocategorie
-        diventano principali.
+        freccia). “Sposta” mette la categoria sotto un’altra, fino a 3 livelli
+        (es. Uomo › T-shirt › Manga). Eliminando una categoria i prodotti
+        restano “senza categoria” e le sottocategorie risalgono di un livello.
       </p>
 
       <div aria-live="polite" role="status" className="sr-only">
@@ -281,25 +339,29 @@ function ListaSortable<T extends { id: string }>({
   );
 }
 
-// --- Riga di una categoria (parametrica per livello 1=radice / 2=figlio) --------
+// --- Riga di una categoria (parametrica per livello 1=radice / 2=figlio / 3=nipote)
 function RigaCategoria({
   categoria,
   livello,
   ctx,
   conteggioProdotti,
   numFigli,
+  numNipoti,
   radici,
+  figliDiretti,
   occupato,
   onRinomina,
   onSposta,
   onElimina,
 }: {
   categoria: Categoria;
-  livello: 1 | 2;
+  livello: 1 | 2 | 3;
   ctx: ContestoRiga;
   conteggioProdotti: number;
   numFigli: number;
+  numNipoti: number;
   radici: Categoria[];
+  figliDiretti: (id: string) => Categoria[];
   occupato: boolean;
   onRinomina: (id: string, nome: string) => void;
   onSposta: (id: string, parentId: string | null) => void;
@@ -329,8 +391,11 @@ function RigaCategoria({
 
   const isRadice = livello === 1;
   const haFigli = numFigli > 0;
-  // Una radice con figli puo restare solo principale: spostarla creerebbe nipoti.
-  const spostaDisabilitato = occupato || (isRadice && haFigli);
+  const haNipoti = numNipoti > 0;
+  // Chi ha gia due livelli sotto di se puo restare solo principale: spostarla
+  // ovunque creerebbe un 4o livello. Chi ha solo figli puo andare sotto una
+  // radice (i figli diventano nipoti), non sotto una figlia.
+  const spostaDisabilitato = occupato || haNipoti;
 
   function chiudiModifica(salva: boolean, conFocus: boolean) {
     if (conFocus) ripristinaFocus.current = true;
@@ -347,11 +412,11 @@ function RigaCategoria({
       value={categoria.parent_id ?? ""}
       onChange={(e) => onSposta(categoria.id, e.target.value || null)}
       disabled={spostaDisabilitato}
-      aria-label={`Sposta ${categoria.nome} sotto una categoria principale`}
+      aria-label={`Sposta ${categoria.nome} sotto un'altra categoria`}
       title={
-        isRadice && haFigli
+        haNipoti
           ? "Sposta o promuovi prima le sottocategorie"
-          : "Sposta sotto una categoria principale"
+          : "Sposta sotto un'altra categoria"
       }
       className="h-11 max-w-[9rem] rounded-lg bg-white px-2 text-xs font-semibold text-foreground ring-1 ring-line outline-none disabled:opacity-40"
     >
@@ -359,9 +424,18 @@ function RigaCategoria({
       {radici
         .filter((r) => r.id !== categoria.id)
         .map((r) => (
-          <option key={r.id} value={r.id}>
-            ↳ {r.nome}
-          </option>
+          <Fragment key={r.id}>
+            <option value={r.id}>↳ {r.nome}</option>
+            {/* Destinazioni di 2o livello: ok solo per chi non ha figli
+                (i suoi figli finirebbero al 4o livello). */}
+            {figliDiretti(r.id)
+              .filter((f) => f.id !== categoria.id)
+              .map((f) => (
+                <option key={f.id} value={f.id} disabled={haFigli}>
+                  {"  "}↳ {f.nome}
+                </option>
+              ))}
+          </Fragment>
         ))}
     </select>
   );
@@ -444,7 +518,7 @@ function RigaCategoria({
               {conteggioProdotti} {conteggioProdotti === 1 ? "prodotto" : "prodotti"}
             </span>
           )}
-          {isRadice && haFigli && (
+          {haFigli && (
             <span className="hidden flex-none whitespace-nowrap rounded-full bg-surface px-2 py-0.5 text-[11px] font-bold text-muted ring-1 ring-line lg:inline-flex">
               {numFigli} sottocat.
             </span>
@@ -499,7 +573,7 @@ function RigaCategoria({
             {conteggioProdotti} {conteggioProdotti === 1 ? "prodotto" : "prodotti"}
           </span>
         )}
-        {isRadice && haFigli && (
+        {haFigli && (
           <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-bold text-muted ring-1 ring-line">
             {numFigli} sottocat.
           </span>
@@ -515,13 +589,13 @@ function RigaCategoria({
   );
 }
 
-// --- Form inline per aggiungere una sottocategoria a una radice -----------------
+// --- Form inline per aggiungere una sottocategoria (a una radice o a una figlia) --
 function AggiungiSotto({
-  radiceId,
+  parentId,
   occupato,
   onCrea,
 }: {
-  radiceId: string;
+  parentId: string;
   occupato: boolean;
   onCrea: (parentId: string, nome: string) => void;
 }) {
@@ -546,7 +620,7 @@ function AggiungiSotto({
     const n = nome.trim();
     setNome("");
     setAperto(false);
-    if (n) onCrea(radiceId, n);
+    if (n) onCrea(parentId, n);
   }
 
   if (!aperto) {

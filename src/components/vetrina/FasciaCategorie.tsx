@@ -72,7 +72,7 @@ export default function FasciaCategorie({
                     scuro ? "text-foreground/75" : "text-white/85"
                   }`}
                 >
-                  {figlie.map((f) => f.nome).join(" · ")}
+                  {figlie.map(({ figlia }) => figlia.nome).join(" · ")}
                 </p>
               )}
               <span

@@ -29,8 +29,10 @@ import {
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import { slugify } from "@/lib/gestore/slug";
 import { ordinaTaglie, skuVariante } from "@/lib/catalogo";
+import { gruppiCategorie, type GruppoCategorie } from "@/lib/categorie-albero";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import EditorVarianti from "@/components/gestore/EditorVarianti";
+import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
 import type { Categoria, VarianteInput } from "@/lib/types";
 
 export interface ProdottoForm {
@@ -120,18 +122,11 @@ export default function FormProdotto({
     [prezzoInput],
   );
 
-  // Categorie in gerarchia a 2 livelli: macro (senza parent) con le loro figlie.
-  const categorieRaggruppate = useMemo(() => {
-    const radici = categorie
-      .filter((c) => !c.parent_id)
-      .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id));
-    return radici.map((radice) => ({
-      radice,
-      figli: categorie
-        .filter((c) => c.parent_id === radice.id)
-        .sort((a, b) => a.ordine - b.ordine || a.id.localeCompare(b.id)),
-    }));
-  }, [categorie]);
+  // Categorie in gerarchia a 3 livelli: macro con figlie e nipoti.
+  const categorieRaggruppate = useMemo(
+    () => gruppiCategorie(categorie),
+    [categorie],
+  );
 
   function onNome(v: string) {
     setNome(v);
@@ -572,7 +567,7 @@ function CampoCategoria({
   className?: string;
   value: string;
   onChange: (v: string) => void;
-  gruppi: { radice: Categoria; figli: Categoria[] }[];
+  gruppi: GruppoCategorie[];
 }) {
   return (
     <div className={className}>
@@ -586,22 +581,7 @@ function CampoCategoria({
             className={`${inputCls} appearance-none pr-9`}
           >
             <option value="">Nessuna categoria</option>
-            {gruppi.map(({ radice, figli }) =>
-              figli.length === 0 ? (
-                <option key={radice.id} value={radice.id}>
-                  {radice.nome}
-                </option>
-              ) : (
-                <optgroup key={radice.id} label={radice.nome}>
-                  <option value={radice.id}>{radice.nome} (tutto)</option>
-                  {figli.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}
-                    </option>
-                  ))}
-                </optgroup>
-              ),
-            )}
+            <OpzioniCategorie gruppi={gruppi} />
           </select>
           <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
             <svg
