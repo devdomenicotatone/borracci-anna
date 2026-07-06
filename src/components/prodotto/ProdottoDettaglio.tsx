@@ -189,7 +189,7 @@ export default function ProdottoDettaglio({
           {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
         </p>
 
-        {soloOnline && (
+        {soloOnline ? (
           <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-sea/10 px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25">
             <svg
               viewBox="0 0 24 24"
@@ -205,6 +205,23 @@ export default function ProdottoDettaglio({
               <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
             </svg>
             Solo online — spedizione a casa o ritiro in negozio
+          </span>
+        ) : (
+          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-lagoon/10 px-3 py-1.5 font-display text-xs font-bold text-lagoon ring-1 ring-lagoon/25">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5"
+              aria-hidden="true"
+            >
+              <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z" />
+              <circle cx="12" cy="10" r="2.5" />
+            </svg>
+            Disponibile anche in negozio — vieni a trovarci
           </span>
         )}
 
