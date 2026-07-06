@@ -263,6 +263,84 @@ export async function rigeneraSlugCategorieAction(): Promise<EsitoCategorie> {
   }
 }
 
+// Ordine di priorita dei TEMI di terzo livello (le licenze ricorrenti sotto ogni
+// tipo di prodotto). Calcio sempre per primo: e il forte del negozio.
+const PRIORITA_TEMI = [
+  "Calcio",
+  "Motorsport",
+  "Gaming",
+  "Anime & Manga",
+  "Film & Serie TV",
+  "Musica",
+];
+
+/** Indice di priorita di un tema (case-insensitive), o +Inf se non e un tema. */
+function indiceTema(nome: string): number {
+  const n = nome.trim().toLowerCase();
+  const i = PRIORITA_TEMI.findIndex((t) => t.toLowerCase() === n);
+  return i === -1 ? Number.POSITIVE_INFINITY : i;
+}
+
+/**
+ * Ordina i TEMI di terzo livello (Calcio, Motorsport, ...) secondo PRIORITA_TEMI
+ * in TUTTI i gruppi in cui compaiono, cosi la navigazione e coerente ovunque
+ * (stesso ordine, Calcio sempre primo). Tocca solo i gruppi che contengono
+ * almeno un tema noto: i figli non tematici (es. Ciclismo > T-shirt/Salopette) e
+ * le categorie principali/di 2o livello NON vengono riordinati. Operazione
+ * manuale (pulsante nel pannello); aggiorna `ordine` solo dove cambia davvero.
+ */
+export async function riordinaTemiAction(): Promise<EsitoCategorie> {
+  const sessione = await verifySession();
+  if (!sessione) return NON_AUTORIZZATO;
+  const { supabase } = sessione;
+
+  try {
+    const categorie = await leggiCategorie(supabase);
+
+    const perParent = new Map<string, Categoria[]>();
+    for (const c of categorie) {
+      if (!c.parent_id) continue;
+      const arr = perParent.get(c.parent_id);
+      if (arr) arr.push(c);
+      else perParent.set(c.parent_id, [c]);
+    }
+
+    for (const figli of perParent.values()) {
+      // Salta i gruppi senza alcun tema noto (non li tocchiamo).
+      if (!figli.some((f) => Number.isFinite(indiceTema(f.nome)))) continue;
+
+      // Temi per priorita; i non-temi restano dopo, nel loro ordine attuale.
+      const ordinati = [...figli].sort((a, b) => {
+        const ia = indiceTema(a.nome);
+        const ib = indiceTema(b.nome);
+        if (ia !== ib) return ia - ib;
+        return a.ordine - b.ordine || a.id.localeCompare(b.id);
+      });
+
+      for (let i = 0; i < ordinati.length; i++) {
+        if (ordinati[i].ordine === i) continue;
+        const { error } = await supabase
+          .from("categorie")
+          .update({ ordine: i })
+          .eq("id", ordinati[i].id);
+        if (error) {
+          return {
+            ok: false,
+            error: error.message,
+            categorie: await leggiCategorie(supabase),
+          };
+        }
+      }
+    }
+
+    const aggiornate = await leggiCategorie(supabase);
+    revalida();
+    return { ok: true, categorie: aggiornate };
+  } catch {
+    return ERRORE_RETE;
+  }
+}
+
 /**
  * Rinomina una categoria. Aggiorna SOLO `nome`, mai lo slug: lo slug e un
  * identificatore stabile (URL/SEO/consumatori) e rigenerarlo li romperebbe.

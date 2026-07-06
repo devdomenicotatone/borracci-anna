@@ -28,6 +28,7 @@ import {
   riordinaCategorieAction,
   eliminaCategoriaAction,
   rigeneraSlugCategorieAction,
+  riordinaTemiAction,
   type EsitoCategorie,
 } from "@/lib/gestore/categorie-actions";
 import { useToast } from "@/components/gestore/Toaster";
@@ -59,6 +60,7 @@ export default function GestoreCategorie({
   const [pending, startTransition] = useTransition();
   const [daEliminare, setDaEliminare] = useState<Categoria | null>(null);
   const [confermaRigenera, setConfermaRigenera] = useState(false);
+  const [confermaTemi, setConfermaTemi] = useState(false);
   const [nuovaRadice, setNuovaRadice] = useState("");
   const [annuncio, setAnnuncio] = useState("");
   const occupato = pending;
@@ -237,6 +239,11 @@ export default function GestoreCategorie({
       () => rigeneraSlugCategorieAction(),
       "Indirizzi delle categorie rigenerati.",
     );
+  }
+
+  function riordinaTemiConfermato() {
+    setConfermaTemi(false);
+    applica(() => riordinaTemiAction(), "Temi riordinati per priorità.");
   }
 
   function messaggioElimina(cat: Categoria): string {
@@ -428,6 +435,26 @@ export default function GestoreCategorie({
             ). Utile dopo aver riorganizzato la tassonomia. I vecchi indirizzi
             smettono di funzionare: usala finche il sito non e pubblicato.
           </p>
+
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setConfermaTemi(true)}
+              disabled={occupato}
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-sea ring-1 ring-line transition-colors hover:bg-surface-2 disabled:opacity-50"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M4 6h11M4 12h7M4 18h4" />
+              </svg>
+              Ordina i temi per priorità
+            </button>
+            <p className="mt-2 max-w-prose text-xs text-muted">
+              Riordina i temi di terzo livello (Calcio, Motorsport, Gaming, Anime
+              &amp; Manga, Film &amp; Serie TV, Musica) con lo stesso ordine in
+              tutti i gruppi — Calcio sempre per primo. Non tocca le categorie
+              principali ne i gruppi senza temi.
+            </p>
+          </div>
         </div>
       )}
 
@@ -453,6 +480,16 @@ export default function GestoreCategorie({
         inCorso={pending}
         onConferma={rigeneraConfermato}
         onAnnulla={() => setConfermaRigenera(false)}
+      />
+
+      <ConfermaDialog
+        aperto={confermaTemi}
+        titolo="Ordinare i temi per priorità?"
+        messaggio="I temi di terzo livello (Calcio, Motorsport, Gaming, Anime & Manga, Film & Serie TV, Musica) verranno riordinati con lo stesso ordine in tutti i gruppi, con Calcio sempre per primo. Le categorie principali e i gruppi senza temi non vengono toccati."
+        etichettaConferma="Ordina"
+        inCorso={pending}
+        onConferma={riordinaTemiConfermato}
+        onAnnulla={() => setConfermaTemi(false)}
       />
     </div>
   );
