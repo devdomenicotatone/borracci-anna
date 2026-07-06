@@ -273,6 +273,26 @@ export default function ListaProdotti({
     prodotti.length < totale && pagina < PAGINA_MAX_GESTORE;
   const cappato = prodotti.length < totale && pagina >= PAGINA_MAX_GESTORE;
 
+  // Scroll infinito: quando la sentinella (il blocco "Mostra altri") entra in
+  // vista si carica la pagina successiva. Durante il caricamento (navPending)
+  // l'observer si stacca — niente doppio fire —; a fine load si riaggancia e, se
+  // la sentinella e ancora in vista, prosegue. Il bottone resta come fallback
+  // accessibile (tastiera/screen reader) e per riprovare in caso di errore.
+  const sentinellaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!puoMostrareAltri || navPending) return;
+    const el = sentinellaRef.current;
+    if (!el) return;
+    const osservatore = new IntersectionObserver(
+      (voci) => {
+        if (voci[0]?.isIntersecting) naviga({}, { pagina: pagina + 1 });
+      },
+      { rootMargin: "800px" },
+    );
+    osservatore.observe(el);
+    return () => osservatore.disconnect();
+  }, [puoMostrareAltri, navPending, pagina, naviga]);
+
   return (
     <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -591,9 +611,14 @@ export default function ListaProdotti({
         </div>
       )}
 
-      {/* Paginazione "Mostra altri" (cumulativa, come la vetrina) */}
+      {/* Scroll infinito: questo blocco e la sentinella dell'IntersectionObserver
+          (autocarica la pagina successiva entrando in vista); il bottone resta
+          come fallback accessibile. */}
       {puoMostrareAltri && (
-        <div className="mt-6 flex flex-col items-center gap-2">
+        <div
+          ref={sentinellaRef}
+          className="mt-6 flex flex-col items-center gap-2"
+        >
           <p className="text-sm tabular-nums text-muted">
             Hai visto {prodotti.length} di {totale}
           </p>
@@ -601,8 +626,14 @@ export default function ListaProdotti({
             type="button"
             onClick={() => naviga({}, { pagina: pagina + 1 })}
             disabled={navPending}
-            className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:opacity-60"
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:opacity-60"
           >
+            {navPending && (
+              <span
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin rounded-full border-2 border-sea/30 border-t-sea"
+              />
+            )}
             {navPending ? "Carico…" : "Mostra altri"}
           </button>
         </div>
