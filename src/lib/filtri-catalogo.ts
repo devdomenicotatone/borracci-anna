@@ -162,3 +162,16 @@ export function contaFiltriAttivi(filtri: FiltriCatalogo): number {
     (filtri.q ? 1 : 0)
   );
 }
+
+/**
+ * Filtri del DRAWER attivi (taglia/colore/prezzo), per il badge del bottone
+ * "Filtri" e i chip. La ricerca testuale ha un campo dedicato sempre in vista,
+ * quindi non conta qui: e separata dai filtri, come nei cataloghi moderni.
+ */
+export function contaFiltriDrawer(filtri: FiltriCatalogo): number {
+  return (
+    filtri.taglie.length +
+    filtri.colori.length +
+    (filtri.prezzoMin != null || filtri.prezzoMax != null ? 1 : 0)
+  );
+}

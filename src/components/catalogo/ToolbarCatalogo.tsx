@@ -9,14 +9,14 @@
 // Accessibilita drawer: stesso pattern del CartDrawer (dialog modale, ESC,
 // click sull'overlay, scroll-lock, focus trap, focus ripristinato).
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
   ETICHETTE_ORDINAMENTO,
   FILTRI_VUOTI,
   ORDINAMENTI,
-  contaFiltriAttivi,
+  contaFiltriDrawer,
   serializzaFiltri,
   type FacetteCatalogo,
   type FiltriCatalogo,
@@ -30,7 +30,6 @@ interface BozzaFiltri {
   colori: string[];
   prezzoMin: string;
   prezzoMax: string;
-  q: string;
 }
 
 function bozzaDaFiltri(filtri: FiltriCatalogo): BozzaFiltri {
@@ -39,7 +38,6 @@ function bozzaDaFiltri(filtri: FiltriCatalogo): BozzaFiltri {
     colori: filtri.colori,
     prezzoMin: filtri.prezzoMin != null ? String(filtri.prezzoMin) : "",
     prezzoMax: filtri.prezzoMax != null ? String(filtri.prezzoMax) : "",
-    q: filtri.q,
   };
 }
 
@@ -68,16 +66,47 @@ export default function ToolbarCatalogo({
   const [inTransito, startTransition] = useTransition();
   const [aperto, setAperto] = useState(false);
   const [bozza, setBozza] = useState<BozzaFiltri>(() => bozzaDaFiltri(filtri));
+  // Testo della ricerca: stato locale reattivo, riversato nell'URL a debounce.
+  const [testo, setTesto] = useState(filtri.q);
 
-  const attivi = contaFiltriAttivi(filtri);
+  // Filtri del drawer (taglia/colore/prezzo): la ricerca ha un campo suo, quindi
+  // non entra nel badge ne tra i chip.
+  const filtriDrawer = contaFiltriDrawer(filtri);
 
   /** Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1). */
-  function naviga(nuovi: FiltriCatalogo) {
-    const qs = serializzaFiltri(nuovi);
-    startTransition(() => {
-      router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
-    });
-  }
+  const naviga = useCallback(
+    (nuovi: FiltriCatalogo) => {
+      const qs = serializzaFiltri(nuovi);
+      startTransition(() => {
+        router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+      });
+    },
+    [basePath, router],
+  );
+
+  // Ricerca istantanea (search-as-you-type): naviga ~300ms dopo l'ultimo tasto,
+  // cosi la griglia si aggiorna da sola senza premere Invio. Il round-trip resta
+  // server-side (stessa pipeline dei filtri), quindi cerca su TUTTO il catalogo,
+  // non solo sui prodotti gia in pagina.
+  const ultimoQRef = useRef(filtri.q);
+  useEffect(() => {
+    const v = testo.trim().slice(0, 80);
+    if (v === filtri.q) return;
+    const id = window.setTimeout(() => {
+      ultimoQRef.current = v;
+      naviga({ ...filtri, q: v });
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [testo, filtri, naviga]);
+
+  // Quando `q` cambia da fuori (chip rimosso, "Azzera", back del browser) e non
+  // per una nostra navigazione, riallinea il campo.
+  useEffect(() => {
+    if (filtri.q !== ultimoQRef.current) {
+      ultimoQRef.current = filtri.q;
+      setTesto(filtri.q);
+    }
+  }, [filtri.q]);
 
   function apriDrawer() {
     setBozza(bozzaDaFiltri(filtri)); // riparte sempre dai filtri applicati
@@ -93,7 +122,7 @@ export default function ToolbarCatalogo({
       colori: bozza.colori,
       prezzoMin: min,
       prezzoMax: max,
-      q: bozza.q.trim(),
+      q: filtri.q, // la ricerca ha il suo campo: qui resta com'e
       ordina: filtri.ordina,
     });
     setAperto(false);
@@ -107,6 +136,52 @@ export default function ToolbarCatalogo({
 
   return (
     <div className="mb-6">
+      {/* Ricerca sempre in evidenza: istantanea, cerca su tutto il catalogo. */}
+      <div className="relative mb-3">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="pointer-events-none absolute inset-y-0 left-4 my-auto h-5 w-5 text-muted"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          type="search"
+          inputMode="search"
+          aria-label="Cerca nel catalogo"
+          placeholder="Cerca per nome o tema…"
+          value={testo}
+          onChange={(e) => setTesto(e.target.value)}
+          className="h-12 w-full rounded-2xl bg-white pl-11 pr-11 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:appearance-none"
+        />
+        {testo && (
+          <button
+            type="button"
+            onClick={() => setTesto("")}
+            aria-label="Cancella ricerca"
+            className="absolute inset-y-0 right-3 my-auto grid h-7 w-7 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-foreground"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+
       {/* Riga strumenti: filtri + conteggio + ordinamento */}
       <div className="flex flex-wrap items-center gap-2.5">
         <button
@@ -128,9 +203,9 @@ export default function ToolbarCatalogo({
             <path d="M4 6h16M7 12h10M10 18h4" />
           </svg>
           Filtri
-          {attivi > 0 && (
+          {filtriDrawer > 0 && (
             <span className="grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1 font-display text-[11px] font-bold text-white">
-              {attivi}
+              {filtriDrawer}
             </span>
           )}
         </button>
@@ -177,15 +252,10 @@ export default function ToolbarCatalogo({
         </label>
       </div>
 
-      {/* Chip dei filtri attivi (rimozione a un tap) */}
-      {attivi > 0 && (
+      {/* Chip dei filtri del drawer (rimozione a un tap). La ricerca ha il suo
+          campo con la X, quindi non compare qui. */}
+      {filtriDrawer > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {filtri.q && (
-            <ChipFiltro
-              etichetta={`“${filtri.q}”`}
-              onRimuovi={() => naviga({ ...filtri, q: "" })}
-            />
-          )}
           {filtri.taglie.map((t) => (
             <ChipFiltro
               key={`t-${t}`}
@@ -219,10 +289,12 @@ export default function ToolbarCatalogo({
               }
             />
           )}
-          {attivi > 1 && (
+          {filtriDrawer > 1 && (
             <button
               type="button"
-              onClick={() => naviga({ ...FILTRI_VUOTI, ordina: filtri.ordina })}
+              onClick={() =>
+                naviga({ ...FILTRI_VUOTI, q: filtri.q, ordina: filtri.ordina })
+              }
               className="ml-1 font-display text-sm font-bold text-coral-ink transition-colors hover:text-coral"
             >
               Azzera tutto
@@ -238,7 +310,7 @@ export default function ToolbarCatalogo({
           facette={facette}
           onApplica={applicaBozza}
           onAzzera={() =>
-            setBozza({ taglie: [], colori: [], prezzoMin: "", prezzoMax: "", q: "" })
+            setBozza({ taglie: [], colori: [], prezzoMin: "", prezzoMax: "" })
           }
           onChiudi={() => setAperto(false)}
           toggle={toggle}
@@ -427,42 +499,6 @@ function DrawerFiltri({
             onApplica();
           }}
         >
-          {/* Ricerca */}
-          <div>
-            <label
-              htmlFor="filtro-ricerca"
-              className="mb-2 block font-display text-sm font-bold text-foreground"
-            >
-              Cerca
-            </label>
-            <div className="relative">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="pointer-events-none absolute inset-y-0 left-4 my-auto h-5 w-5 text-muted"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                id="filtro-ricerca"
-                type="search"
-                inputMode="search"
-                placeholder="Nome o descrizione…"
-                value={bozza.q}
-                onChange={(e) =>
-                  setBozza((b) => ({ ...b, q: e.target.value }))
-                }
-                className="h-12 w-full rounded-2xl bg-white pl-11 pr-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
-              />
-            </div>
-          </div>
-
           {/* Prezzo */}
           <div>
             <span className="mb-2 block font-display text-sm font-bold text-foreground">

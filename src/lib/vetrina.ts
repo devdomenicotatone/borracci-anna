@@ -142,11 +142,16 @@ export async function caricaProdottiVetrina(
       query = query.lte("prezzo_cents", filtri.prezzoMax * 100);
     }
     if (filtri.q) {
-      const pattern = patternRicerca(filtri.q);
-      if (pattern) {
-        query = query.or(
-          `nome.ilike.%${pattern}%,descrizione.ilike.%${pattern}%`,
-        );
+      // Multi-parola: ogni token deve comparire (AND tra i token, chiamate .or()
+      // consecutive = AND) nel nome OPPURE nella descrizione. Cosi "squid game
+      // logo" trova i prodotti con tutte le parole in qualsiasi ordine, non la
+      // stringa esatta. Cap a 6 token: oltre e rumore e allunga la query.
+      const token = patternRicerca(filtri.q)
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 6);
+      for (const t of token) {
+        query = query.or(`nome.ilike.%${t}%,descrizione.ilike.%${t}%`);
       }
     }
 
