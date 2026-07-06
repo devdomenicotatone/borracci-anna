@@ -40,6 +40,32 @@ function nomeDaSlug(slug: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Chip di navigazione categoria: pill piena se attivo, contornata altrimenti. */
+function ChipCat({
+  href,
+  etichetta,
+  attivo,
+}: {
+  href: string;
+  etichetta: string;
+  attivo: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={attivo ? "page" : undefined}
+      className={[
+        "shrink-0 rounded-full px-4 py-2 font-display text-sm font-bold transition-all",
+        attivo
+          ? "bg-sea text-white shadow-sea"
+          : "bg-white text-foreground ring-1 ring-line hover:ring-sea",
+      ].join(" ")}
+    >
+      {etichetta}
+    </Link>
+  );
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -92,13 +118,14 @@ export default async function CategoriaPage({
 
   const percorsoDb = percorsoCategoria(categorie, cat.id);
   const percorso = percorsoDb.length > 0 ? percorsoDb : [cat];
-  // Genitore diretto (penultimo del percorso): a 3 livelli e la figlia, non la macro.
-  const padre = percorso.length >= 2 ? percorso[percorso.length - 2] : null;
-  const figlie = figlieDi(categorie, cat.id);
-  // Chip di navigazione: le figlie dirette se ci sono (scendi), altrimenti le
-  // sorelle (naviga in orizzontale). Vale a ogni livello della gerarchia.
-  const chips: Categoria[] = figlie.length > 0 ? figlie : padre ? figlieDi(categorie, padre.id) : [];
-  const radiceChips = figlie.length > 0 ? cat : (padre ?? cat);
+  // Navigazione "a scala" a due righe (fino a 3 livelli), ancorata al percorso:
+  //  - riga 1: le figlie della macro (le sorelle di 2o livello) restano sempre
+  //    visibili, cosi da cambiare ramo senza tornare indietro;
+  //  - riga 2: le figlie del 2o livello attivo (le nipoti), quando esistono.
+  const macro = percorso[0] ?? cat;
+  const attivaL2 = percorso[1] ?? null;
+  const chipsL2 = figlieDi(categorie, macro.id);
+  const chipsL3 = attivaL2 ? figlieDi(categorie, attivaL2.id) : [];
 
   // Cambiando categoria dai chip si conservano filtri e ordinamento correnti.
   const qsCorrente = serializzaFiltri(filtri);
@@ -186,36 +213,57 @@ export default async function CategoriaPage({
           {cat.nome}
         </h1>
 
-        {/* Chip sottocategorie (o sorelle, per navigare in orizzontale) */}
-        {chips.length > 0 && (
-          <div className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Link
-              href={hrefCategoria(radiceChips)}
-              aria-current={radiceChips.id === cat.id ? "page" : undefined}
-              className={[
-                "shrink-0 rounded-full px-4 py-2 font-display text-sm font-bold transition-all",
-                radiceChips.id === cat.id
-                  ? "bg-sea text-white shadow-sea"
-                  : "bg-white text-foreground ring-1 ring-line hover:ring-sea",
-              ].join(" ")}
-            >
-              Tutto {radiceChips.nome}
-            </Link>
-            {chips.map((c) => (
-              <Link
-                key={c.id}
-                href={hrefCategoria(c)}
-                aria-current={c.id === cat.id ? "page" : undefined}
-                className={[
-                  "shrink-0 rounded-full px-4 py-2 font-display text-sm font-bold transition-all",
-                  c.id === cat.id
-                    ? "bg-sea text-white shadow-sea"
-                    : "bg-white text-foreground ring-1 ring-line hover:ring-sea",
-                ].join(" ")}
-              >
-                {c.nome}
-              </Link>
-            ))}
+        {/* Chip di navigazione "a scala": le sorelle di 2o livello restano
+            sempre visibili (riga 1) e, se il ramo attivo ha nipoti, queste
+            compaiono nella riga 2. Tutti i link conservano i filtri correnti. */}
+        {chipsL2.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2">
+            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <ChipCat
+                href={hrefCategoria(macro)}
+                etichetta={`Tutto ${macro.nome}`}
+                attivo={cat.id === macro.id}
+              />
+              {chipsL2.map((c) => (
+                <ChipCat
+                  key={c.id}
+                  href={hrefCategoria(c)}
+                  etichetta={c.nome}
+                  attivo={c.id === attivaL2?.id}
+                />
+              ))}
+            </div>
+
+            {attivaL2 && chipsL3.length > 0 && (
+              <div className="-mx-5 flex items-center gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4 shrink-0 text-line"
+                  aria-hidden="true"
+                >
+                  <path d="M6 6v6a3 3 0 0 0 3 3h10" />
+                  <path d="m15 10 4 4-4 4" />
+                </svg>
+                <ChipCat
+                  href={hrefCategoria(attivaL2)}
+                  etichetta={`Tutto ${attivaL2.nome}`}
+                  attivo={cat.id === attivaL2.id}
+                />
+                {chipsL3.map((c) => (
+                  <ChipCat
+                    key={c.id}
+                    href={hrefCategoria(c)}
+                    etichetta={c.nome}
+                    attivo={c.id === cat.id}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>
