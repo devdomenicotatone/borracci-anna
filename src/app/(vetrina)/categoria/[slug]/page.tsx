@@ -9,6 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import CatalogoSezione from "@/components/catalogo/CatalogoSezione";
+import NavScorribile from "@/components/vetrina/NavScorribile";
 import { caricaCategoriePubbliche } from "@/lib/categorie";
 import {
   categoriaPerSlug,
@@ -218,7 +219,7 @@ export default async function CategoriaPage({
             compaiono nella riga 2. Tutti i link conservano i filtri correnti. */}
         {chipsL2.length > 0 && (
           <div className="mt-4 flex flex-col gap-2">
-            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <NavScorribile>
               <ChipCat
                 href={hrefCategoria(macro)}
                 etichetta={`Tutto ${macro.nome}`}
@@ -232,10 +233,10 @@ export default async function CategoriaPage({
                   attivo={c.id === attivaL2?.id}
                 />
               ))}
-            </div>
+            </NavScorribile>
 
             {attivaL2 && chipsL3.length > 0 && (
-              <div className="-mx-5 flex items-center gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <NavScorribile>
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -262,7 +263,7 @@ export default async function CategoriaPage({
                     attivo={c.id === cat.id}
                   />
                 ))}
-              </div>
+              </NavScorribile>
             )}
           </div>
         )}
