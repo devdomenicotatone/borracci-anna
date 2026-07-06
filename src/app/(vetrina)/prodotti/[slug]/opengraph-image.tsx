@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { createClient } from "@supabase/supabase-js";
+import QRCode from "qrcode";
 
 import { fontOg } from "@/lib/og-fonts";
 import { formatPrezzo } from "@/lib/format";
@@ -44,6 +45,23 @@ export default async function Image({
     } catch {
       // degrada a card brand senza dati prodotto
     }
+  }
+
+  // QR dell'URL prodotto (PNG data URL) da mostrare nella card. Correzione errori
+  // Q (25%): assorbe comodamente il piccolo logo "A" al centro (~6% dell'area)
+  // restando meno denso di H, quindi piu leggibile da lontano/in stampa.
+  // Degrada a null (card senza QR) se manca l'URL del sito o la generazione fallisce.
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  let qr: string | null = null;
+  try {
+    qr = await QRCode.toDataURL(`${site}/prodotti/${slug}`, {
+      margin: 0,
+      errorCorrectionLevel: "Q",
+      width: 264,
+      color: { dark: "#0a1f33", light: "#ffffff" },
+    });
+  } catch {
+    qr = null;
   }
 
   return new ImageResponse(
@@ -110,8 +128,74 @@ export default async function Image({
             ) : null}
           </div>
 
-          <div style={{ display: "flex", fontSize: 28, fontWeight: 600, color: "rgba(255,255,255,0.82)" }}>
-            abbigliamento mare · Rimini
+          {/* Riga in basso: tagline (+ invito) a sinistra, QR a destra. */}
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {qr ? (
+                <div style={{ display: "flex", fontSize: 25, fontWeight: 600, color: "rgba(255,255,255,0.92)" }}>
+                  Inquadra per aprire
+                </div>
+              ) : null}
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: qr ? 6 : 0,
+                  fontSize: 26,
+                  fontWeight: 600,
+                  color: "rgba(255,255,255,0.72)",
+                }}
+              >
+                abbigliamento mare · Rimini
+              </div>
+            </div>
+
+            {qr ? (
+              <div
+                style={{
+                  display: "flex",
+                  position: "relative",
+                  width: 150,
+                  height: 150,
+                  padding: 14,
+                  borderRadius: 18,
+                  background: "#ffffff",
+                }}
+              >
+                <img src={qr} alt="" width={122} height={122} style={{ display: "flex" }} />
+                {/* Logo brand al centro del QR (la correzione errori H lo assorbe). */}
+                <div
+                  style={{
+                    display: "flex",
+                    position: "absolute",
+                    top: 60,
+                    left: 60,
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    background: "#ffffff",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      background: "#ff5c5c",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#ffffff",
+                      fontSize: 15,
+                      fontWeight: 700,
+                    }}
+                  >
+                    A
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
