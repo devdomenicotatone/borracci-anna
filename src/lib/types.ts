@@ -47,6 +47,68 @@ export interface Prodotto {
   solo_online?: boolean;
 }
 
+// --- Vetrina curata (home a fasce, gestibile dal pannello) -------------------
+
+/** Tipo di una fascia della home. Vedi migration 20260706120000. */
+export type TipoSezioneVetrina =
+  | "hero" //             testata in cima (titolo, sottotitolo, CTA, sticker)
+  | "banner" //           striscia promozionale (testo + CTA)
+  | "categorie" //        scorciatoie alle categorie radice
+  | "prodotti_manuale" // carosello di prodotti scelti a mano (pivot, ordinati)
+  | "prodotti_auto"; //   carosello popolato da una regola
+
+export const TIPI_SEZIONE_VETRINA: readonly TipoSezioneVetrina[] = [
+  "hero",
+  "banner",
+  "categorie",
+  "prodotti_manuale",
+  "prodotti_auto",
+];
+
+/** Regola di riempimento di una fascia `prodotti_auto`. */
+export type RegolaProdottiAuto = "novita" | "categoria" | "solo_online";
+
+/**
+ * Parametri specifici del tipo di sezione (colonna `config` jsonb). Tutti i
+ * campi sono opzionali: ogni tipo ne usa un sottoinsieme (vedi la migration).
+ * Il gestore modifica un unico oggetto; la lettura da DB e tollerante.
+ */
+export interface ConfigVetrina {
+  /** Etichetta piccola sopra il titolo (es. "Fresche di stagione"). */
+  occhiello?: string;
+  // hero
+  ctaPrimariaLabel?: string;
+  ctaPrimariaHref?: string;
+  ctaSecondariaLabel?: string;
+  ctaSecondariaHref?: string;
+  stickerAlto?: string;
+  stickerBasso?: string;
+  /** Immagine di sfondo (hero) o laterale (banner); vuota = gradiente. */
+  immagineUrl?: string | null;
+  // banner
+  testo?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  /** Tono cromatico del banner (chiave delle tile: es. "coral", "cyan"). */
+  tono?: string;
+  // prodotti_auto / prodotti_manuale
+  regola?: RegolaProdottiAuto;
+  categoriaId?: string | null;
+  /** Quanti prodotti mostrare nel carosello. */
+  limite?: number;
+}
+
+/** Una fascia della home curata dal gestore. */
+export interface VetrinaSezione {
+  id: string;
+  tipo: TipoSezioneVetrina;
+  titolo: string | null;
+  sottotitolo: string | null;
+  ordine: number;
+  visibile: boolean;
+  config: ConfigVetrina;
+}
+
 /**
  * Una foto della galleria prodotto. `variante_id` opzionale: se valorizzato la
  * foto rappresenta quel colore. La copertina resta `Prodotto.immagine_url`.

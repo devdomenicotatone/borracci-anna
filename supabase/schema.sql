@@ -674,3 +674,88 @@ drop policy if exists "prodotto_foto_delete_gestore" on public.prodotto_foto;
 create policy "prodotto_foto_delete_gestore"
   on public.prodotto_foto for delete to authenticated
   using ( public.is_gestore() );
+
+-- ============================================================================
+-- VETRINA CURATA: sezioni della home (fasce) + prodotti pinnati a mano.
+-- Vedi migration 20260706120000_vetrina_sezioni.sql (con il seed iniziale).
+-- ============================================================================
+create table if not exists public.vetrina_sezioni (
+  id          uuid primary key default gen_random_uuid(),
+  tipo        text not null
+                check (tipo in ('hero','banner','categorie',
+                                'prodotti_manuale','prodotti_auto')),
+  titolo      text,
+  sottotitolo text,
+  ordine      integer not null default 0,
+  visibile    boolean not null default true,
+  config      jsonb   not null default '{}'::jsonb,
+  creato_il   timestamptz not null default now()
+);
+
+create table if not exists public.vetrina_sezione_prodotti (
+  id          uuid primary key default gen_random_uuid(),
+  sezione_id  uuid not null references public.vetrina_sezioni (id) on delete cascade,
+  prodotto_id uuid not null references public.prodotti (id)        on delete cascade,
+  ordine      integer not null default 0,
+  creato_il   timestamptz not null default now(),
+  unique (sezione_id, prodotto_id)
+);
+create index if not exists idx_vsp_sezione
+  on public.vetrina_sezione_prodotti (sezione_id, ordine);
+
+alter table public.vetrina_sezioni enable row level security;
+
+drop policy if exists "vetrina_sezioni_lettura_pubblica" on public.vetrina_sezioni;
+create policy "vetrina_sezioni_lettura_pubblica"
+  on public.vetrina_sezioni for select to anon, authenticated
+  using ( visibile = true );
+
+drop policy if exists "vetrina_sezioni_lettura_gestore" on public.vetrina_sezioni;
+create policy "vetrina_sezioni_lettura_gestore"
+  on public.vetrina_sezioni for select to authenticated
+  using ( public.is_gestore() );
+
+drop policy if exists "vetrina_sezioni_insert_gestore" on public.vetrina_sezioni;
+create policy "vetrina_sezioni_insert_gestore"
+  on public.vetrina_sezioni for insert to authenticated
+  with check ( public.is_gestore() );
+
+drop policy if exists "vetrina_sezioni_update_gestore" on public.vetrina_sezioni;
+create policy "vetrina_sezioni_update_gestore"
+  on public.vetrina_sezioni for update to authenticated
+  using ( public.is_gestore() ) with check ( public.is_gestore() );
+
+drop policy if exists "vetrina_sezioni_delete_gestore" on public.vetrina_sezioni;
+create policy "vetrina_sezioni_delete_gestore"
+  on public.vetrina_sezioni for delete to authenticated
+  using ( public.is_gestore() );
+
+alter table public.vetrina_sezione_prodotti enable row level security;
+
+drop policy if exists "vsp_lettura_pubblica" on public.vetrina_sezione_prodotti;
+create policy "vsp_lettura_pubblica"
+  on public.vetrina_sezione_prodotti for select to anon, authenticated
+  using ( exists (
+    select 1 from public.vetrina_sezioni s
+    where s.id = sezione_id and s.visibile
+  ) );
+
+drop policy if exists "vsp_lettura_gestore" on public.vetrina_sezione_prodotti;
+create policy "vsp_lettura_gestore"
+  on public.vetrina_sezione_prodotti for select to authenticated
+  using ( public.is_gestore() );
+
+drop policy if exists "vsp_insert_gestore" on public.vetrina_sezione_prodotti;
+create policy "vsp_insert_gestore"
+  on public.vetrina_sezione_prodotti for insert to authenticated
+  with check ( public.is_gestore() );
+
+drop policy if exists "vsp_update_gestore" on public.vetrina_sezione_prodotti;
+create policy "vsp_update_gestore"
+  on public.vetrina_sezione_prodotti for update to authenticated
+  using ( public.is_gestore() ) with check ( public.is_gestore() );
+
+drop policy if exists "vsp_delete_gestore" on public.vetrina_sezione_prodotti;
+create policy "vsp_delete_gestore"
+  on public.vetrina_sezione_prodotti for delete to authenticated
+  using ( public.is_gestore() );

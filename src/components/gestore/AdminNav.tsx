@@ -82,6 +82,26 @@ function IconaCategorie({ className }: { className?: string }) {
   );
 }
 
+function IconaVetrina({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 9l1.6-5h14.8L21 9" />
+      <path d="M4 9v11h16V9" />
+      <path d="M4 9h16" />
+      <path d="M9.5 20v-6h5v6" />
+    </svg>
+  );
+}
+
 function IconaMedia({ className }: { className?: string }) {
   return (
     <svg
@@ -112,6 +132,7 @@ export default function AdminNav({
   const pathname = usePathname();
   const suNuovo = pathname.startsWith("/gestore/prodotti/nuovo");
   const suProdotti = pathname.startsWith("/gestore/prodotti") && !suNuovo;
+  const suVetrina = pathname.startsWith("/gestore/vetrina");
   const suCategorie = pathname.startsWith("/gestore/categorie");
   const suOrdini = pathname.startsWith("/gestore/ordini");
   const suMedia = pathname.startsWith("/gestore/media");
@@ -163,6 +184,10 @@ export default function AdminNav({
             <IconaProdotti className="h-5 w-5" />
             Prodotti
           </Link>
+          <Link href="/gestore/vetrina" className={voceSidebar(suVetrina)}>
+            <IconaVetrina className="h-5 w-5" />
+            Vetrina
+          </Link>
           <Link href="/gestore/categorie" className={voceSidebar(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />
             Categorie
@@ -208,10 +233,14 @@ export default function AdminNav({
 
       {/* BOTTOM-NAV mobile (nascosta sulle pagine di form) */}
       {!suFormProdotto && (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <Link href="/gestore/prodotti" className={voceBottom(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             <span>Prodotti</span>
+          </Link>
+          <Link href="/gestore/vetrina" className={voceBottom(suVetrina)}>
+            <IconaVetrina className="h-5 w-5" />
+            <span>Vetrina</span>
           </Link>
           <Link href="/gestore/categorie" className={voceBottom(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />

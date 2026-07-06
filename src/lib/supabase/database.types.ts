@@ -382,6 +382,76 @@ export interface Database {
           },
         ];
       };
+      vetrina_sezioni: {
+        Row: {
+          id: string;
+          tipo: string;
+          titolo: string | null;
+          sottotitolo: string | null;
+          ordine: number;
+          visibile: boolean;
+          config: Json;
+          creato_il: string;
+        };
+        Insert: {
+          id?: string;
+          tipo: string;
+          titolo?: string | null;
+          sottotitolo?: string | null;
+          ordine?: number;
+          visibile?: boolean;
+          config?: Json;
+          creato_il?: string;
+        };
+        Update: {
+          id?: string;
+          tipo?: string;
+          titolo?: string | null;
+          sottotitolo?: string | null;
+          ordine?: number;
+          visibile?: boolean;
+          config?: Json;
+          creato_il?: string;
+        };
+        Relationships: [];
+      };
+      vetrina_sezione_prodotti: {
+        Row: {
+          id: string;
+          sezione_id: string;
+          prodotto_id: string;
+          ordine: number;
+          creato_il: string;
+        };
+        Insert: {
+          id?: string;
+          sezione_id: string;
+          prodotto_id: string;
+          ordine?: number;
+          creato_il?: string;
+        };
+        Update: {
+          id?: string;
+          sezione_id?: string;
+          prodotto_id?: string;
+          ordine?: number;
+          creato_il?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "vetrina_sezione_prodotti_sezione_id_fkey";
+            columns: ["sezione_id"];
+            referencedRelation: "vetrina_sezioni";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "vetrina_sezione_prodotti_prodotto_id_fkey";
+            columns: ["prodotto_id"];
+            referencedRelation: "prodotti";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
