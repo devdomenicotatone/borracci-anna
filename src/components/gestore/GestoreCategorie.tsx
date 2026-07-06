@@ -34,6 +34,7 @@ import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import {
   useSortableList,
   type ContestoRiga,
+  type DropIntent,
   type NestSortable,
 } from "@/components/gestore/useSortableList";
 import type { Categoria } from "@/lib/types";
@@ -105,17 +106,18 @@ export default function GestoreCategorie({
     [],
   );
 
-  // Bersaglio di nidificazione corrente (per evidenziare la riga di rilascio).
-  const [nestTarget, setNestTarget] = useState<string | null>(null);
-  const nestTargetRef = useRef<string | null>(null);
-  const setNestTargetSync = useCallback((id: string | null) => {
-    nestTargetRef.current = id;
-    setNestTarget(id);
+  // Intento di rilascio corrente del drag (per l'indicatore visivo: barra di
+  // riordino o evidenziazione "dentro").
+  const [dropIntent, setDropIntent] = useState<DropIntent>(null);
+  const dropIntentRef = useRef<DropIntent>(null);
+  const setDropIntentSync = useCallback((i: DropIntent) => {
+    dropIntentRef.current = i;
+    setDropIntent(i);
   }, []);
 
-  // Opzioni di nidificazione per le liste sortable. Legalita e decisione
-  // (dentro/riordino) calcolate sull'albero corrente: rispecchiano la barriera
-  // "max 3 livelli + niente cicli" di actions/trigger.
+  // Opzioni di nidificazione per le liste sortable. La legalita e calcolata
+  // sull'albero corrente e rispecchia la barriera "max 3 livelli + niente cicli"
+  // di actions/trigger (il DB resta comunque l'autorita finale).
   const nestOpts = useMemo<NestSortable>(() => {
     const parentDi = new Map<string, string | null>();
     const figliDi = new Map<string, string[]>();
@@ -145,7 +147,7 @@ export default function GestoreCategorie({
       return 1 + max;
     };
     // È lecito mettere `dragged` DENTRO `bersaglio`?
-    const consentito = (dragged: string, bersaglio: string) => {
+    const puoNidificare = (dragged: string, bersaglio: string) => {
       if (dragged === bersaglio) return false;
       if ((parentDi.get(dragged) ?? null) === bersaglio) return false; // già dentro
       // Il bersaglio non deve essere un discendente della trascinata (ciclo).
@@ -157,27 +159,14 @@ export default function GestoreCategorie({
       }
       return livello(bersaglio) + altezza(dragged) <= 3;
     };
-    const decidi: NestSortable["decidi"] = (dragged, bersaglio, fascia) => {
-      if (dragged === bersaglio) return null;
-      const fratelli =
-        (parentDi.get(dragged) ?? null) === (parentDi.get(bersaglio) ?? null);
-      if (fratelli) {
-        // Fratello: centro = dentro (reparent), bordi = riordino tra fratelli.
-        return fascia === "centro" && consentito(dragged, bersaglio)
-          ? "nest"
-          : "reorder";
-      }
-      // Riga di un altro gruppo: tutta la riga nidifica, se lecito.
-      return consentito(dragged, bersaglio) ? "nest" : null;
-    };
     return {
       registro: registroRighe,
-      decidi,
+      puoNidificare,
       onNest: (dragged, bersaglio) => spostaRef.current(dragged, bersaglio),
-      setBersaglio: setNestTargetSync,
-      bersaglioRef: nestTargetRef,
+      setIntent: setDropIntentSync,
+      intentRef: dropIntentRef,
     };
-  }, [righe, setNestTargetSync]);
+  }, [righe, setDropIntentSync]);
 
   function applica(azione: () => Promise<EsitoCategorie>, successo?: string) {
     startTransition(async () => {
@@ -323,7 +312,7 @@ export default function GestoreCategorie({
                 figliDiretti={figliDiretti}
                 occupato={occupato}
                 registraRiga={registraRigaGlobale}
-                nestTarget={nestTarget}
+                dropIntent={dropIntent}
                 onRinomina={rinomina}
                 onSposta={sposta}
                 onElimina={setDaEliminare}
@@ -349,7 +338,7 @@ export default function GestoreCategorie({
                         figliDiretti={figliDiretti}
                         occupato={occupato}
                         registraRiga={registraRigaGlobale}
-                        nestTarget={nestTarget}
+                        dropIntent={dropIntent}
                         onRinomina={rinomina}
                         onSposta={sposta}
                         onElimina={setDaEliminare}
@@ -374,7 +363,7 @@ export default function GestoreCategorie({
                               figliDiretti={figliDiretti}
                               occupato={occupato}
                               registraRiga={registraRigaGlobale}
-                              nestTarget={nestTarget}
+                              dropIntent={dropIntent}
                               onRinomina={rinomina}
                               onSposta={sposta}
                               onElimina={setDaEliminare}
@@ -471,7 +460,7 @@ function RigaCategoria({
   figliDiretti,
   occupato,
   registraRiga,
-  nestTarget,
+  dropIntent,
   onRinomina,
   onSposta,
   onElimina,
@@ -486,7 +475,7 @@ function RigaCategoria({
   figliDiretti: (id: string) => Categoria[];
   occupato: boolean;
   registraRiga: (id: string, el: HTMLElement | null) => void;
-  nestTarget: string | null;
+  dropIntent: DropIntent;
   onRinomina: (id: string, nome: string) => void;
   onSposta: (id: string, parentId: string | null) => void;
   onElimina: (categoria: Categoria) => void;
@@ -564,22 +553,32 @@ function RigaCategoria({
     </select>
   );
 
-  const bersaglioNest = nestTarget === categoria.id;
+  // Indicatore di rilascio: "dentro" (reparent) o barra di riordino su questa riga.
+  const dentro = dropIntent?.tipo === "dentro" && dropIntent.id === categoria.id;
+  const primaDi = dropIntent?.tipo === "prima" && dropIntent.id === categoria.id;
+  const dopoDi = dropIntent?.tipo === "dopo" && dropIntent.id === categoria.id;
 
   return (
     <div
       ref={(el) => registraRiga(categoria.id, el)}
       className={[
         "relative rounded-2xl bg-white p-2.5 shadow-soft ring-1 transition-shadow",
-        bersaglioNest
+        dentro
           ? "bg-sea/[0.06] ring-2 ring-sea shadow-lg"
           : ctx.inTrascinamento
-            ? "shadow-lg ring-sea"
+            ? "opacity-60 ring-2 ring-dashed ring-sea"
             : "ring-line",
       ].join(" ")}
     >
-      {/* Indicatore "rilascia per mettere dentro" durante il drag di nidificazione. */}
-      {bersaglioNest && (
+      {/* Barra di riordino: la trascinata finira prima/dopo questa riga. */}
+      {primaDi && (
+        <span className="pointer-events-none absolute -top-1.5 left-2 right-2 z-10 h-1 rounded-full bg-sea" />
+      )}
+      {dopoDi && (
+        <span className="pointer-events-none absolute -bottom-1.5 left-2 right-2 z-10 h-1 rounded-full bg-sea" />
+      )}
+      {/* Evidenziazione "rilascia per mettere dentro" (nidificazione). */}
+      {dentro && (
         <span className="pointer-events-none absolute -top-2 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-sea px-2 py-0.5 text-[11px] font-bold text-white shadow-sea">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true">
             <path d="M9 10 4 15l5 5" />
