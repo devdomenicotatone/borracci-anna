@@ -10,10 +10,13 @@ import Link from "next/link";
 
 import {
   rimuoviFotoGalleriaAction,
+  sostituisciFotoAction,
   type FotoGalleriaRow,
 } from "@/lib/gestore/actions";
 import { useToast } from "@/components/gestore/Toaster";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
+import { generaBlurDataUrl } from "@/lib/blur";
+import { autoTrimmaImmagine } from "@/lib/trim";
 
 // Editor caricato in lazy (Filerobot + konva pesano solo quando si apre).
 const EditorImmagine = dynamic(
@@ -52,8 +55,16 @@ export default function GestoreMedia({
     fotoId: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  // Ripulitura batch dei bordi: chiede conferma, poi mostra il progresso.
+  const [chiediRipulitura, setChiediRipulitura] = useState(false);
+  const [ripulitura, setRipulitura] = useState<{
+    fatte: number;
+    totale: number;
+    ritagliate: number;
+  } | null>(null);
 
   const totale = gruppi.reduce((n, g) => n + g.foto.length, 0);
+  const occupato = pending || ripulitura !== null;
 
   // Riallinea un gruppo allo stato canonico ritornato dall'azione; i gruppi
   // rimasti senza foto spariscono.
@@ -96,17 +107,111 @@ export default function GestoreMedia({
     });
   }
 
+  // Ripulitura di massa: scarica ogni foto, ritaglia i bordi uniformi (stessa
+  // logica dell'ingestione, lib/trim.ts) e ricarica solo quelle effettivamente
+  // ritagliate. Idempotente: rilanciarla sulle foto gia pulite non fa nulla.
+  // In sequenza: piu lento ma non stressa Storage ne fa saltare le giacenze RLS.
+  async function ripulisciBordi() {
+    setChiediRipulitura(false);
+    const tutte = gruppi.flatMap((g) =>
+      g.foto.map((foto) => ({ prodottoId: g.prodottoId, foto })),
+    );
+    if (tutte.length === 0) return;
+
+    setRipulitura({ fatte: 0, totale: tutte.length, ritagliate: 0 });
+    let ritagliate = 0;
+    let errori = 0;
+    for (let i = 0; i < tutte.length; i++) {
+      const { prodottoId, foto } = tutte[i];
+      try {
+        const resp = await fetch(foto.url);
+        const blob = resp.ok ? await resp.blob() : null;
+        if (blob) {
+          const esito = await autoTrimmaImmagine(blob);
+          if (esito.ritagliata) {
+            const blur = (await generaBlurDataUrl(esito.blob)) ?? "";
+            const fd = new FormData();
+            fd.append("foto", esito.blob, "foto.webp");
+            if (blur) fd.append("blur", blur);
+            const r = await sostituisciFotoAction(prodottoId, foto.id, fd);
+            if (r.ok) {
+              ritagliate++;
+              if (r.foto) applicaGalleria(prodottoId, r.foto);
+            } else {
+              errori++;
+            }
+          }
+        } else {
+          errori++;
+        }
+      } catch {
+        errori++;
+      }
+      setRipulitura({ fatte: i + 1, totale: tutte.length, ritagliate });
+    }
+
+    setRipulitura(null);
+    mostra(
+      ritagliate > 0
+        ? `Ritagliate ${ritagliate} foto${errori ? `, ${errori} non riuscite` : ""}.`
+        : errori
+          ? `Nessuna foto ritagliata (${errori} non riuscite).`
+          : "Le foto erano gia tutte a posto.",
+      errori && !ritagliate ? "errore" : "ok",
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 lg:max-w-6xl">
       <header className="mb-6">
-        <h1 className="font-display text-2xl font-extrabold text-foreground">
-          Media
-        </h1>
-        <p className="text-sm text-muted">
-          {totale > 0
-            ? `${totale} foto in ${gruppi.length} ${gruppi.length === 1 ? "prodotto" : "prodotti"}. Modificale o rimuovile.`
-            : "Tutte le foto del catalogo."}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-extrabold text-foreground">
+              Media
+            </h1>
+            <p className="text-sm text-muted">
+              {totale > 0
+                ? `${totale} foto in ${gruppi.length} ${gruppi.length === 1 ? "prodotto" : "prodotti"}. Modificale o rimuovile.`
+                : "Tutte le foto del catalogo."}
+            </p>
+          </div>
+          {totale > 0 && (
+            <button
+              type="button"
+              onClick={() => setChiediRipulitura(true)}
+              disabled={occupato}
+              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-sea px-4 py-2 font-display text-sm font-bold text-white shadow-sea transition-colors hover:bg-sea/90 disabled:opacity-50"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                <path d="M3 3h18v18H3z" strokeDasharray="3 3" />
+                <path d="m8 12 3 3 5-6" />
+              </svg>
+              Ripulisci bordi bianchi
+            </button>
+          )}
+        </div>
+
+        {ripulitura && (
+          <div className="mt-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
+            <div className="flex items-center justify-between gap-3 text-sm font-bold text-foreground">
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sea/30 border-t-sea" />
+                Ripulisco le foto… {ripulitura.fatte}/{ripulitura.totale}
+              </span>
+              <span className="text-sea">
+                {ripulitura.ritagliate} ritagliate
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full bg-sea transition-all"
+                style={{
+                  width: `${Math.round((ripulitura.fatte / ripulitura.totale) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
       </header>
 
       {gruppi.length === 0 ? (
@@ -162,7 +267,7 @@ export default function GestoreMedia({
                   <div className="flex items-center justify-between gap-1 p-1.5">
                     <button
                       type="button"
-                      disabled={pending}
+                      disabled={occupato}
                       onClick={() =>
                         setDaModificare({ prodottoId: g.prodottoId, foto: f })
                       }
@@ -176,7 +281,7 @@ export default function GestoreMedia({
                     <button
                       type="button"
                       aria-label="Elimina foto"
-                      disabled={pending}
+                      disabled={occupato}
                       onClick={() =>
                         setDaEliminare({
                           prodottoId: g.prodottoId,
@@ -205,6 +310,16 @@ export default function GestoreMedia({
         inCorso={pending}
         onConferma={eliminaConfermato}
         onAnnulla={() => setDaEliminare(null)}
+      />
+
+      <ConfermaDialog
+        aperto={chiediRipulitura}
+        titolo="Ripulire i bordi delle foto?"
+        messaggio="Analizzo tutte le foto del catalogo e ritaglio i bordi bianchi o trasparenti, cosi il capo riempie il riquadro. Le foto gia a posto non vengono toccate; potrai comunque rifinire ogni singola foto dall'editor."
+        etichettaConferma="Ripulisci"
+        inCorso={false}
+        onConferma={ripulisciBordi}
+        onAnnulla={() => setChiediRipulitura(false)}
       />
 
       {daModificare && (

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import imageCompression from "browser-image-compression";
 
 import { generaBlurDataUrl } from "@/lib/blur";
+import { autoTrimmaImmagine } from "@/lib/trim";
 
 import {
   generaSchedaDaFotoAction,
@@ -232,9 +233,10 @@ export default function GeneraDaFoto({
         let erroriFoto = 0;
         for (let i = 0; i < fotoProdotto.length; i++) {
           const f = fotoProdotto[i];
+          const { blob: pulita } = await autoTrimmaImmagine(f.file);
           const fd = new FormData();
-          fd.append("foto", f.file, "p.webp");
-          const blur = (await generaBlurDataUrl(f.file)) ?? "";
+          fd.append("foto", pulita, "p.webp");
+          const blur = (await generaBlurDataUrl(pulita)) ?? "";
           if (blur) fd.append("blur", blur);
           const colore = colorePerIndice.get(i);
           if (colore) fd.append("colore", colore);

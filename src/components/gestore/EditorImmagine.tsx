@@ -22,6 +22,7 @@ import { StyleSheetManager } from "styled-components";
 import isPropValid from "@emotion/is-prop-valid";
 
 import { generaBlurDataUrl } from "@/lib/blur";
+import { autoTrimmaImmagine } from "@/lib/trim";
 import {
   sostituisciFotoAction,
   type FotoGalleriaRow,
@@ -93,7 +94,10 @@ export default function EditorImmagine({
           });
         },
       });
-      const nuovo = URL.createObjectURL(blob);
+      // Dopo la rimozione lo sfondo il capo galleggia in un rettangolo
+      // trasparente: ritagliamo l'alone cosi torna centrato e pronto da salvare.
+      const { blob: pulita } = await autoTrimmaImmagine(blob);
+      const nuovo = URL.createObjectURL(pulita);
       objectUrls.current.push(nuovo);
       setSorgente(nuovo);
       mostra("Sfondo rimosso. Ora puoi rifinire e salvare.", "ok");

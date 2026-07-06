@@ -4,8 +4,11 @@
 // Foto principale grande + striscia di miniature scorrevole. Frecce e contatore
 // quando c'e piu di una foto. L'indice attivo e controllato dall'esterno
 // (ProdottoDettaglio) cosi resta sincronizzato col selettore colore.
-
-import { useCallback, useState, type CSSProperties } from "react";
+//
+// Le foto entrano gia ritagliate ai bordi uniformi (vedi lib/trim.ts): il capo
+// riempie il riquadro senza bianco di troppo, quindi qui basta un object-cover
+// netto — niente piu selettore Fronte/Retro/Intera, che serviva solo a rimediare
+// alle foto orizzontali "annegate nel bianco".
 
 import Image from "next/image";
 
@@ -51,71 +54,6 @@ export default function GalleriaProdotto({
   const blurPrincipale = principale?.blurDataUrl ?? null;
   const multipla = foto.length > 1;
 
-  // Foto "larghe" (es. scatto fronte+retro affiancati): in un box verticale,
-  // object-cover ne mostrerebbe solo la meta centrale (la giuntura). Per queste,
-  // SENZA ritagliare i file, offriamo tre viste sulla stessa immagine: Fronte
-  // (ancorata a sinistra), Retro (a destra) e Intera (contain). "Larga" e
-  // rilevato dal rapporto reale dell'immagine quando si carica (vedi misuraImg),
-  // cosi le foto verticali normali restano identiche a prima e non serve alcun
-  // dato salvato: funziona retroattivo su tutte le foto gia caricate.
-  const [ratioPerId, setRatioPerId] = useState<Record<string, number>>({});
-  const [vista, setVista] = useState<"sx" | "dx" | "intera">("sx");
-
-  // Cambiando foto, riparti sempre dal Fronte. Aggiustamento di stato DURANTE il
-  // render (non in un effect): React lo consiglia per resettare uno stato quando
-  // cambia una prop, senza il render a cascata di un useEffect.
-  const [fotoDellaVista, setFotoDellaVista] = useState(idx);
-  if (fotoDellaVista !== idx) {
-    setFotoDellaVista(idx);
-    setVista("sx");
-  }
-
-  const chiaveFoto = principale?.id ?? "__fallback__";
-
-  // Misura il rapporto reale dell'immagine tramite ref callback. Copre due casi:
-  // foto gia in cache (complete al mount -> misura subito) e foto ancora da
-  // caricare (listener "load" nativo). Il listener nativo e piu affidabile del
-  // prop onLoad, che con next/image non scattava sempre. Il ref dipende da
-  // chiaveFoto: React lo ri-invoca al cambio foto e rimisura; il cleanup (React
-  // 19) stacca il listener alla rimozione o al cambio.
-  const misuraImg = useCallback(
-    (img: HTMLImageElement | null) => {
-      if (!img) return;
-      const misura = () => {
-        if (img.naturalHeight === 0) return;
-        const r = img.naturalWidth / img.naturalHeight;
-        setRatioPerId((m) =>
-          m[chiaveFoto] === r ? m : { ...m, [chiaveFoto]: r },
-        );
-      };
-      if (img.complete) {
-        misura();
-        return;
-      }
-      img.addEventListener("load", misura);
-      return () => img.removeEventListener("load", misura);
-    },
-    [chiaveFoto],
-  );
-
-  // Soglia 1.2 = chiaramente orizzontale. Una foto singola verticale sta ~0.75,
-  // un fronte+retro affiancati ~1.5: la soglia separa bene i due casi.
-  const larga = (ratioPerId[chiaveFoto] ?? 0) > 1.2;
-
-  // object-fit/position via STILE INLINE, non classi Tailwind: sono valori
-  // dinamici e cosi non dipendiamo dalla generazione just-in-time delle utility
-  // (le nuove object-left/right non venivano emesse). Cambio istantaneo tra le
-  // viste: netto e prevedibile per un selettore Fronte/Retro.
-  const stileFoto: CSSProperties = {
-    objectFit: larga && vista === "intera" ? "contain" : "cover",
-    objectPosition:
-      larga && vista === "sx"
-        ? "left center"
-        : larga && vista === "dx"
-          ? "right center"
-          : "center",
-  };
-
   function vai(delta: number) {
     if (!multipla) return;
     const n = foto.length;
@@ -132,8 +70,7 @@ export default function GalleriaProdotto({
             alt={principale ? `${nome} — ${principale.etichetta}` : nome}
             fill
             sizes="(max-width: 768px) 100vw, 50vw"
-            style={stileFoto}
-            ref={misuraImg}
+            className="object-cover"
             // Foto grande della scheda: quality alta cosi l'ottimizzazione non
             // somma una seconda perdita visibile sopra la foto gia caricata.
             quality={90}
@@ -183,36 +120,6 @@ export default function GalleriaProdotto({
               {idx + 1}/{foto.length}
             </span>
           </>
-        )}
-
-        {/* Selettore vista per le foto larghe (fronte+retro nello stesso file):
-            sposta object-position invece di ritagliare l'immagine. */}
-        {larga && (
-          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/85 p-1 shadow-soft backdrop-blur">
-            {([
-              ["sx", "Fronte"],
-              ["dx", "Retro"],
-              ["intera", "Intera"],
-            ] as const).map(([v, etichetta]) => {
-              const attivo = vista === v;
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setVista(v)}
-                  aria-pressed={attivo}
-                  className={[
-                    "rounded-full px-3 py-1 font-display text-xs font-bold transition-colors",
-                    attivo
-                      ? "bg-sea text-white shadow-sea"
-                      : "text-foreground hover:bg-black/5",
-                  ].join(" ")}
-                >
-                  {etichetta}
-                </button>
-              );
-            })}
-          </div>
         )}
       </div>
 

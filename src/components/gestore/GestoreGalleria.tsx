@@ -13,6 +13,7 @@ import dynamic from "next/dynamic";
 import imageCompression from "browser-image-compression";
 
 import { generaBlurDataUrl } from "@/lib/blur";
+import { autoTrimmaImmagine } from "@/lib/trim";
 
 import {
   aggiungiFotoGalleriaAction,
@@ -75,9 +76,14 @@ export default function GestoreGalleria({
           fileType: "image/webp",
           useWebWorker: true,
         });
-        const blur = await generaBlurDataUrl(compressa);
+        // Toglie i bordi bianchi/trasparenti (scatti da catalogo, o l'alone che
+        // resta dopo "rimuovi sfondo"): il capo riempie la scheda invece di
+        // perdersi nel bianco. Conservativo: se non c'e un bordo uniforme lascia
+        // l'immagine com'e.
+        const { blob: pulita } = await autoTrimmaImmagine(compressa);
+        const blur = await generaBlurDataUrl(pulita);
         const fd = new FormData();
-        fd.append("foto", compressa, "foto.webp");
+        fd.append("foto", pulita, "foto.webp");
         if (blur) fd.append("blur", blur);
         const esito = await aggiungiFotoGalleriaAction(prodottoId, fd);
         if (!esito.ok || !esito.foto) {
