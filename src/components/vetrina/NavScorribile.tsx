@@ -8,7 +8,14 @@
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
-export default function NavScorribile({ children }: { children: ReactNode }) {
+export default function NavScorribile({
+  children,
+  etichetta = "le categorie",
+}: {
+  children: ReactNode;
+  /** Cosa si scorre, per le aria-label delle frecce (es. "i temi"). */
+  etichetta?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [sx, setSx] = useState(false);
   const [dx, setDx] = useState(false);
@@ -47,7 +54,7 @@ export default function NavScorribile({ children }: { children: ReactNode }) {
       {sx && (
         <button
           type="button"
-          aria-label="Scorri le categorie a sinistra"
+          aria-label={`Scorri ${etichetta} a sinistra`}
           onClick={() => scorri(-1)}
           className={`${frecciaCls} left-0`}
         >
@@ -67,7 +74,7 @@ export default function NavScorribile({ children }: { children: ReactNode }) {
       {dx && (
         <button
           type="button"
-          aria-label="Scorri le categorie a destra"
+          aria-label={`Scorri ${etichetta} a destra`}
           onClick={() => scorri(1)}
           className={`${frecciaCls} right-0`}
         >

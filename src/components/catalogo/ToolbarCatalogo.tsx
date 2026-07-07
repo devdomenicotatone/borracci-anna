@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import NavScorribile from "@/components/vetrina/NavScorribile";
 import {
   ETICHETTE_ORDINAMENTO,
   FILTRI_VUOTI,
@@ -114,54 +115,57 @@ export default function ToolbarCatalogo({
     <div className="mb-6">
       {/* Chip franchise: scorciatoie per saga/serie presenti nella categoria,
           derivate dai nomi (vedi lib/franchise). Servono alla scoperta: mostrano
-          cosa c'e senza doverlo cercare. */}
+          cosa c'e senza doverlo cercare. Stessa riga scorribile con frecce delle
+          categorie (NavScorribile): quando sono tanti si raggiungono tutti. */}
       {franchiseDisponibili.length > 0 && (
-        <div className="-mx-1 mb-3 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* "Tutto" = default: nessun franchise attivo, si vede l'intera
-              categoria. Coerente con le righe di navigazione sopra, dove una
-              voce "Tutto" resta selezionata finche non si restringe. */}
-          <button
-            type="button"
-            onClick={() => naviga({ ...filtri, franchise: "" })}
-            aria-pressed={filtri.franchise === ""}
-            className={[
-              "inline-flex shrink-0 snap-start items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
-              filtri.franchise === ""
-                ? "bg-sea text-white shadow-sea"
-                : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
-            ].join(" ")}
-          >
-            Tutto
-          </button>
-          {franchiseDisponibili.slice(0, 12).map((f) => {
-            const attivo = filtri.franchise === f.slug;
-            return (
-              <button
-                key={f.slug}
-                type="button"
-                onClick={() =>
-                  naviga({ ...filtri, franchise: attivo ? "" : f.slug })
-                }
-                aria-pressed={attivo}
-                className={[
-                  "inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
-                  attivo
-                    ? "bg-sea text-white shadow-sea"
-                    : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
-                ].join(" ")}
-              >
-                {f.etichetta}
-                <span
+        <div className="mb-3">
+          <NavScorribile etichetta="i temi">
+            {/* "Tutto" = default: nessun franchise attivo, si vede l'intera
+                categoria. Coerente con le righe di navigazione sopra, dove una
+                voce "Tutto" resta selezionata finche non si restringe. */}
+            <button
+              type="button"
+              onClick={() => naviga({ ...filtri, franchise: "" })}
+              aria-pressed={filtri.franchise === ""}
+              className={[
+                "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
+                filtri.franchise === ""
+                  ? "bg-sea text-white shadow-sea"
+                  : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
+              ].join(" ")}
+            >
+              Tutto
+            </button>
+            {franchiseDisponibili.map((f) => {
+              const attivo = filtri.franchise === f.slug;
+              return (
+                <button
+                  key={f.slug}
+                  type="button"
+                  onClick={() =>
+                    naviga({ ...filtri, franchise: attivo ? "" : f.slug })
+                  }
+                  aria-pressed={attivo}
                   className={[
-                    "rounded-full px-1.5 text-xs font-bold tabular-nums",
-                    attivo ? "bg-white/25 text-white" : "bg-surface-2 text-sea",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
+                    attivo
+                      ? "bg-sea text-white shadow-sea"
+                      : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
                   ].join(" ")}
                 >
-                  {f.count}
-                </span>
-              </button>
-            );
-          })}
+                  {f.etichetta}
+                  <span
+                    className={[
+                      "rounded-full px-1.5 text-xs font-bold tabular-nums",
+                      attivo ? "bg-white/25 text-white" : "bg-surface-2 text-sea",
+                    ].join(" ")}
+                  >
+                    {f.count}
+                  </span>
+                </button>
+              );
+            })}
+          </NavScorribile>
         </div>
       )}
 
