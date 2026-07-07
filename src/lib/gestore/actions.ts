@@ -7,10 +7,11 @@
 //   2) mutazione via anon key + sessione + RLS (is_gestore), in try/catch;
 //   3) revalidatePath e/o redirect FUORI dal try/catch.
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { verifySession } from "@/lib/gestore/auth";
+import { TAG_CORRELATI } from "@/lib/correlati";
 import { slugify } from "@/lib/gestore/slug";
 import { caricaCategorie } from "@/lib/categorie";
 import { idsProdottiGestore } from "@/lib/gestore/prodotti-lista";
@@ -56,6 +57,7 @@ export async function toggleAttivoAction(
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
+    revalidateTag(TAG_CORRELATI, "max");
     return { ok: true };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
@@ -207,6 +209,9 @@ export async function salvaProdottoAction(
   revalidatePath("/");
   // PDP pubblica: rotta dinamica -> pattern + tipo 'page' (non la URL letterale).
   revalidatePath("/prodotti/[slug]", "page");
+  // Correlati: un prodotto nuovo/modificato cambia i suggerimenti anche di ALTRI
+  // (stessa entita/categoria), quindi si invalida l'intero tag, non una pagina.
+  revalidateTag(TAG_CORRELATI, "max");
 
   // In creazione si va alla pagina di modifica (per foto/varianti).
   // redirect() lancia NEXT_REDIRECT: deve stare fuori dal try/catch.
@@ -440,6 +445,9 @@ function revalidaProdotto(prodottoId: string): void {
   revalidatePath(`/gestore/prodotti/${prodottoId}`);
   revalidatePath("/");
   revalidatePath("/prodotti/[slug]", "page");
+  // La copertina (immagine_url) cambia dalla galleria: rinfresca anche le card
+  // correlate degli altri prodotti che lo mostrano.
+  revalidateTag(TAG_CORRELATI, "max");
 }
 
 /** Carica una foto WebP nella galleria del prodotto (in coda). */
@@ -709,6 +717,7 @@ export async function eliminaProdottoAction(id: string): Promise<EsitoElimina> {
       if (error) return { ok: false, error: error.message };
       revalidatePath("/gestore/prodotti");
       revalidatePath("/");
+      revalidateTag(TAG_CORRELATI, "max");
       return { ok: true, soft: true };
     }
 
@@ -723,6 +732,7 @@ export async function eliminaProdottoAction(id: string): Promise<EsitoElimina> {
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
+    revalidateTag(TAG_CORRELATI, "max");
     return { ok: true, soft: false };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
@@ -770,6 +780,7 @@ export async function assegnaCategoriaBulkAction(
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
+    revalidateTag(TAG_CORRELATI, "max");
     return { ok: true, aggiornati };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
@@ -856,6 +867,7 @@ export async function eliminaProdottiBulkAction(
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
+    revalidateTag(TAG_CORRELATI, "max");
     return { ok: true, eliminati: nEliminati, nascosti: nNascosti };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };

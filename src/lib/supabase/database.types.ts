@@ -512,6 +512,25 @@ export interface Database {
         Args: Record<string, never>;
         Returns: { categoria_id: string | null; n: number }[];
       };
+      norm_nome_prodotto: {
+        Args: { p: string };
+        Returns: string;
+      };
+      prodotti_correlati: {
+        Args: { p_slug: string; p_limit?: number };
+        Returns: {
+          id: string;
+          slug: string;
+          nome: string;
+          descrizione: string | null;
+          prezzo_cents: number;
+          valuta: string;
+          immagine_url: string | null;
+          attivo: boolean;
+          solo_online: boolean;
+          categoria_id: string | null;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

@@ -23,7 +23,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { TAG_CORRELATI } from "@/lib/correlati";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
@@ -703,6 +704,7 @@ export async function creaProdottoDaImportAction(input: {
 
   revalidatePath("/gestore/prodotti");
   revalidatePath("/");
+  revalidateTag(TAG_CORRELATI, "max");
   return { ok: true, prodottoId };
 }
 
@@ -950,6 +952,7 @@ export async function importaFotoDaUrlAction(
     revalidatePath(`/gestore/prodotti/${prodottoId}`);
     revalidatePath("/");
     revalidatePath("/prodotti/[slug]", "page");
+    revalidateTag(TAG_CORRELATI, "max");
     return { ok: true };
   } catch {
     return { ok: false, error: "Errore di rete durante l'import della foto." };

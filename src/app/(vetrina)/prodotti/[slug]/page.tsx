@@ -3,12 +3,13 @@
 // foto da Supabase per slug. Se le env Supabase non sono configurate degrada
 // con grazia a un prodotto d'esempio, cosi il progetto builda anche senza DB.
 
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import ProdottoDettaglio from "@/components/prodotto/ProdottoDettaglio";
+import ProdottiCorrelati from "@/components/prodotto/ProdottiCorrelati";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { ordineTaglia } from "@/lib/catalogo";
 import type {
@@ -297,6 +298,13 @@ export default async function PaginaProdotto({ params }: PdpProps) {
         suRichiesta={prodottoBase.disponibilita_su_richiesta ?? true}
         soloOnline={prodottoBase.solo_online ?? false}
       />
+
+      {/* Suggerimenti correlati: caricamento indipendente (streaming), cosi
+          non ritardano il contenuto principale della scheda. Se sono troppo
+          pochi la sezione non compare (vedi ProdottiCorrelati). */}
+      <Suspense fallback={null}>
+        <ProdottiCorrelati slug={prodottoBase.slug} />
+      </Suspense>
     </main>
   );
 }

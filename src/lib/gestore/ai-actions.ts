@@ -13,7 +13,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
 import { COLORI, coloreCanonico } from "@/lib/catalogo";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { TAG_CORRELATI } from "@/lib/correlati";
 
 const MODELLO = "claude-sonnet-5";
 
@@ -367,6 +368,7 @@ export async function creaSchedaDaFotoAction(
 
     revalidatePath("/gestore/prodotti");
     revalidatePath("/");
+    revalidateTag(TAG_CORRELATI, "max");
     return { ok: true, id: prodottoId };
   } catch {
     // Se la bozza era gia stata creata, falla aprire comunque (niente fantasma).

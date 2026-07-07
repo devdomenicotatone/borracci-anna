@@ -979,3 +979,149 @@ revoke all on function public.conteggi_categorie_gestore() from public;
 grant execute on function public.cerca_prodotti_gestore(text, text, uuid[], boolean, text, integer, integer) to authenticated;
 grant execute on function public.ids_prodotti_gestore(text, text, uuid[], boolean) to authenticated;
 grant execute on function public.conteggi_categorie_gestore() to authenticated;
+
+-- ============================================================================
+-- PRODOTTI CORRELATI ("Ti potrebbe piacere anche" nella scheda prodotto)
+-- ----------------------------------------------------------------------------
+-- Stesso contenuto della migration 20260707120000_prodotti_correlati.sql.
+-- Recommender content-based nativo Postgres: la "licenza/entita" (Harry Potter,
+-- Napoli...) non e una colonna ne una categoria (i temi di 3o livello sono
+-- macro: "Film & Serie TV", "Calcio"), vive nel `nome` e nel prefisso `codice`.
+-- Si combina: similarita trigram sul nome normalizzato (segnale forte) + bonus
+-- prefisso codice + bonus categoria (foglia>tipo>genere) + vicinanza prezzo,
+-- con anti-monotonia (max 2 per nome normalizzato) e soglia minima.
+-- SECURITY INVOKER: la RLS mostra solo il catalogo attivo (dati pubblici).
+-- ============================================================================
+
+create extension if not exists pg_trgm;
+
+create or replace function public.norm_nome_prodotto(p text)
+returns text
+language sql
+immutable
+parallel safe
+as $norm$
+  select trim(both ' ' from
+    regexp_replace(
+      regexp_replace(
+        regexp_replace(
+          regexp_replace(
+            ' ' || regexp_replace(lower(coalesce(p, '')), '[^a-z0-9]+', ' ', 'g') || ' ',
+            '\m(tshirt|shirt|maglia|maglietta|maglie|maglione|felpa|felpe|polo|camicia|cappello|cappellino|cappelli|berretto|berretti|visiera|trucker|pantaloni|pantalone|salopette|pallone|palloni|palla|completo|completi|kit|tuta|giacca|gilet|canotta|canottiera|shorts|bermuda|costume|sciarpa|sciarpe|borsa|zaino|calzini|guanti|portachiavi|tazza|poster|ufficiale|official|replica|home|away|third|logo|jersey|con|collo|coreano|coreana|da|di|del|dello|della|dei|delle|il|la|le|lo|gli|in|ed|kids|junior|baby|bimbo|bimba|donna|uomo|bambino|bambina|unisex|adulto|new|edition|calcio|ciclismo|fc|ac|as|ssc|cf|us|ssd)\M',
+            ' ', 'g'
+          ),
+          '\m[0-9]+\M', ' ', 'g'
+        ),
+        '\m[a-z]\M', ' ', 'g'
+      ),
+      '\s+', ' ', 'g'
+    )
+  );
+$norm$;
+
+create or replace function public.prodotti_correlati(
+  p_slug  text,
+  p_limit integer default 8
+)
+returns table (
+  id           uuid,
+  slug         text,
+  nome         text,
+  descrizione  text,
+  prezzo_cents integer,
+  valuta       text,
+  immagine_url text,
+  attivo       boolean,
+  solo_online  boolean,
+  categoria_id uuid
+)
+language sql
+stable
+set search_path = public, extensions, pg_catalog
+as $$
+  with
+  catinfo as (
+    select c.id,
+           c.parent_id,
+           coalesce(gp.id, pp.id, c.id) as root_id
+    from public.categorie c
+    left join public.categorie pp on pp.id = c.parent_id
+    left join public.categorie gp on gp.id = pp.parent_id
+  ),
+  target as (
+    select
+      p.id,
+      p.categoria_id,
+      p.prezzo_cents,
+      public.norm_nome_prodotto(p.nome)                          as nom,
+      lower(coalesce(substring(p.codice from '^[A-Za-z]+'), ''))  as pfx,
+      ci.parent_id                                               as t_parent,
+      ci.root_id                                                 as t_root
+    from public.prodotti p
+    left join catinfo ci on ci.id = p.categoria_id
+    where p.slug = p_slug and p.attivo = true
+    limit 1
+  ),
+  candidates as (
+    select
+      c.id, c.slug, c.nome, c.descrizione, c.prezzo_cents, c.valuta,
+      c.immagine_url, c.attivo, c.solo_online, c.categoria_id,
+      public.norm_nome_prodotto(c.nome)                          as cand_nom,
+      lower(coalesce(substring(c.codice from '^[A-Za-z]+'), ''))  as cpfx,
+      ci.parent_id                                               as c_parent,
+      ci.root_id                                                 as c_root
+    from public.prodotti c
+    left join catinfo ci on ci.id = c.categoria_id
+    where c.attivo = true
+  ),
+  scored as (
+    select
+      c.id, c.slug, c.nome, c.descrizione, c.prezzo_cents, c.valuta,
+      c.immagine_url, c.attivo, c.solo_online, c.categoria_id, c.cand_nom,
+      (
+          4.0 * case
+                  when length(t.nom) >= 2 and length(c.cand_nom) >= 2
+                    then similarity(c.cand_nom, t.nom)
+                  else 0
+                end
+        + 2.0 * case
+                  when length(t.pfx) >= 3 and length(c.cpfx) >= 3
+                       and left(c.cpfx, 3) = left(t.pfx, 3) then 1.0
+                  when length(t.pfx) >= 2 and length(c.cpfx) >= 2
+                       and left(c.cpfx, 2) = left(t.pfx, 2) then 0.35
+                  else 0
+                end
+        + 1.5 * case
+                  when c.categoria_id is not null and c.categoria_id = t.categoria_id then 1.0
+                  when c.c_parent   is not null and c.c_parent = t.t_parent           then 0.6
+                  when c.c_root     is not null and t.t_root is not null
+                       and c.c_root = t.t_root                                        then 0.3
+                  else 0
+                end
+        + 0.5 * (1 - least(1.0, abs(c.prezzo_cents - t.prezzo_cents)::numeric
+                                   / greatest(t.prezzo_cents, 1)))
+      ) as score
+    from candidates c
+    cross join target t
+    where c.id <> t.id
+  ),
+  ranked as (
+    select s.*,
+           row_number() over (
+             partition by s.cand_nom
+             order by s.score desc, s.prezzo_cents asc, s.id asc
+           ) as rn
+    from scored s
+    where s.score >= 0.5
+  )
+  select
+    id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url,
+    attivo, solo_online, categoria_id
+  from ranked
+  where rn <= 2
+  order by score desc, prezzo_cents asc, id asc
+  limit greatest(coalesce(p_limit, 8), 0);
+$$;
+
+grant execute on function public.norm_nome_prodotto(text)          to anon, authenticated;
+grant execute on function public.prodotti_correlati(text, integer) to anon, authenticated;
