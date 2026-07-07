@@ -647,7 +647,12 @@ export async function creaProdottoDaImportAction(input: {
           attivo: false, //                       SEMPRE bozza: pubblica il gestore
           disponibilita_su_richiesta: true,
           solo_online: input.soloOnline === true,
-        })
+          // Origine BLT: il sync giornaliero aggiorna solo questi (i prodotti
+          // propri del negozio restano fornitore null e non vengono mai toccati).
+          fornitore: "BLT",
+          // Cast: `fornitore` e una colonna nuova non ancora nei types generati
+          // (rigenerare dopo la migration 20260707180000).
+        } as never)
         .select("id")
         .single();
       if (!error && data) {

@@ -44,7 +44,7 @@ export interface ReportSync {
   dryRun: boolean;
   durataMs: number;
   csv?: { righeDati: number; prodottiFornitore: number };
-  prodotti?: { totali: number; agganciati: number; orfani: string[]; senzaCodice: number };
+  prodotti?: { totali: number; agganciati: number; orfani: string[]; senzaCodice: number; nonBlt: number };
   varianti?: {
     analizzate: number;
     daAggiornare: number;
@@ -61,6 +61,7 @@ interface RigaProdotto {
   codice: string | null;
   nome: string;
   costo_cents: number | null;
+  fornitore: string | null;
 }
 interface RigaVariante {
   id: string;
@@ -109,7 +110,7 @@ export async function eseguiSyncCatalogo(opts: { dryRun?: boolean } = {}): Promi
 
     // 2. Stato attuale del catalogo (service role: vede anche le bozze).
     const sb = createAdminSupabase() as unknown as Db;
-    const prodotti = await leggiTutto<RigaProdotto>(sb, "prodotti", "id, codice, nome, costo_cents");
+    const prodotti = await leggiTutto<RigaProdotto>(sb, "prodotti", "id, codice, nome, costo_cents, fornitore");
     const varianti = await leggiTutto<RigaVariante>(sb, "varianti", "id, prodotto_id, taglia, stock");
 
     // 3. Prodotti: aggancio codice→parent, costo ingrosso, avvisi prezzo.
@@ -119,8 +120,11 @@ export async function eseguiSyncCatalogo(opts: { dryRun?: boolean } = {}): Promi
     const orfani: string[] = [];
     let senzaCodice = 0;
     let agganciati = 0;
+    let nonBlt = 0;
 
     for (const p of prodotti) {
+      // Solo articoli BLT: i prodotti propri del negozio non si toccano mai.
+      if (p.fornitore !== "BLT") { nonBlt++; continue; }
       const codice = (p.codice ?? "").trim();
       if (!codice) { senzaCodice++; parentPerProdotto.set(p.id, null); continue; }
       const parent = parentDaCodice(codice, idx.parents);
@@ -167,7 +171,7 @@ export async function eseguiSyncCatalogo(opts: { dryRun?: boolean } = {}): Promi
       dryRun,
       durataMs: durataMs(),
       csv: { righeDati: idx.righeDati, prodottiFornitore: idx.prodotti },
-      prodotti: { totali: prodotti.length, agganciati, orfani, senzaCodice },
+      prodotti: { totali: prodotti.length, agganciati, orfani, senzaCodice, nonBlt },
       varianti: {
         analizzate: varianti.length,
         daAggiornare: updVarianti.length,
