@@ -186,6 +186,13 @@ export function indicizzaCatalogoCsv(testo: string): IndiceCatalogoBlt {
   const perVariante = new Map<string, VoceCatalogoBlt>();
   const costoPerParent = new Map<string, number | null>();
   const parents = new Set<string>();
+  // Conteggio righe e ultima voce per parent: per gli articoli con UNA sola
+  // giacenza nel CSV (accessori taglia-unica — es. i cappelli, che BLT etichetta
+  // con la taglia numerica "58"/"54") si aggiunge poi un alias "Taglia unica",
+  // cosi combaciano con la variante taglia-unica del sito che l'etichetta esatta
+  // non intercetterebbe.
+  const nRighe = new Map<string, number>();
+  const ultimaVoce = new Map<string, VoceCatalogoBlt>();
   let righeDati = 0;
 
   for (const r of righe.slice(1)) {
@@ -197,12 +204,24 @@ export function indicizzaCatalogoCsv(testo: string): IndiceCatalogoBlt {
     parents.add(parent);
     const taglia = tipo === "Sku Standalone" ? "Taglia unica" : normalizzaTagliaBlt(r[H.taglia]);
     const costoCents = prezzoIngrossoCents(r[H.price]);
-    perVariante.set(`${parent}||${taglia}`, { semaforo: pulisci(r[H.stock]), costoCents });
+    const voce: VoceCatalogoBlt = { semaforo: pulisci(r[H.stock]), costoCents };
+    perVariante.set(`${parent}||${taglia}`, voce);
+    nRighe.set(parent, (nRighe.get(parent) ?? 0) + 1);
+    ultimaVoce.set(parent, voce);
     // Costo del prodotto: primo valore valido incontrato per il parent.
     if (costoCents !== null && !costoPerParent.has(parent)) {
       costoPerParent.set(parent, costoCents);
     } else if (!costoPerParent.has(parent)) {
       costoPerParent.set(parent, null);
+    }
+  }
+  // Alias "Taglia unica" per gli articoli con una sola giacenza nel CSV (vedi
+  // sopra): li aggancia alla variante taglia-unica del sito. Non consultato per
+  // i prodotti con taglie vere (il match esatto scatta prima).
+  for (const [parent, n] of nRighe) {
+    const voce = ultimaVoce.get(parent);
+    if (n === 1 && voce && !perVariante.has(`${parent}||Taglia unica`)) {
+      perVariante.set(`${parent}||Taglia unica`, voce);
     }
   }
   return { perVariante, costoPerParent, parents, righeDati, prodotti: parents.size };
