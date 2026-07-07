@@ -17,6 +17,7 @@ import {
 } from "@/lib/filtri-catalogo";
 import type { Prodotto } from "@/lib/types";
 import { COLORI, ordinaTaglie } from "@/lib/catalogo";
+import { contaFranchise, paroleFranchise } from "@/lib/franchise";
 
 type Supabase = SupabaseClient<Database>;
 
@@ -155,6 +156,17 @@ export async function caricaProdottiVetrina(
       }
     }
 
+    // Filtro per FRANCHISE: le parole-chiave del franchise diventano un OR ilike
+    // sul nome (le stesse usate per contarli, cosi il numero del chip torna).
+    if (filtri.franchise) {
+      const parole = (paroleFranchise(filtri.franchise) ?? [])
+        .map((p) => patternRicerca(p))
+        .filter(Boolean);
+      if (parole.length > 0) {
+        query = query.or(parole.map((p) => `nome.ilike.%${p}%`).join(","));
+      }
+    }
+
     switch (filtri.ordina) {
       case "prezzo-asc":
         query = query.order("prezzo_cents", { ascending: true });
@@ -220,7 +232,7 @@ async function aggregaFacette(
     const supabase = createAdminSupabase();
     let query = supabase
       .from("prodotti")
-      .select("prezzo_cents, varianti(taglia, colore)")
+      .select("nome, prezzo_cents, varianti(taglia, colore)")
       .eq("attivo", true);
     if (categoriaIds.length > 0) {
       query = query.in("categoria_id", categoriaIds);
@@ -231,13 +243,16 @@ async function aggregaFacette(
 
     const taglie = new Set<string>();
     const colori = new Set<string>();
+    const nomi: string[] = [];
     let min: number | null = null;
     let max: number | null = null;
 
     for (const riga of data as unknown as Array<{
+      nome: string;
       prezzo_cents: number;
       varianti: Array<{ taglia: string | null; colore: string | null }> | null;
     }>) {
+      nomi.push(riga.nome);
       min = min == null ? riga.prezzo_cents : Math.min(min, riga.prezzo_cents);
       max = max == null ? riga.prezzo_cents : Math.max(max, riga.prezzo_cents);
       for (const v of riga.varianti ?? []) {
@@ -251,6 +266,7 @@ async function aggregaFacette(
       colori: ordinaColori(colori),
       prezzoMinCents: min,
       prezzoMaxCents: max,
+      franchise: contaFranchise(nomi),
     };
   } catch {
     return FACETTE_VUOTE;
@@ -283,7 +299,7 @@ export async function caricaFacetteVetrina(
 
   const cached = unstable_cache(
     () => aggregaFacette(ids),
-    ["facette-vetrina", chiave],
+    ["facette-vetrina-v2", chiave],
     { revalidate: FACETTE_REVALIDATE_S, tags: [TAG_FACETTE_VETRINA] },
   );
 

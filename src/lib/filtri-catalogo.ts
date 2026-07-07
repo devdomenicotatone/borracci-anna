@@ -38,6 +38,8 @@ export interface FiltriCatalogo {
   prezzoMax: number | null;
   /** Testo di ricerca (nome/descrizione). */
   q: string;
+  /** Slug del franchise selezionato (derivato dai nomi). "" = nessuno. */
+  franchise: string;
   ordina: Ordinamento;
 }
 
@@ -47,6 +49,7 @@ export const FILTRI_VUOTI: FiltriCatalogo = {
   prezzoMin: null,
   prezzoMax: null,
   q: "",
+  franchise: "",
   ordina: ORDINAMENTO_DEFAULT,
 };
 
@@ -99,6 +102,7 @@ export function parseFiltri(sp: SearchParamsCatalogo): FiltriCatalogo {
     prezzoMin,
     prezzoMax,
     q: primo(sp.q).trim().slice(0, 80),
+    franchise: primo(sp.franchise).trim().slice(0, 40),
     ordina,
   };
 }
@@ -114,6 +118,7 @@ export function serializzaFiltri(filtri: FiltriCatalogo): string {
   if (filtri.prezzoMin != null) qs.set("prezzo_min", String(filtri.prezzoMin));
   if (filtri.prezzoMax != null) qs.set("prezzo_max", String(filtri.prezzoMax));
   if (filtri.q) qs.set("q", filtri.q);
+  if (filtri.franchise) qs.set("franchise", filtri.franchise);
   if (filtri.ordina !== ORDINAMENTO_DEFAULT) qs.set("ordina", filtri.ordina);
   return qs.toString();
 }
@@ -123,6 +128,13 @@ export function serializzaFiltri(filtri: FiltriCatalogo): string {
  * prezzi. Le calcola il server (lib/vetrina), le consuma la toolbar client:
  * il tipo vive qui perche questo modulo e importabile da entrambi i mondi.
  */
+/** Un franchise presente nella categoria, con quanti prodotti lo compongono. */
+export interface FranchiseConteggio {
+  slug: string;
+  etichetta: string;
+  count: number;
+}
+
 export interface FacetteCatalogo {
   /** Taglie realmente presenti (ordinate sulla scala XXS -> 6XL). */
   taglie: string[];
@@ -131,6 +143,8 @@ export interface FacetteCatalogo {
   /** Range prezzi del catalogo corrente, in centesimi. null = catalogo vuoto. */
   prezzoMinCents: number | null;
   prezzoMaxCents: number | null;
+  /** Franchise presenti nella categoria (per i chip rapidi), ordinati per numero. */
+  franchise: FranchiseConteggio[];
 }
 
 export const FACETTE_VUOTE: FacetteCatalogo = {
@@ -138,6 +152,7 @@ export const FACETTE_VUOTE: FacetteCatalogo = {
   colori: [],
   prezzoMinCents: null,
   prezzoMaxCents: null,
+  franchise: [],
 };
 
 /**
@@ -159,7 +174,8 @@ export function contaFiltriAttivi(filtri: FiltriCatalogo): number {
     filtri.taglie.length +
     filtri.colori.length +
     (filtri.prezzoMin != null || filtri.prezzoMax != null ? 1 : 0) +
-    (filtri.q ? 1 : 0)
+    (filtri.q ? 1 : 0) +
+    (filtri.franchise ? 1 : 0)
   );
 }
 

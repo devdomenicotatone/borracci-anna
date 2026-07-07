@@ -72,6 +72,8 @@ export default function ToolbarCatalogo({
   // Filtri del drawer (taglia/colore/prezzo): la ricerca ha un campo suo, quindi
   // non entra nel badge ne tra i chip.
   const filtriDrawer = contaFiltriDrawer(filtri);
+  // Difensivo: facette da una cache precedente potrebbero non avere i franchise.
+  const franchiseDisponibili = facette.franchise ?? [];
 
   /** Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1). */
   const naviga = useCallback(
@@ -123,6 +125,7 @@ export default function ToolbarCatalogo({
       prezzoMin: min,
       prezzoMax: max,
       q: filtri.q, // la ricerca ha il suo campo: qui resta com'e
+      franchise: filtri.franchise, // idem il franchise: ha i suoi chip
       ordina: filtri.ordina,
     });
     setAperto(false);
@@ -181,6 +184,43 @@ export default function ToolbarCatalogo({
           </button>
         )}
       </div>
+
+      {/* Chip franchise: scorciatoie per saga/serie presenti nella categoria,
+          derivate dai nomi (vedi lib/franchise). Servono alla scoperta: mostrano
+          cosa c'e senza doverlo cercare. */}
+      {franchiseDisponibili.length > 0 && (
+        <div className="-mx-1 mb-3 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {franchiseDisponibili.slice(0, 12).map((f) => {
+            const attivo = filtri.franchise === f.slug;
+            return (
+              <button
+                key={f.slug}
+                type="button"
+                onClick={() =>
+                  naviga({ ...filtri, franchise: attivo ? "" : f.slug })
+                }
+                aria-pressed={attivo}
+                className={[
+                  "inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
+                  attivo
+                    ? "bg-sea text-white shadow-sea"
+                    : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
+                ].join(" ")}
+              >
+                {f.etichetta}
+                <span
+                  className={[
+                    "rounded-full px-1.5 text-xs font-bold tabular-nums",
+                    attivo ? "bg-white/25 text-white" : "bg-surface-2 text-sea",
+                  ].join(" ")}
+                >
+                  {f.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Riga strumenti: filtri + conteggio + ordinamento */}
       <div className="flex flex-wrap items-center gap-2.5">
@@ -293,7 +333,12 @@ export default function ToolbarCatalogo({
             <button
               type="button"
               onClick={() =>
-                naviga({ ...FILTRI_VUOTI, q: filtri.q, ordina: filtri.ordina })
+                naviga({
+                  ...FILTRI_VUOTI,
+                  q: filtri.q,
+                  franchise: filtri.franchise,
+                  ordina: filtri.ordina,
+                })
               }
               className="ml-1 font-display text-sm font-bold text-coral-ink transition-colors hover:text-coral"
             >
