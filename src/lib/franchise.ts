@@ -71,7 +71,62 @@ export const FRANCHISE: Franchise[] = [
   { slug: "zelda", etichetta: "Zelda", parole: ["zelda", "hyrule"] },
   { slug: "sonic", etichetta: "Sonic", parole: ["sonic"] },
   { slug: "pac-man", etichetta: "Pac-Man", parole: ["pac-man", "pacman"] },
+  // — Calcio (squadre) —
+  { slug: "juventus", etichetta: "Juventus", parole: ["juventus", "juve"] },
+  { slug: "milan", etichetta: "Milan", parole: ["milan"] },
+  { slug: "inter", etichetta: "Inter", parole: ["inter"] },
+  { slug: "napoli", etichetta: "Napoli", parole: ["napoli"] },
+  { slug: "lazio", etichetta: "Lazio", parole: ["lazio"] },
+  { slug: "fiorentina", etichetta: "Fiorentina", parole: ["fiorentina"] },
+  { slug: "roma", etichetta: "Roma", parole: ["as roma"] },
+  { slug: "real-madrid", etichetta: "Real Madrid", parole: ["real madrid"] },
+  { slug: "barcellona", etichetta: "Barcellona", parole: ["barcellona", "barcelona"] },
+  { slug: "atletico-madrid", etichetta: "Atlético Madrid", parole: ["atletico madrid", "atletico"] },
+  { slug: "liverpool", etichetta: "Liverpool", parole: ["liverpool"] },
+  { slug: "arsenal", etichetta: "Arsenal", parole: ["arsenal"] },
+  { slug: "chelsea", etichetta: "Chelsea", parole: ["chelsea"] },
+  { slug: "manchester-city", etichetta: "Manchester City", parole: ["manchester city", "man city"] },
+  { slug: "manchester-united", etichetta: "Manchester United", parole: ["manchester united", "man united", "man utd"] },
+  { slug: "bayern", etichetta: "Bayern Monaco", parole: ["bayern"] },
+  { slug: "psg", etichetta: "Paris Saint-Germain", parole: ["paris saint", "psg"] },
+  { slug: "maradona", etichetta: "Maradona", parole: ["maradona"] },
+  // — Motorsport —
+  { slug: "ferrari", etichetta: "Ferrari", parole: ["ferrari"] },
+  { slug: "mercedes", etichetta: "Mercedes", parole: ["mercedes amg", "mercedes"] },
+  { slug: "red-bull", etichetta: "Red Bull Racing", parole: ["red bull"] },
+  { slug: "mclaren", etichetta: "McLaren", parole: ["mclaren"] },
+  { slug: "formula-1", etichetta: "Formula 1", parole: ["formula 1", "formula1"] },
+  { slug: "motogp", etichetta: "MotoGP", parole: ["motogp", "moto gp"] },
+  { slug: "valentino-rossi", etichetta: "Valentino Rossi", parole: ["valentino rossi", "vr46"] },
+  // — Musica (band/artisti) —
+  { slug: "iron-maiden", etichetta: "Iron Maiden", parole: ["iron maiden"] },
+  { slug: "ac-dc", etichetta: "AC/DC", parole: ["ac/dc", "ac dc", "acdc"] },
+  { slug: "metallica", etichetta: "Metallica", parole: ["metallica"] },
+  { slug: "linkin-park", etichetta: "Linkin Park", parole: ["linkin park"] },
+  { slug: "led-zeppelin", etichetta: "Led Zeppelin", parole: ["led zeppelin"] },
+  { slug: "black-sabbath", etichetta: "Black Sabbath", parole: ["black sabbath"] },
+  { slug: "guns-n-roses", etichetta: "Guns N' Roses", parole: ["guns n"] },
+  { slug: "pink-floyd", etichetta: "Pink Floyd", parole: ["pink floyd"] },
+  { slug: "foo-fighters", etichetta: "Foo Fighters", parole: ["foo fighters"] },
+  { slug: "sex-pistols", etichetta: "Sex Pistols", parole: ["sex pistols"] },
+  { slug: "nirvana", etichetta: "Nirvana", parole: ["nirvana"] },
+  { slug: "queen", etichetta: "Queen", parole: ["queen"] },
+  { slug: "beatles", etichetta: "The Beatles", parole: ["beatles"] },
+  { slug: "rolling-stones", etichetta: "Rolling Stones", parole: ["rolling stones"] },
+  { slug: "ramones", etichetta: "Ramones", parole: ["ramones"] },
+  { slug: "slipknot", etichetta: "Slipknot", parole: ["slipknot"] },
+  { slug: "rammstein", etichetta: "Rammstein", parole: ["rammstein"] },
+  { slug: "aerosmith", etichetta: "Aerosmith", parole: ["aerosmith"] },
+  { slug: "avenged-sevenfold", etichetta: "Avenged Sevenfold", parole: ["avenged sevenfold"] },
+  { slug: "bring-me-horizon", etichetta: "Bring Me the Horizon", parole: ["bring me the horizon"] },
+  { slug: "billie-eilish", etichetta: "Billie Eilish", parole: ["billie eilish"] },
 ];
+
+/** "Versione" del dizionario, per bustare la cache delle facette quando cambia
+ *  (somma di franchise + parole): cosi aggiungere una saga o affinare i pattern
+ *  aggiorna subito i conteggi invece di aspettare la revalidate. */
+export const VERSIONE_FRANCHISE =
+  FRANCHISE.length + FRANCHISE.reduce((n, f) => n + f.parole.length, 0);
 
 /** Indice slug -> franchise, per lookup O(1). */
 const PER_SLUG = new Map(FRANCHISE.map((f) => [f.slug, f]));

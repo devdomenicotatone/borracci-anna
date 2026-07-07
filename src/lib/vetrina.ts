@@ -17,7 +17,11 @@ import {
 } from "@/lib/filtri-catalogo";
 import type { Prodotto } from "@/lib/types";
 import { COLORI, ordinaTaglie } from "@/lib/catalogo";
-import { contaFranchise, paroleFranchise } from "@/lib/franchise";
+import {
+  VERSIONE_FRANCHISE,
+  contaFranchise,
+  paroleFranchise,
+} from "@/lib/franchise";
 
 type Supabase = SupabaseClient<Database>;
 
@@ -299,7 +303,7 @@ export async function caricaFacetteVetrina(
 
   const cached = unstable_cache(
     () => aggregaFacette(ids),
-    ["facette-vetrina-v2", chiave],
+    ["facette-vetrina", chiave, String(VERSIONE_FRANCHISE)],
     { revalidate: FACETTE_REVALIDATE_S, tags: [TAG_FACETTE_VETRINA] },
   );
 
