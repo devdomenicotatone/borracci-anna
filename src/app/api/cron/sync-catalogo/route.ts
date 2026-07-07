@@ -1,0 +1,47 @@
+// Cron giornaliero: allinea le giacenze del catalogo al CSV di Ingrosso BLT.
+// Lo chiama Vercel Cron (vedi vercel.json) con l'header
+// `Authorization: Bearer <CRON_SECRET>`. Per un primo giro sicuro in produzione:
+//   GET /api/cron/sync-catalogo?dryRun=1   → calcola e riporta SENZA scrivere.
+
+import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { eseguiSyncCatalogo } from "@/lib/gestore/sync-catalogo";
+import { TAG_CORRELATI } from "@/lib/correlati";
+import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
+
+// Runtime Node (serve fetch con cookie, crypto, supabase service role): NON edge.
+export const runtime = "nodejs";
+// Mai cachare: il cron deve girare davvero a ogni invocazione.
+export const dynamic = "force-dynamic";
+// Il job e leggero (download + qualche SELECT + 1 RPC); 60s coprono il caso
+// peggiore. Su Vercel Hobby 60 e il massimo; su Pro si puo alzare.
+export const maxDuration = 60;
+
+/** Solo chi presenta il CRON_SECRET (Vercel Cron, o un trigger manuale). */
+function autorizzato(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false; // secret non configurato: nega, non aprire.
+  return req.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+export async function GET(req: NextRequest) {
+  if (!autorizzato(req)) {
+    return NextResponse.json({ ok: false, error: "Non autorizzato." }, { status: 401 });
+  }
+
+  const dryRun = req.nextUrl.searchParams.get("dryRun") === "1";
+  const report = await eseguiSyncCatalogo({ dryRun });
+
+  // Dopo un run reale andato a buon fine: giacenze e disponibilita sono
+  // cambiate, quindi rivalida vetrina, schede prodotto e lista gestore.
+  if (report.ok && !dryRun) {
+    revalidatePath("/");
+    revalidatePath("/prodotti/[slug]", "page");
+    revalidatePath("/gestore/prodotti");
+    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    revalidateTag(TAG_CORRELATI, "max");
+  }
+
+  return NextResponse.json(report, { status: report.ok ? 200 : 500 });
+}
