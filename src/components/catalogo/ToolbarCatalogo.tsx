@@ -1,7 +1,7 @@
 "use client";
 
-// Toolbar del catalogo vetrina: ordinamento, bottone "Filtri" con drawer
-// (ricerca, prezzo, taglie, colori) e chip dei filtri attivi rimovibili.
+// Toolbar del catalogo vetrina: chip franchise, ordinamento, bottone "Filtri"
+// con drawer (prezzo, taglie, colori) e chip dei filtri attivi rimovibili.
 // Lo stato vive nell'URL: ogni modifica naviga (router.replace, scroll
 // invariato) e il server ri-renderizza la griglia. Cosi i filtri sono
 // condivisibili via link, il back del browser funziona e niente stato doppio.
@@ -66,11 +66,8 @@ export default function ToolbarCatalogo({
   const [inTransito, startTransition] = useTransition();
   const [aperto, setAperto] = useState(false);
   const [bozza, setBozza] = useState<BozzaFiltri>(() => bozzaDaFiltri(filtri));
-  // Testo della ricerca: stato locale reattivo, riversato nell'URL a debounce.
-  const [testo, setTesto] = useState(filtri.q);
 
-  // Filtri del drawer (taglia/colore/prezzo): la ricerca ha un campo suo, quindi
-  // non entra nel badge ne tra i chip.
+  // Filtri del drawer (taglia/colore/prezzo), per il badge e i chip attivi.
   const filtriDrawer = contaFiltriDrawer(filtri);
   // Difensivo: facette da una cache precedente potrebbero non avere i franchise.
   const franchiseDisponibili = facette.franchise ?? [];
@@ -85,30 +82,6 @@ export default function ToolbarCatalogo({
     },
     [basePath, router],
   );
-
-  // Ricerca istantanea (search-as-you-type): naviga ~300ms dopo l'ultimo tasto,
-  // cosi la griglia si aggiorna da sola senza premere Invio. Il round-trip resta
-  // server-side (stessa pipeline dei filtri), quindi cerca su TUTTO il catalogo,
-  // non solo sui prodotti gia in pagina.
-  const ultimoQRef = useRef(filtri.q);
-  useEffect(() => {
-    const v = testo.trim().slice(0, 80);
-    if (v === filtri.q) return;
-    const id = window.setTimeout(() => {
-      ultimoQRef.current = v;
-      naviga({ ...filtri, q: v });
-    }, 300);
-    return () => window.clearTimeout(id);
-  }, [testo, filtri, naviga]);
-
-  // Quando `q` cambia da fuori (chip rimosso, "Azzera", back del browser) e non
-  // per una nostra navigazione, riallinea il campo.
-  useEffect(() => {
-    if (filtri.q !== ultimoQRef.current) {
-      ultimoQRef.current = filtri.q;
-      setTesto(filtri.q);
-    }
-  }, [filtri.q]);
 
   function apriDrawer() {
     setBozza(bozzaDaFiltri(filtri)); // riparte sempre dai filtri applicati
@@ -139,57 +112,27 @@ export default function ToolbarCatalogo({
 
   return (
     <div className="mb-6">
-      {/* Ricerca sempre in evidenza: istantanea, cerca su tutto il catalogo. */}
-      <div className="relative mb-3">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="pointer-events-none absolute inset-y-0 left-4 my-auto h-5 w-5 text-muted"
-          aria-hidden="true"
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        <input
-          type="search"
-          inputMode="search"
-          aria-label="Cerca nel catalogo"
-          placeholder="Cerca per nome o tema…"
-          value={testo}
-          onChange={(e) => setTesto(e.target.value)}
-          className="h-12 w-full rounded-2xl bg-white pl-11 pr-11 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:appearance-none"
-        />
-        {testo && (
-          <button
-            type="button"
-            onClick={() => setTesto("")}
-            aria-label="Cancella ricerca"
-            className="absolute inset-y-0 right-3 my-auto grid h-7 w-7 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-foreground"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              className="h-4 w-4"
-              aria-hidden="true"
-            >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
-
       {/* Chip franchise: scorciatoie per saga/serie presenti nella categoria,
           derivate dai nomi (vedi lib/franchise). Servono alla scoperta: mostrano
           cosa c'e senza doverlo cercare. */}
       {franchiseDisponibili.length > 0 && (
         <div className="-mx-1 mb-3 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* "Tutto" = default: nessun franchise attivo, si vede l'intera
+              categoria. Coerente con le righe di navigazione sopra, dove una
+              voce "Tutto" resta selezionata finche non si restringe. */}
+          <button
+            type="button"
+            onClick={() => naviga({ ...filtri, franchise: "" })}
+            aria-pressed={filtri.franchise === ""}
+            className={[
+              "inline-flex shrink-0 snap-start items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
+              filtri.franchise === ""
+                ? "bg-sea text-white shadow-sea"
+                : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
+            ].join(" ")}
+          >
+            Tutto
+          </button>
           {franchiseDisponibili.slice(0, 12).map((f) => {
             const attivo = filtri.franchise === f.slug;
             return (
