@@ -332,6 +332,12 @@ function normalizzaTaglia(grezza: string): string | null {
   // Bambino: numero singolo sportswear (fino a 16).
   const num = testo.match(/^(\d{1,2})$/);
   if (num && parseInt(num[1], 10) <= 16) return String(parseInt(num[1], 10));
+  // Cappello: misura di circonferenza (40–70 cm), tenuta come numero.
+  const cappello = testo.match(/^(\d{2,3})$/);
+  if (cappello) {
+    const n = parseInt(cappello[1], 10);
+    if (n >= 40 && n <= 70) return String(n);
+  }
   return null;
 }
 
@@ -345,6 +351,11 @@ function rangoTaglia(t: string): number {
   if (anni) return parseInt(anni[1], 10) * 10;
   const range = t.match(/^(\d{1,2})\s*[-/]\s*(\d{1,2})$/);
   if (range) return parseInt(range[1], 10) * 10 + 1;
+  const cappello = t.match(/^(\d{2,3})$/);
+  if (cappello) {
+    const n = parseInt(cappello[1], 10);
+    if (n >= 40 && n <= 70) return 15_000 + n;
+  }
   const num = t.match(/^(\d{1,2})$/);
   if (num) return parseInt(num[1], 10) * 10;
   if (t.toLowerCase() === "taglia unica") return 20_000;

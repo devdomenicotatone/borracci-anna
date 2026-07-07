@@ -41,7 +41,23 @@ export const TAGLIE_BAMBINO_ETA = [
 ] as const;
 export const TAGLIE_BAMBINO_NUM = ["2", "4", "6", "8", "10", "12", "14", "16"] as const;
 
-// Taglia unica: accessori senza scala (berretti, cappelli, sciarpe, ...). Una
+// Taglie CAPPELLO: circonferenza in cm (scala del fornitore). Numeri "grandi"
+// (48–62) da NON confondere con i numeri BAMBINO (fino a 16): un cappello 58 e
+// una misura, non un'eta. I cappelli con misura si vendono per taglia; i
+// berretti/accessori senza misura restano a "Taglia unica".
+export const TAGLIE_CAPPELLO = [
+  "48", "50", "51", "52", "54", "55", "56", "57", "58", "59", "60", "61", "62",
+] as const;
+
+/** Vero se la taglia e una misura CAPPELLO (circonferenza 40–70 cm). */
+export function eTagliaCappello(t: string | null | undefined): boolean {
+  const s = (t ?? "").trim();
+  if (!/^\d{2,3}$/.test(s)) return false;
+  const n = parseInt(s, 10);
+  return n >= 40 && n <= 70;
+}
+
+// Taglia unica: accessori senza scala (berretti, sciarpe, ...). Una
 // sola variante per il prodotto; nel selettore vetrina resta l'unica scelta.
 export const TAGLIA_UNICA = "Taglia unica";
 
@@ -58,6 +74,9 @@ export function ordineTaglia(t: string | null | undefined): number {
   // Adulto: scala XXS→6XL (match esatto).
   const iAdulto = TAGLIE.indexOf(s.toUpperCase() as Taglia);
   if (iAdulto !== -1) return 10_000 + iAdulto;
+  // Cappello: circonferenza 40–70, subito dopo la scala adulto e ordinata per
+  // misura crescente (intercettata PRIMA del numero bambino, che vale fino a 16).
+  if (eTagliaCappello(s)) return 15_000 + parseInt(s, 10);
   // Bambino per eta: "N anni", range "A-B"/"A/B", numero singolo.
   const anni = s.match(/^(\d{1,2})\s*anni$/i);
   if (anni) return parseInt(anni[1], 10) * 10;
@@ -88,6 +107,7 @@ export function eTagliaBambino(t: string | null | undefined): boolean {
   const s = (t ?? "").trim();
   if (!s) return false;
   if ((TAGLIE as readonly string[]).includes(s.toUpperCase())) return false;
+  if (eTagliaCappello(s)) return false; // un numero cappello (58...) non e bambino
   return (
     /^\d{1,2}\s*anni$/i.test(s) ||
     /^\d{1,2}\s*[-/]\s*\d{1,2}$/.test(s) ||
