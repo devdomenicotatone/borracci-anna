@@ -57,6 +57,20 @@ export function eTagliaCappello(t: string | null | undefined): boolean {
   return n >= 40 && n <= 70;
 }
 
+// Taglie PALLONE: misura del pallone (calcio/volley, 1–5). Il fornitore le mette
+// nel NOME ("Pallone ... Misura 5") e vende ogni misura come prodotto a se. A
+// differenza dei cappelli NON si tengono come numero nudo: un "5" pallone si
+// confonderebbe con un "5" bambino (numeri fino a 16). Percio si etichettano
+// "Misura N", come fa il fornitore: univoche ovunque e leggibili in vetrina.
+export const TAGLIE_PALLONE = [
+  "Misura 1", "Misura 2", "Misura 3", "Misura 4", "Misura 5",
+] as const;
+
+/** Vero se la taglia e una misura PALLONE ("Misura 1".."Misura 5"). */
+export function eTagliaPallone(t: string | null | undefined): boolean {
+  return /^misura\s+[1-5]$/i.test((t ?? "").trim());
+}
+
 // Taglia unica: accessori senza scala (berretti, sciarpe, ...). Una
 // sola variante per il prodotto; nel selettore vetrina resta l'unica scelta.
 export const TAGLIA_UNICA = "Taglia unica";
@@ -77,6 +91,10 @@ export function ordineTaglia(t: string | null | undefined): number {
   // Cappello: circonferenza 40–70, subito dopo la scala adulto e ordinata per
   // misura crescente (intercettata PRIMA del numero bambino, che vale fino a 16).
   if (eTagliaCappello(s)) return 15_000 + parseInt(s, 10);
+  // Pallone: "Misura 1".."Misura 5" — banda propria (ne adulto ne bambino),
+  // ordinata per misura crescente.
+  const pallone = s.match(/^misura\s+([1-5])$/i);
+  if (pallone) return 16_000 + parseInt(pallone[1], 10);
   // Bambino per eta: "N anni", range "A-B"/"A/B", numero singolo.
   const anni = s.match(/^(\d{1,2})\s*anni$/i);
   if (anni) return parseInt(anni[1], 10) * 10;

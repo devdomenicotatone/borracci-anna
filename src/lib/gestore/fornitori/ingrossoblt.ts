@@ -338,6 +338,10 @@ function normalizzaTaglia(grezza: string): string | null {
     const n = parseInt(cappello[1], 10);
     if (n >= 40 && n <= 70) return String(n);
   }
+  // Pallone: "Misura N" (1–5). Il fornitore vende ogni misura come prodotto a se
+  // (la misura e nel nome), ma se comparisse come opzione la si tiene com'e.
+  const pallone = testo.match(/^misura\s+([1-5])$/i);
+  if (pallone) return `Misura ${pallone[1]}`;
   return null;
 }
 
@@ -356,6 +360,8 @@ function rangoTaglia(t: string): number {
     const n = parseInt(cappello[1], 10);
     if (n >= 40 && n <= 70) return 15_000 + n;
   }
+  const pallone = t.match(/^misura\s+([1-5])$/i);
+  if (pallone) return 16_000 + parseInt(pallone[1], 10);
   const num = t.match(/^(\d{1,2})$/);
   if (num) return parseInt(num[1], 10) * 10;
   if (t.toLowerCase() === "taglia unica") return 20_000;

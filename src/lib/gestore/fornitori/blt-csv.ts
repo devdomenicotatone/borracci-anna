@@ -142,7 +142,22 @@ export function normalizzaTagliaBlt(grezza: string): string {
   if (range) return `${Number(range[1])}-${Number(range[2])}`;
   const num = t.match(/^(\d{1,2})$/);
   if (num && Number(num[1]) <= 16) return String(Number(num[1]));
+  // Pallone "Misura N": forma canonica (maiuscolizzando diventerebbe "MISURA 5"
+  // e non combacerebbe con la chiave indicizzata dal nome).
+  const pallone = t.match(/^misura\s+([1-5])$/i);
+  if (pallone) return `Misura ${pallone[1]}`;
   return U;
+}
+
+/**
+ * Misura pallone ("Misura 1".."Misura 5") dal NOME del prodotto BLT
+ * ("... Mis. 5", "Misura 2", "mis.1"); null se il nome non contiene una misura.
+ * I palloni sono venduti come Standalone con la misura nel nome (la colonna
+ * taglia e vuota): serve per agganciarli al sync una volta rietichettati.
+ */
+export function misuraPalloneDaNome(nome: string): string | null {
+  const m = (nome ?? "").match(/\bmis(?:ura)?\.?\s*([1-5])\b/i);
+  return m ? `Misura ${m[1]}` : null;
 }
 
 /** Prezzo ingrosso testuale ("17,00", "3,45") in centesimi; null se non numerico. */
@@ -206,6 +221,13 @@ export function indicizzaCatalogoCsv(testo: string): IndiceCatalogoBlt {
     const costoCents = prezzoIngrossoCents(r[H.price]);
     const voce: VoceCatalogoBlt = { semaforo: pulisci(r[H.stock]), costoCents };
     perVariante.set(`${parent}||${taglia}`, voce);
+    // Palloni: BLT li vende come Standalone con la misura NEL NOME ("... Mis. 5")
+    // e taglia CSV vuota. Indicizza anche `parent||Misura N` cosi la variante
+    // rietichettata a "Misura N" resta agganciata al sync (oltre a "Taglia unica").
+    if (tipo === "Sku Standalone") {
+      const misura = misuraPalloneDaNome(pulisci(r[H.name]));
+      if (misura) perVariante.set(`${parent}||${misura}`, voce);
+    }
     nRighe.set(parent, (nRighe.get(parent) ?? 0) + 1);
     ultimaVoce.set(parent, voce);
     // Costo del prodotto: primo valore valido incontrato per il parent.
