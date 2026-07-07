@@ -38,7 +38,8 @@ export interface FiltriCatalogo {
   prezzoMax: number | null;
   /** Testo di ricerca (nome/descrizione). */
   q: string;
-  /** Slug del franchise selezionato (derivato dai nomi). "" = nessuno. */
+  /** Slug del franchise selezionato (derivato dai nomi), oppure "altro" per
+   *  i prodotti senza chip proprio. "" = nessuno. */
   franchise: string;
   ordina: Ordinamento;
 }
@@ -128,7 +129,8 @@ export function serializzaFiltri(filtri: FiltriCatalogo): string {
  * prezzi. Le calcola il server (lib/vetrina), le consuma la toolbar client:
  * il tipo vive qui perche questo modulo e importabile da entrambi i mondi.
  */
-/** Un franchise presente nella categoria, con quanti prodotti lo compongono. */
+/** Un chip tema della categoria (franchise o "Altro"), col suo conteggio.
+ *  I chip formano una PARTIZIONE: la somma dei count e il totale prodotti. */
 export interface FranchiseConteggio {
   slug: string;
   etichetta: string;

@@ -19,14 +19,20 @@ import type { Prodotto } from "@/lib/types";
 import { COLORI, ordinaTaglie } from "@/lib/catalogo";
 import {
   VERSIONE_FRANCHISE,
+  appartieneAlChip,
   contaFranchise,
-  paroleFranchise,
+  etichettaFranchise,
 } from "@/lib/franchise";
 
 type Supabase = SupabaseClient<Database>;
 
 /** Prodotti per "pagina" della griglia (il bottone Mostra altri ne carica altrettanti). */
 export const PRODOTTI_PER_PAGINA = 24;
+
+/** Blocco delle scansioni integrali (percorso tema, facette): PostgREST tronca
+ *  ogni risposta a max-rows (default Supabase: 1000) SENZA errore, quindi le
+ *  letture "tutte le righe" vanno paginate a blocchi e guidate dal count. */
+const BLOCCO_SCANSIONE = 1000;
 
 /** Campi letti per le card della vetrina (condivisi con la home a fasce). */
 export const CAMPI_CARD =
@@ -101,6 +107,13 @@ function patternRicerca(q: string): string {
  * ordinati e paginati. `categoriaIds` va gia espanso ai discendenti (vedi
  * idConDiscendenti). Con Supabase non configurato ritorna i dati di esempio;
  * su errore degrada a vuoto (mai prodotti finti con DB connesso).
+ *
+ * Filtro per TEMA (franchise): NON si applica lato DB. Il conteggio dei chip
+ * assegna ogni prodotto a UN solo tema (primo match del dizionario), quindi il
+ * filtro usa la stessa funzione (appartieneAlChip) su una scansione leggera
+ * `id, nome` gia filtrata/ordinata dal DB; le card della pagina si caricano
+ * poi per id. Cosi il numero sul chip e ESATTAMENTE quanti prodotti appaiono
+ * cliccandolo — incluso il chip "Altro", complemento dei chip visibili.
  */
 export async function caricaProdottiVetrina(
   supabase: Supabase | null,
@@ -117,86 +130,149 @@ export async function caricaProdottiVetrina(
   const { filtri, categoriaIds, pagina = 1 } = opzioni;
 
   try {
+    // Percorso tema attivo solo per slug noti ("altro" incluso): uno slug
+    // ignoto (link vecchio/manomesso) si ignora, come faceva il vecchio filtro.
+    const perTema =
+      filtri.franchise !== "" && etichettaFranchise(filtri.franchise) != null;
+
     // Il join sulle varianti serve solo quando si filtra per taglia/colore:
     // `!inner` esclude i prodotti senza una variante che soddisfi ENTRAMBI i
     // vincoli (es. "esiste una variante Blu in M"). PostgREST embedda le
     // varianti come array: nessuna duplicazione delle righe prodotto.
     const filtraVarianti = filtri.taglie.length > 0 || filtri.colori.length > 0;
+    // Col tema attivo la prima query e una scansione leggera (id + nome, per il
+    // match in JS); altrimenti carica direttamente i campi delle card.
+    const campiBase = perTema ? "id, nome" : CAMPI_CARD;
     const campi = filtraVarianti
-      ? `${CAMPI_CARD}, varianti!inner(taglia, colore)`
-      : CAMPI_CARD;
+      ? `${campiBase}, varianti!inner(taglia, colore)`
+      : campiBase;
 
-    let query = supabase
-      .from("prodotti")
-      .select(campi, { count: "exact" })
-      .eq("attivo", true);
+    // Multi-parola: ogni token deve comparire (AND tra i token, chiamate .or()
+    // consecutive = AND) nel nome OPPURE nella descrizione. Cosi "squid game
+    // logo" trova i prodotti con tutte le parole in qualsiasi ordine, non la
+    // stringa esatta. Cap a 6 token: oltre e rumore e allunga la query.
+    const token = filtri.q
+      ? patternRicerca(filtri.q).split(/\s+/).filter(Boolean).slice(0, 6)
+      : [];
 
-    if (categoriaIds && categoriaIds.length > 0) {
-      query = query.in("categoria_id", categoriaIds);
-    }
-    if (filtri.taglie.length > 0) {
-      query = query.in("varianti.taglia", filtri.taglie);
-    }
-    if (filtri.colori.length > 0) {
-      query = query.in("varianti.colore", filtri.colori);
-    }
-    if (filtri.prezzoMin != null) {
-      query = query.gte("prezzo_cents", filtri.prezzoMin * 100);
-    }
-    if (filtri.prezzoMax != null) {
-      query = query.lte("prezzo_cents", filtri.prezzoMax * 100);
-    }
-    if (filtri.q) {
-      // Multi-parola: ogni token deve comparire (AND tra i token, chiamate .or()
-      // consecutive = AND) nel nome OPPURE nella descrizione. Cosi "squid game
-      // logo" trova i prodotti con tutte le parole in qualsiasi ordine, non la
-      // stringa esatta. Cap a 6 token: oltre e rumore e allunga la query.
-      const token = patternRicerca(filtri.q)
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 6);
+    // Costruttore della query: ogni chiamata da un builder NUOVO con filtri e
+    // ordinamento applicati. Serve alla scansione a blocchi del percorso tema:
+    // .range() muta il builder, quindi non si puo riusarne uno solo.
+    const costruisci = (conteggio: boolean) => {
+      let q = supabase
+        .from("prodotti")
+        .select(campi, conteggio ? { count: "exact" } : undefined)
+        .eq("attivo", true);
+
+      if (categoriaIds && categoriaIds.length > 0) {
+        q = q.in("categoria_id", categoriaIds);
+      }
+      if (filtri.taglie.length > 0) {
+        q = q.in("varianti.taglia", filtri.taglie);
+      }
+      if (filtri.colori.length > 0) {
+        q = q.in("varianti.colore", filtri.colori);
+      }
+      if (filtri.prezzoMin != null) {
+        q = q.gte("prezzo_cents", filtri.prezzoMin * 100);
+      }
+      if (filtri.prezzoMax != null) {
+        q = q.lte("prezzo_cents", filtri.prezzoMax * 100);
+      }
       for (const t of token) {
-        query = query.or(`nome.ilike.%${t}%,descrizione.ilike.%${t}%`);
+        q = q.or(`nome.ilike.%${t}%,descrizione.ilike.%${t}%`);
       }
-    }
 
-    // Filtro per FRANCHISE: le parole-chiave del franchise diventano un OR ilike
-    // sul nome (le stesse usate per contarli, cosi il numero del chip torna).
-    if (filtri.franchise) {
-      const parole = (paroleFranchise(filtri.franchise) ?? [])
-        .map((p) => patternRicerca(p))
-        .filter(Boolean);
-      if (parole.length > 0) {
-        query = query.or(parole.map((p) => `nome.ilike.%${p}%`).join(","));
+      switch (filtri.ordina) {
+        case "prezzo-asc":
+          q = q.order("prezzo_cents", { ascending: true });
+          break;
+        case "prezzo-desc":
+          q = q.order("prezzo_cents", { ascending: false });
+          break;
+        case "nome":
+          q = q.order("nome", { ascending: true });
+          break;
+        default:
+          q = q.order("creato_il", { ascending: false });
       }
-    }
-
-    switch (filtri.ordina) {
-      case "prezzo-asc":
-        query = query.order("prezzo_cents", { ascending: true });
-        break;
-      case "prezzo-desc":
-        query = query.order("prezzo_cents", { ascending: false });
-        break;
-      case "nome":
-        query = query.order("nome", { ascending: true });
-        break;
-      default:
-        query = query.order("creato_il", { ascending: false });
-    }
-    // Tie-break stabile (prezzi/nomi uguali) per una paginazione coerente.
-    query = query.order("id", { ascending: true });
-
-    const { data, error, count } = await query.range(
-      0,
-      pagina * PRODOTTI_PER_PAGINA - 1,
-    );
-
-    if (error) return { prodotti: [], totale: 0 };
-    return {
-      prodotti: (data as unknown as Prodotto[] | null) ?? [],
-      totale: count ?? 0,
+      // Tie-break stabile (prezzi/nomi uguali) per una paginazione coerente.
+      return q.order("id", { ascending: true });
     };
+
+    if (!perTema) {
+      const { data, error, count } = await costruisci(true).range(
+        0,
+        pagina * PRODOTTI_PER_PAGINA - 1,
+      );
+
+      if (error) return { prodotti: [], totale: 0 };
+      return {
+        prodotti: (data as unknown as Prodotto[] | null) ?? [],
+        totale: count ?? 0,
+      };
+    }
+
+    // — Percorso tema: match in JS sulla scansione leggera (gia ordinata) —
+    // Scansione INTEGRALE a blocchi: senza range PostgREST tronca a max-rows
+    // (default 1000) SENZA errore, e il catalogo supera gia quella soglia:
+    // righe perse in silenzio = conteggi e "Mostra altri" sbagliati. Il count
+    // exact del primo blocco fa da guida: si legge finche non si coprono tutte
+    // le righe attese (robusto anche se il server ha un max-rows piu basso).
+    const righe: Array<{ id: string; nome: string }> = [];
+    let attese: number | null = null;
+    for (;;) {
+      const { data, error, count } = await costruisci(righe.length === 0).range(
+        righe.length,
+        righe.length + BLOCCO_SCANSIONE - 1,
+      );
+      if (error) return { prodotti: [], totale: 0 };
+      const blocco =
+        (data as unknown as Array<{ id: string; nome: string }> | null) ?? [];
+      righe.push(...blocco);
+      if (attese == null) attese = count ?? null;
+      if (blocco.length === 0) break; // guardia anti-loop (mai fidarsi del count)
+      if (attese != null ? righe.length >= attese : blocco.length < BLOCCO_SCANSIONE) {
+        break;
+      }
+    }
+
+    // "Altro" e il complemento dei chip VISIBILI: servono gli slug delle stesse
+    // facette che l'utente vede (cache condivisa con la pagina: di norma un hit).
+    const facette = await caricaFacetteVetrina(supabase, categoriaIds);
+    const visibili = new Set(facette.franchise.map((f) => f.slug));
+
+    const filtrate = righe.filter((r) =>
+      appartieneAlChip(r.nome, filtri.franchise, visibili),
+    );
+    const totale = filtrate.length;
+    const ids = filtrate
+      .slice(0, pagina * PRODOTTI_PER_PAGINA)
+      .map((r) => r.id);
+    if (ids.length === 0) return { prodotti: [], totale };
+
+    // Card per id, a blocchi: un IN con centinaia di id gonfia l'URL PostgREST.
+    const blocchi: string[][] = [];
+    for (let i = 0; i < ids.length; i += 100) blocchi.push(ids.slice(i, i + 100));
+    const esiti = await Promise.all(
+      blocchi.map((b) =>
+        supabase.from("prodotti").select(CAMPI_CARD).in("id", b),
+      ),
+    );
+    // Un blocco fallito NON azzera l'esito: il totale e gia certo (viene dalla
+    // scansione riuscita) e l'assemblaggio sotto salta gli id mancanti. Meglio
+    // una griglia parziale che un finto "nessun prodotto con questi filtri".
+
+    // L'IN non conserva l'ordine: si riassembla su quello della scansione.
+    const perId = new Map(
+      esiti
+        .flatMap((e) => (e.data as unknown as Prodotto[] | null) ?? [])
+        .map((p) => [p.id, p]),
+    );
+    const prodotti = ids
+      .map((id) => perId.get(id))
+      .filter((p): p is Prodotto => p != null);
+    return { prodotti, totale };
   } catch {
     return { prodotti: [], totale: 0 };
   }
@@ -219,62 +295,88 @@ export const TAG_FACETTE_VETRINA = "facette-vetrina";
 /** Durata cache facette: cambiano di rado (nuovi prodotti/varianti). */
 const FACETTE_REVALIDATE_S = 300;
 
+/** Riga della scansione facette (campi minimi per aggregare). */
+interface RigaFacette {
+  nome: string;
+  prezzo_cents: number;
+  varianti: Array<{ taglia: string | null; colore: string | null }> | null;
+}
+
 /**
  * Aggregazione facette vera e propria. Isolata perche gira DENTRO unstable_cache:
  * non puo ricevere il client Supabase (non serializzabile) ne leggere i cookie,
  * quindi si crea qui un client COOKIELESS (service role, cookieless). Legge solo
  * dati pubblici del catalogo attivo (prezzo + varianti), coerenti con l'anon.
+ *
+ * Niente fallback morbidi qui dentro: unstable_cache memorizza QUALSIASI valore
+ * ritornato, e un errore transitorio cacheato come FACETTE_VUOTE prenderebbe il
+ * posto dell'entry buona per 5 minuti (coi chip spariti e il filtro "altro"
+ * degradato a tutta la categoria). Su errore si LANCIA: il chiamante degrada
+ * per la singola richiesta senza avvelenare la cache.
  */
 async function aggregaFacette(
   categoriaIds: string[],
 ): Promise<FacetteCatalogo> {
-  // Senza service role key non possiamo creare il client cookieless: degrada
-  // a facette vuote invece di lanciare (come il resto della vetrina).
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return FACETTE_VUOTE;
+  const supabase = createAdminSupabase();
 
-  try {
-    const supabase = createAdminSupabase();
-    let query = supabase
+  // Scansione integrale a blocchi (vedi BLOCCO_SCANSIONE): senza range la
+  // risposta si fermerebbe a max-rows e i conteggi sarebbero parziali in
+  // silenzio — il catalogo supera gia le 1000 righe. L'ordine per id rende la
+  // paginazione stabile (senza ORDER BY ogni blocco potrebbe rimescolarsi).
+  const costruisci = (conteggio: boolean) => {
+    let q = supabase
       .from("prodotti")
-      .select("nome, prezzo_cents, varianti(taglia, colore)")
+      .select(
+        "nome, prezzo_cents, varianti(taglia, colore)",
+        conteggio ? { count: "exact" } : undefined,
+      )
       .eq("attivo", true);
     if (categoriaIds.length > 0) {
-      query = query.in("categoria_id", categoriaIds);
+      q = q.in("categoria_id", categoriaIds);
     }
+    return q.order("id", { ascending: true });
+  };
 
-    const { data, error } = await query;
-    if (error || !data) return FACETTE_VUOTE;
-
-    const taglie = new Set<string>();
-    const colori = new Set<string>();
-    const nomi: string[] = [];
-    let min: number | null = null;
-    let max: number | null = null;
-
-    for (const riga of data as unknown as Array<{
-      nome: string;
-      prezzo_cents: number;
-      varianti: Array<{ taglia: string | null; colore: string | null }> | null;
-    }>) {
-      nomi.push(riga.nome);
-      min = min == null ? riga.prezzo_cents : Math.min(min, riga.prezzo_cents);
-      max = max == null ? riga.prezzo_cents : Math.max(max, riga.prezzo_cents);
-      for (const v of riga.varianti ?? []) {
-        if (v.taglia) taglie.add(v.taglia);
-        if (v.colore) colori.add(v.colore);
-      }
+  const righe: RigaFacette[] = [];
+  let attese: number | null = null;
+  for (;;) {
+    const { data, error, count } = await costruisci(righe.length === 0).range(
+      righe.length,
+      righe.length + BLOCCO_SCANSIONE - 1,
+    );
+    if (error) throw error;
+    const blocco = (data as unknown as RigaFacette[] | null) ?? [];
+    righe.push(...blocco);
+    if (attese == null) attese = count ?? null;
+    if (blocco.length === 0) break; // guardia anti-loop (mai fidarsi del count)
+    if (attese != null ? righe.length >= attese : blocco.length < BLOCCO_SCANSIONE) {
+      break;
     }
-
-    return {
-      taglie: ordinaTaglie(taglie),
-      colori: ordinaColori(colori),
-      prezzoMinCents: min,
-      prezzoMaxCents: max,
-      franchise: contaFranchise(nomi),
-    };
-  } catch {
-    return FACETTE_VUOTE;
   }
+
+  const taglie = new Set<string>();
+  const colori = new Set<string>();
+  const nomi: string[] = [];
+  let min: number | null = null;
+  let max: number | null = null;
+
+  for (const riga of righe) {
+    nomi.push(riga.nome);
+    min = min == null ? riga.prezzo_cents : Math.min(min, riga.prezzo_cents);
+    max = max == null ? riga.prezzo_cents : Math.max(max, riga.prezzo_cents);
+    for (const v of riga.varianti ?? []) {
+      if (v.taglia) taglie.add(v.taglia);
+      if (v.colore) colori.add(v.colore);
+    }
+  }
+
+  return {
+    taglie: ordinaTaglie(taglie),
+    colori: ordinaColori(colori),
+    prezzoMinCents: min,
+    prezzoMaxCents: max,
+    franchise: contaFranchise(nomi),
+  };
 }
 
 /**
@@ -295,6 +397,9 @@ export async function caricaFacetteVetrina(
   categoriaIds?: string[],
 ): Promise<FacetteCatalogo> {
   if (!supabase) return FACETTE_VUOTE;
+  // Senza service role key il client cookieless non si puo creare: si degrada
+  // PRIMA della cache, cosi il valore vuoto non viene mai memorizzato.
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return FACETTE_VUOTE;
 
   // Chiave stabile per categoria: ordinata cosi ordini diversi degli stessi id
   // condividono la stessa entry di cache. "tutte" = catalogo intero (home).
@@ -307,5 +412,12 @@ export async function caricaFacetteVetrina(
     { revalidate: FACETTE_REVALIDATE_S, tags: [TAG_FACETTE_VETRINA] },
   );
 
-  return cached();
+  try {
+    return await cached();
+  } catch {
+    // Errore transitorio dell'aggregazione: si degrada per QUESTA richiesta.
+    // unstable_cache non memorizza quando la funzione lancia, quindi l'entry
+    // buona precedente resta valida e verra riprovata alla prossima visita.
+    return FACETTE_VUOTE;
+  }
 }

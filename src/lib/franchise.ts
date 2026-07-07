@@ -5,11 +5,16 @@
 // univoche -> franchise, cosi possiamo:
 //   - CONTARE quanti prodotti di ogni franchise ci sono in una categoria
 //     (per mostrare i chip solo dove servono, con il numero);
-//   - FILTRARE il catalogo per franchise (le stesse parole diventano un OR ilike
-//     sul nome, lato DB).
+//   - FILTRARE il catalogo per franchise con la STESSA funzione del conteggio
+//     (appartieneAlChip): il numero sul chip e esattamente quanti prodotti
+//     appaiono cliccandolo.
 // I conteggi sono per-categoria: lo stesso dizionario vale ovunque, ma in "Film"
 // emergono Harry Potter/Marvel, in "Anime" One Piece/Naruto, in "Gaming" Call of
 // Duty... — quelli con zero match semplicemente non compaiono.
+//
+// INVARIANTE (chip = partizione): i chip di una categoria, incluso "Altro",
+// coprono TUTTI i prodotti una volta sola. Somma dei numeri = totale prodotti:
+// niente prodotti "spariti" tra un chip e l'altro.
 //
 // REGOLA per le `parole`: preferire termini UNIVOCI del franchise (nomi propri,
 // titoli) ed evitare parole comuni/ambigue. Meglio contare 14 invece di 15 che
@@ -17,6 +22,15 @@
 // `nome.toLowerCase().includes(parola)`.
 
 import type { FranchiseConteggio } from "@/lib/filtri-catalogo";
+
+/**
+ * Slug riservato del chip "Altro": prodotti senza franchise riconosciuto nel
+ * nome PIU quelli di franchise sotto soglia (senza chip proprio). Non e nel
+ * dizionario: e il complemento dei chip visibili, cosi i numeri sommano al
+ * totale della categoria.
+ */
+export const FRANCHISE_ALTRO = "altro";
+const ETICHETTA_ALTRO = "Altro";
 
 export interface Franchise {
   /** Slug per l'URL (?franchise=harry-potter). */
@@ -33,7 +47,7 @@ export const FRANCHISE: Franchise[] = [
   // — Film & Serie TV —
   { slug: "harry-potter", etichetta: "Harry Potter", parole: ["harry potter", "hogwarts", "hermione", "voldemort", "grifondoro", "serpeverde", "corvonero", "tassorosso", "silente", "animali fantastici", "fantastic beasts"] },
   { slug: "star-wars", etichetta: "Star Wars", parole: ["star wars", "guerre stellari", "darth vader", "yoda", "mandalorian", "grogu", "stormtrooper", "skywalker", "boba fett", "jedi"] },
-  { slug: "marvel", etichetta: "Marvel", parole: ["marvel", "avengers", "spider-man", "spiderman", "iron man", "capitan america", "captain america", "deadpool", "wolverine", "venom", "hulk", "thor", "loki", "black panther"] },
+  { slug: "marvel", etichetta: "Marvel", parole: ["marvel", "avengers", "spider-man", "spiderman", "iron man", "capitan america", "captain america", "deadpool", "wolverine", "venom", "hulk", "thor", "loki", "black panther", "punisher"] },
   { slug: "dc", etichetta: "DC Comics", parole: ["batman", "superman", "joker", "wonder woman", "aquaman", "harley quinn"] },
   { slug: "stranger-things", etichetta: "Stranger Things", parole: ["stranger things", "demogorgon", "hellfire", "hawkins"] },
   { slug: "squid-game", etichetta: "Squid Game", parole: ["squid game"] },
@@ -42,6 +56,7 @@ export const FRANCHISE: Franchise[] = [
   { slug: "simpsons", etichetta: "I Simpson", parole: ["simpson"] },
   { slug: "lupin", etichetta: "Lupin III", parole: ["lupin"] },
   { slug: "diabolik", etichetta: "Diabolik", parole: ["diabolik"] },
+  { slug: "jurassic-park", etichetta: "Jurassic Park", parole: ["jurassic"] },
   { slug: "top-gun", etichetta: "Top Gun", parole: ["top gun", "maverick"] },
   { slug: "nightmare-christmas", etichetta: "Nightmare Before Christmas", parole: ["nightmare before christmas", "jack skellington"] },
   { slug: "witcher", etichetta: "The Witcher", parole: ["witcher", "geralt"] },
@@ -122,11 +137,14 @@ export const FRANCHISE: Franchise[] = [
   { slug: "billie-eilish", etichetta: "Billie Eilish", parole: ["billie eilish"] },
 ];
 
-/** "Versione" del dizionario, per bustare la cache delle facette quando cambia
- *  (somma di franchise + parole): cosi aggiungere una saga o affinare i pattern
- *  aggiorna subito i conteggi invece di aspettare la revalidate. */
-export const VERSIONE_FRANCHISE =
-  FRANCHISE.length + FRANCHISE.reduce((n, f) => n + f.parole.length, 0);
+/** "Versione" del dizionario+logica, per bustare la cache delle facette quando
+ *  cambiano: il prefisso `vN` copre i cambi di LOGICA di conteggio (es. v2 =
+ *  introduzione del chip "Altro"), la parte numerica i cambi di DIZIONARIO
+ *  (franchise + parole). Cosi ogni modifica aggiorna subito i conteggi invece
+ *  di aspettare la revalidate. */
+export const VERSIONE_FRANCHISE = `v2:${
+  FRANCHISE.length + FRANCHISE.reduce((n, f) => n + f.parole.length, 0)
+}`;
 
 /** Indice slug -> franchise, per lookup O(1). */
 const PER_SLUG = new Map(FRANCHISE.map((f) => [f.slug, f]));
@@ -143,20 +161,20 @@ export function franchiseDiNome(nome: string): Franchise | null {
   return null;
 }
 
-/** Parole-chiave di un franchise dato lo slug (per costruire il filtro DB). */
-export function paroleFranchise(slug: string): string[] | null {
-  return PER_SLUG.get(slug)?.parole ?? null;
-}
-
-/** Etichetta di un franchise dato lo slug (per il chip del filtro attivo). */
+/** Etichetta di un franchise dato lo slug (riconosce anche "altro"). */
 export function etichettaFranchise(slug: string): string | null {
+  if (slug === FRANCHISE_ALTRO) return ETICHETTA_ALTRO;
   return PER_SLUG.get(slug)?.etichetta ?? null;
 }
 
 /**
  * Conta i franchise presenti in un elenco di nomi (una categoria), ordinati per
- * numerosita decrescente. Solo quelli con almeno `min` prodotti: sotto soglia
- * un chip e rumore. Ogni prodotto conta per un solo franchise (il primo match).
+ * numerosita decrescente. Un chip proprio solo con almeno `min` prodotti: sotto
+ * soglia e rumore. Ogni prodotto conta per un solo franchise (il primo match).
+ *
+ * Se emerge almeno un chip, in coda si aggiunge "Altro" col resto (prodotti
+ * senza franchise + franchise sotto soglia): i numeri dei chip sommano SEMPRE
+ * a nomi.length, cosi il totale della categoria torna a colpo d'occhio.
  */
 export function contaFranchise(nomi: string[], min = 3): FranchiseConteggio[] {
   const conteggi = new Map<string, number>();
@@ -164,11 +182,35 @@ export function contaFranchise(nomi: string[], min = 3): FranchiseConteggio[] {
     const f = franchiseDiNome(nome);
     if (f) conteggi.set(f.slug, (conteggi.get(f.slug) ?? 0) + 1);
   }
-  return FRANCHISE.filter((f) => (conteggi.get(f.slug) ?? 0) >= min)
+  const chips = FRANCHISE.filter((f) => (conteggi.get(f.slug) ?? 0) >= min)
     .map((f) => ({
       slug: f.slug,
       etichetta: f.etichetta,
       count: conteggi.get(f.slug)!,
     }))
     .sort((a, b) => b.count - a.count);
+  if (chips.length === 0) return []; // nessun tema: niente riga chip
+
+  const inChip = chips.reduce((n, f) => n + f.count, 0);
+  const altro = nomi.length - inChip;
+  if (altro > 0) {
+    chips.push({ slug: FRANCHISE_ALTRO, etichetta: ETICHETTA_ALTRO, count: altro });
+  }
+  return chips;
+}
+
+/**
+ * Il prodotto `nome` appartiene al chip `slug`? Stessa semantica del conteggio
+ * (primo match del dizionario), cosi filtro e numero sul chip coincidono.
+ * Per "altro" serve l'insieme dei chip visibili nella categoria (`chipVisibili`,
+ * gli slug di contaFranchise): altro = niente franchise O franchise senza chip.
+ */
+export function appartieneAlChip(
+  nome: string,
+  slug: string,
+  chipVisibili: ReadonlySet<string>,
+): boolean {
+  const f = franchiseDiNome(nome);
+  if (slug === FRANCHISE_ALTRO) return f == null || !chipVisibili.has(f.slug);
+  return f?.slug === slug;
 }
