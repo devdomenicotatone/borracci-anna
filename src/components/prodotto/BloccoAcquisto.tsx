@@ -18,12 +18,19 @@ export default function BloccoAcquisto({
   variante: Variante | null;
 }) {
   const { aggiungi } = useCarrello();
-  const [quantita, setQuantita] = useState<number>(1);
+  const [quantitaScelta, setQuantitaScelta] = useState<number>(1);
   const [errore, setErrore] = useState<string | null>(null);
   const [inCorso, startTransition] = useTransition();
 
   const stockMax = variante?.stock ?? 0;
   const stockBasso = stockMax > 0 && stockMax <= 3;
+
+  // Quantita EFFETTIVA: la scelta dell'utente cappata allo stock della variante
+  // corrente, derivata al render (niente effetti). Al cambio taglia/colore
+  // l'input mostra cosi SEMPRE un valore acquistabile: prima continuava a
+  // mostrare la quantita della variante precedente (es. 5) mentre al click ne
+  // venivano aggiunte meno (stock 2), in silenzio.
+  const quantita = Math.min(Math.max(1, quantitaScelta), stockMax || 1);
   const puoAggiungere = !!variante && stockMax > 0 && quantita >= 1;
 
   function handleAggiungi() {
@@ -32,9 +39,8 @@ export default function BloccoAcquisto({
       return;
     }
     setErrore(null);
-    const qta = Math.min(Math.max(1, quantita), stockMax);
     startTransition(async () => {
-      await aggiungi({ prodotto, variante, quantita: qta });
+      await aggiungi({ prodotto, variante, quantita });
     });
   }
 
@@ -53,7 +59,7 @@ export default function BloccoAcquisto({
             type="button"
             aria-label="Diminuisci quantita"
             disabled={quantita <= 1}
-            onClick={() => setQuantita((q) => Math.max(1, q - 1))}
+            onClick={() => setQuantitaScelta(Math.max(1, quantita - 1))}
             className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
           >
             -
@@ -67,10 +73,10 @@ export default function BloccoAcquisto({
             onChange={(e) => {
               const n = Number.parseInt(e.target.value, 10);
               if (Number.isNaN(n)) {
-                setQuantita(1);
+                setQuantitaScelta(1);
                 return;
               }
-              setQuantita(Math.min(Math.max(1, n), stockMax || 1));
+              setQuantitaScelta(Math.min(Math.max(1, n), stockMax || 1));
             }}
             className="w-12 bg-transparent text-center font-display text-lg font-bold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
@@ -78,7 +84,7 @@ export default function BloccoAcquisto({
             type="button"
             aria-label="Aumenta quantita"
             disabled={quantita >= stockMax}
-            onClick={() => setQuantita((q) => Math.min(stockMax || 1, q + 1))}
+            onClick={() => setQuantitaScelta(Math.min(stockMax || 1, quantita + 1))}
             className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
           >
             +
