@@ -13,6 +13,23 @@ export interface DatiCard {
   nome: string;
   prezzo: string | null;
   immagine: string | null;
+  /** true = articolo disponibile SOLO online (non in negozio): cambia la
+   *  tagline di disponibilita su poster/card. Vedi taglineDisponibilita(). */
+  soloOnline: boolean;
+}
+
+/**
+ * Tagline di disponibilita condivisa da tutte le superfici "share" (poster
+ * social, e riusata identica dal cartellino stampato di GestiShop): rispecchia
+ * il badge della scheda prodotto. `solo_online` = non presente in negozio,
+ * quindi NON si puo dire "online o in negozio" (sarebbe falso).
+ * ⚠️ Se cambi il testo, allinea la copia gemella in GestiShop
+ * (lib/etichette.ts → taglineCartellino): sono due repo separate.
+ */
+export function taglineDisponibilita(soloOnline: boolean): string {
+  return soloOnline
+    ? "solo online · spedizione o ritiro in negozio"
+    : "online o in negozio · Rimini";
 }
 
 /**
@@ -25,6 +42,7 @@ export async function caricaProdottoCard(slug: string): Promise<DatiCard> {
   let nome = "Anna Shop";
   let prezzo: string | null = null;
   let immagine: string | null = null;
+  let soloOnline = false;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -33,13 +51,14 @@ export async function caricaProdottoCard(slug: string): Promise<DatiCard> {
       const supabase = createClient(url, anon);
       const { data } = await supabase
         .from("prodotti")
-        .select("nome, prezzo_cents, valuta, immagine_url")
+        .select("nome, prezzo_cents, valuta, immagine_url, solo_online")
         .eq("slug", slug)
         .eq("attivo", true)
         .maybeSingle();
       if (data) {
         nome = (data.nome as string) ?? nome;
         immagine = (data.immagine_url as string | null) ?? null;
+        soloOnline = (data.solo_online as boolean | null) ?? false;
         if (typeof data.prezzo_cents === "number") {
           prezzo = formatPrezzo(
             data.prezzo_cents,
@@ -52,7 +71,7 @@ export async function caricaProdottoCard(slug: string): Promise<DatiCard> {
     }
   }
 
-  return { nome, prezzo, immagine };
+  return { nome, prezzo, immagine, soloOnline };
 }
 
 /**

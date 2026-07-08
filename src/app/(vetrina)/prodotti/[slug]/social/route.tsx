@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 import { fontOg } from "@/lib/og-fonts";
-import { caricaProdottoCard, qrDataUrl } from "@/lib/social-card";
+import { caricaProdottoCard, qrDataUrl, taglineDisponibilita } from "@/lib/social-card";
 
 // Immagine social verticale del prodotto, con QR ben visibile: pensata per
 // essere SCARICATA e pubblicata/stampata, li dove il link non e cliccabile
@@ -30,7 +30,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
-  const { nome, prezzo, immagine } = await caricaProdottoCard(slug);
+  const { nome, prezzo, immagine, soloOnline } = await caricaProdottoCard(slug);
 
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const qr = await qrDataUrl(`${site}/prodotti/${slug}`, 400);
@@ -126,7 +126,7 @@ export async function GET(
                 Inquadra e acquista
               </div>
               <div style={{ display: "flex", marginTop: 12, fontSize: c.tagline, fontWeight: 600, color: "rgba(255,255,255,0.74)" }}>
-                online o in negozio · Rimini
+                {taglineDisponibilita(soloOnline)}
               </div>
             </div>
 

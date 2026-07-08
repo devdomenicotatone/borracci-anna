@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     for (let da = 0; da < PAGINA * 10; da += PAGINA) {
       const { data, error } = await supabase
         .from("prodotti")
-        .select("slug, nome, prezzo_cents, valuta, immagine_url")
+        .select("slug, nome, prezzo_cents, valuta, immagine_url, solo_online")
         .eq("attivo", true)
         .order("nome", { ascending: true })
         .order("slug", { ascending: true }) // pareggio stabile tra pagine a parita di nome
