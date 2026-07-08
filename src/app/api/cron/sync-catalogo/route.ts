@@ -6,7 +6,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 
-import { eseguiSyncCatalogo } from "@/lib/gestore/sync-catalogo";
+import { eseguiSyncCatalogo, salvaEsitoSync } from "@/lib/gestore/sync-catalogo";
 import { TAG_CORRELATI } from "@/lib/correlati";
 import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
 
@@ -32,6 +32,10 @@ export async function GET(req: NextRequest) {
 
   const dryRun = req.nextUrl.searchParams.get("dryRun") === "1";
   const report = await eseguiSyncCatalogo({ dryRun });
+
+  // Persisti l'esito (solo run reali, salta internamente i dry-run) cosi il
+  // gestore lo vede nel banner della lista prodotti. Best effort: non blocca.
+  await salvaEsitoSync(report);
 
   // Dopo un run reale andato a buon fine: giacenze e disponibilita sono
   // cambiate, quindi rivalida vetrina, schede prodotto e lista gestore.

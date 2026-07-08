@@ -44,6 +44,12 @@ export interface Prodotto {
    */
   disponibilita_su_richiesta?: boolean;
   /**
+   * Somma dello stock delle varianti, denormalizzata e mantenuta da trigger
+   * (migration 20260708160000). Alimenta il badge "Esaurito" in vetrina senza
+   * dover embeddare le varianti nella query delle card.
+   */
+  stock_totale?: number;
+  /**
    * Articolo disponibile SOLO dal sito, non presente in negozio: badge
    * informativo in vetrina. Default false (vedi migration 20260705120000).
    */

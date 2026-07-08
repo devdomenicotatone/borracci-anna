@@ -12,7 +12,10 @@
 //   &ordina=nome        recenti (default) | nome | prezzo-asc | prezzo-desc | scorte
 //   &pagina=2           1-based (non e un filtro: mai in serializzaFiltriGestore)
 
-export const STATI_PRODOTTO = ["tutti", "attivi", "nascosti"] as const;
+// "esauriti" = stock totale 0 (escl. i su-richiesta): utile ora che il sync BLT
+// azzera le giacenze ogni giorno. E un filtro ortogonale ad attivo/nascosto, ma
+// nella UI vive nello stesso selettore a segmenti (una vista alla volta).
+export const STATI_PRODOTTO = ["tutti", "attivi", "nascosti", "esauriti"] as const;
 export type StatoProdotto = (typeof STATI_PRODOTTO)[number];
 
 export const ORDINAMENTI_GESTORE = [

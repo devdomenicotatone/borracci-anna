@@ -40,14 +40,29 @@ export default function ProductCard({
 }) {
   const gradiente = gradientPer(prodotto.id || prodotto.slug);
   const inchiostro = TILE_INK.has(gradiente);
+  // Esaurito: stock totale a 0 e NON "su richiesta" (i su-richiesta non hanno
+  // giacenza in tempo reale, quindi non sono mai "esauriti"). `=== false` cosi un
+  // flag assente (dato non caricato) non genera un falso "Esaurito".
+  const esaurito =
+    prodotto.disponibilita_su_richiesta === false &&
+    (prodotto.stock_totale ?? 0) <= 0;
 
   return (
     <Link
       href={`/prodotti/${prodotto.slug}`}
       className="group relative isolate block rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea"
-      aria-label={`Vedi ${prodotto.nome}`}
+      aria-label={`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
     >
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl">
+      <div
+        className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl ${
+          esaurito ? "opacity-75" : ""
+        }`}
+      >
+        {esaurito && (
+          <span className="absolute right-2 top-2 z-20 inline-flex items-center rounded-full bg-foreground/85 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">
+            Esaurito
+          </span>
+        )}
         {prodotto.solo_online ? (
           <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-sea ring-1 ring-sea/25 backdrop-blur">
             <svg

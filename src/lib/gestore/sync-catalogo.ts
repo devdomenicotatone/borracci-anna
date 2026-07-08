@@ -186,3 +186,51 @@ export async function eseguiSyncCatalogo(opts: { dryRun?: boolean } = {}): Promi
     return { ok: false, dryRun, durataMs: durataMs(), error: e instanceof Error ? e.message : "Errore imprevisto nel sync." };
   }
 }
+
+/** Ultimo esito del sync giacenze, per il banner della dashboard gestore. */
+export interface UltimoSync {
+  eseguitoIl: string;
+  ok: boolean;
+  report: ReportSync | null;
+}
+
+/**
+ * Persiste l'esito dell'ultimo sync REALE (una sola riga, id fisso "giacenze"),
+ * cosi il gestore puo vederlo. I dry-run non sovrascrivono l'ultimo sync reale.
+ * Best effort: un problema nel salvataggio del log non deve rompere il sync.
+ * Usa il service role (bypassa la RLS di sync_stato). La tabella non e nei types
+ * generati: client non-tipizzato, come il resto del modulo.
+ */
+export async function salvaEsitoSync(report: ReportSync): Promise<void> {
+  if (report.dryRun) return;
+  try {
+    const sb = createAdminSupabase() as Db;
+    await sb.from("sync_stato").upsert({
+      id: "giacenze",
+      eseguito_il: new Date().toISOString(),
+      ok: report.ok,
+      report: report as unknown as Record<string, unknown>,
+    });
+  } catch {
+    // log best effort.
+  }
+}
+
+/**
+ * Legge l'ultimo esito del sync giacenze per il gestore. Ritorna null se assente
+ * (mai eseguito) o se la tabella non esiste ancora (migration non applicata).
+ */
+export async function leggiUltimoSync(supabase: Db): Promise<UltimoSync | null> {
+  try {
+    const { data, error } = await supabase
+      .from("sync_stato")
+      .select("eseguito_il, ok, report")
+      .eq("id", "giacenze")
+      .maybeSingle();
+    if (error || !data) return null;
+    const r = data as { eseguito_il: string; ok: boolean; report: ReportSync | null };
+    return { eseguitoIl: r.eseguito_il, ok: r.ok, report: r.report };
+  } catch {
+    return null;
+  }
+}

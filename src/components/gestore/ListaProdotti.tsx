@@ -389,7 +389,7 @@ export default function ListaProdotti({
             />
           </div>
           <div className="flex gap-1 rounded-full bg-surface-2 p-1 text-sm lg:w-auto">
-            {(["tutti", "attivi", "nascosti"] as StatoProdotto[]).map((f) => (
+            {(["tutti", "attivi", "nascosti", "esauriti"] as StatoProdotto[]).map((f) => (
               <button
                 key={f}
                 type="button"

@@ -32,7 +32,7 @@ export const PRODOTTI_PER_PAGINA = 24;
 
 /** Campi letti per le card della vetrina (condivisi con la home a fasce). */
 export const CAMPI_CARD =
-  "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online, categoria_id";
+  "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online, categoria_id, disponibilita_su_richiesta, stock_totale";
 
 /**
  * Prodotti di esempio usati SOLO quando Supabase non e configurato
