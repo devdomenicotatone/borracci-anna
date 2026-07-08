@@ -235,12 +235,25 @@ export async function salvaSezioneAction(
       return { ok: false, error: "Tipo di sezione non valido." };
     }
 
+    const config = sanificaConfig(tipo, dati.config ?? {});
+    // Regola "Una categoria" senza categoria scelta: configurazione incompleta.
+    // Senza questo blocco il salvataggio riusciva ("Sezione salvata") e in home
+    // la fascia degradava in silenzio a TUTTO il catalogo sotto un titolo
+    // sbagliato (il CategoriaSelect parte proprio da "Nessuna categoria").
+    if (
+      tipo === "prodotti_auto" &&
+      config.regola === "categoria" &&
+      !config.categoriaId
+    ) {
+      return { ok: false, error: "Scegli la categoria per questa fascia." };
+    }
+
     const { error } = await supabase
       .from("vetrina_sezioni")
       .update({
         titolo: testo(dati.titolo, 120) ?? null,
         sottotitolo: testo(dati.sottotitolo, 300) ?? null,
-        config: sanificaConfig(tipo, dati.config ?? {}),
+        config,
       })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };

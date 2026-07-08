@@ -174,7 +174,12 @@ async function prodottiAuto(
   let query = supabase.from("prodotti").select(CAMPI_CARD).eq("attivo", true);
   let href = "/prodotti";
 
-  if (regola === "categoria" && config.categoriaId) {
+  if (regola === "categoria") {
+    // Difesa: regola per categoria SENZA categoria scelta (config incompleta
+    // salvata prima della validazione, o categoria eliminata): fascia vuota
+    // (omessa in home) invece di degradare in silenzio a tutto il catalogo
+    // sotto un titolo sbagliato. La validazione vera e in salvaSezioneAction.
+    if (!config.categoriaId) return { prodotti: [], href };
     const ids = idConDiscendenti(categorie, config.categoriaId);
     query = query.in("categoria_id", ids);
     const cat = categorie.find((c) => c.id === config.categoriaId);
