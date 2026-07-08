@@ -7,6 +7,9 @@ import type { MetadataRoute } from "next";
 // perché il manifest richiede URL stabili, non route con hash di build.
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    // id esplicito: distingue questa app dalla PWA "Anna Gestore" (stessa
+    // origine, scope /gestore) — Chrome identifica le app per id, non per URL.
+    id: "/",
     name: "Anna Shop",
     short_name: "Anna Shop",
     description:
@@ -43,6 +46,19 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
+      },
+    ],
+    // Tasto destro sull'icona dell'app installata: salti diretti.
+    shortcuts: [
+      {
+        name: "Tutti i prodotti",
+        url: "/prodotti",
+        icons: [{ src: "/icona-192.png", sizes: "192x192", type: "image/png" }],
+      },
+      {
+        name: "Vieni a trovarci",
+        url: "/vieni-a-trovarci",
+        icons: [{ src: "/icona-192.png", sizes: "192x192", type: "image/png" }],
       },
     ],
   };

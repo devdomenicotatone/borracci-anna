@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import Wordmark from "@/components/Wordmark";
+import PulsanteInstallaApp from "@/components/gestore/PulsanteInstallaApp";
 import { logoutGestore } from "@/lib/gestore/auth-actions";
 
 function IconaProdotti({ className }: { className?: string }) {
@@ -155,14 +156,17 @@ export default function AdminNav({
             suffixClassName="ml-1 text-sm font-medium text-muted"
           />
         </Link>
-        <form action={logoutGestore}>
-          <button
-            type="submit"
-            className="rounded-full px-3 py-2 text-sm font-display font-bold text-sea transition-colors hover:bg-surface"
-          >
-            Esci
-          </button>
-        </form>
+        <div className="flex items-center gap-1">
+          <PulsanteInstallaApp variante="compatta" />
+          <form action={logoutGestore}>
+            <button
+              type="submit"
+              className="rounded-full px-3 py-2 text-sm font-display font-bold text-sea transition-colors hover:bg-surface"
+            >
+              Esci
+            </button>
+          </form>
+        </div>
       </header>
 
       {/* SIDEBAR desktop */}
@@ -229,14 +233,17 @@ export default function AdminNav({
               <p className="truncate text-xs capitalize text-muted">{ruolo}</p>
             </div>
           </div>
-          <form action={logoutGestore} className="mt-3">
-            <button
-              type="submit"
-              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-background hover:text-foreground"
-            >
-              Esci
-            </button>
-          </form>
+          <div className="mt-3">
+            <PulsanteInstallaApp variante="sidebar" />
+            <form action={logoutGestore}>
+              <button
+                type="submit"
+                className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-background hover:text-foreground"
+              >
+                Esci
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
 

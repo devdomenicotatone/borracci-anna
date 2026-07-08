@@ -62,7 +62,10 @@ export const config = {
   // Tutte le route tranne static/asset e /api/* (i route handler — webhook
   // Stripe, checkout — non hanno sessione cookie da rinfrescare e non sono
   // sotto /gestore, quindi evitiamo un getUser() inutile a ogni chiamata).
+  // I .webmanifest DEVONO restare fuori: Chrome scarica il manifest della PWA
+  // gestore (/gestore/manifest.webmanifest) senza cookie, e il redirect alla
+  // login lo renderebbe illeggibile (app non installabile).
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)",
   ],
 };
