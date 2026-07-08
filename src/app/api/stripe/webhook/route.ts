@@ -130,7 +130,15 @@ async function finalizzaOrdine(
     p_session_id: session.id,
     p_email: session.customer_details?.email ?? null,
     p_total: session.amount_total ?? 0,
-    p_righe: righe.map((r) => ({ sku: r.sku, qta: r.qta })),
+    // nome + prezzo unitario: servono alla RPC per ricostruire le ordine_righe
+    // se il pre-save della route checkout e fallito (migration 20260708170000).
+    // Le versioni precedenti della RPC ignorano le chiavi extra.
+    p_righe: righe.map((r) => ({
+      sku: r.sku,
+      qta: r.qta,
+      nome: r.nome,
+      prezzo_cents: r.qta > 0 ? Math.round(r.importoCents / r.qta) : 0,
+    })),
     // shipping_cost.amount_total = costo della tariffa scelta dal cliente.
     p_shipping_cents: session.shipping_cost?.amount_total ?? null,
     p_indirizzo: indirizzoDaSessione(session),
@@ -262,9 +270,26 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
   } else if (EVENTI_SCADUTI.has(event.type)) {
-    // Sessione scaduta senza pagamento: nessun ordine da finalizzare, nessuno
-    // stock scalato. Logghiamo per tracciabilita e restiamo idempotenti.
+    // Sessione scaduta senza pagamento: nessuno stock scalato. Se la sessione
+    // apparteneva a un checkout diretto abbandonato, l'ordine pre-creato
+    // "in_attesa" non verra mai pagato: lo marchiamo annullato, cosi non resta
+    // un fantasma anonimo nel pannello "Da confermare". Gli ordini del flusso
+    // richiesta hanno una sessione solo DOPO la conferma (stato 'confermato'),
+    // quindi il filtro sullo stato li lascia intatti. Idempotente sui retry.
     const session = event.data.object as Stripe.Checkout.Session;
+    try {
+      const supabase = createAdminSupabase();
+      const { error } = await supabase
+        .from("ordini")
+        .update({ stato: "annullato" })
+        .eq("stripe_session_id", session.id)
+        .eq("stato", "in_attesa");
+      if (error) throw error;
+    } catch (err) {
+      // 500 -> Stripe ritenta: la pulizia e idempotente, il retry e innocuo.
+      console.error("[stripe-webhook] pulizia sessione scaduta fallita:", err);
+      return new Response("Elaborazione fallita.", { status: 500 });
+    }
     console.info(
       "[stripe-webhook] sessione scaduta:",
       `session=${session.id}`,
