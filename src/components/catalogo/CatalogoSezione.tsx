@@ -6,6 +6,7 @@
 import Link from "next/link";
 
 import ProductCard from "@/components/ProductCard";
+import EtichettaMostraAltri from "@/components/catalogo/EtichettaMostraAltri";
 import ToolbarCatalogo from "@/components/catalogo/ToolbarCatalogo";
 import Wordmark from "@/components/Wordmark";
 import {
@@ -103,7 +104,7 @@ export default function CatalogoSezione({
                 scroll={false}
                 className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
               >
-                Mostra altri
+                <EtichettaMostraAltri />
               </Link>
             </div>
           )}
