@@ -14,17 +14,20 @@ import type { ReactNode } from "react";
 export const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea";
 
-/** Etichetta + campo + hint. Con `htmlFor` l'etichetta e un <label> associato;
- *  senza (es. quando il controllo non ha un id) degrada a <span>. */
+/** Etichetta + campo + hint/errore. Con `htmlFor` l'etichetta e un <label>
+ *  associato; senza (es. quando il controllo non ha un id) degrada a <span>.
+ *  `errore` (rosso) ha la precedenza su `hint`: serve ai form con validazione. */
 export function Campo({
   label,
   htmlFor,
   hint,
+  errore,
   children,
 }: {
   label: string;
   htmlFor?: string;
   hint?: string;
+  errore?: string;
   children: ReactNode;
 }) {
   return (
@@ -42,7 +45,11 @@ export function Campo({
         </span>
       )}
       {children}
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
+      {errore ? (
+        <p className="text-xs font-bold text-coral-ink">{errore}</p>
+      ) : hint ? (
+        <p className="text-xs text-muted">{hint}</p>
+      ) : null}
     </div>
   );
 }

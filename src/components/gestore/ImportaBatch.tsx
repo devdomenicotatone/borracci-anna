@@ -31,6 +31,7 @@ import {
   copiaFotoTraProdottiAction,
   creaProdottoDaImportAction,
   importaFotoDaUrlAction,
+  revalidaCatalogoAction,
   type BozzaImport,
 } from "@/lib/gestore/import-actions";
 import { toggleAttivoAction } from "@/lib/gestore/actions";
@@ -267,6 +268,23 @@ export default function ImportaBatch({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [lavoroInCorso]);
 
+  // A fine batch (fase "riepilogo") una sola revalidate completa del catalogo:
+  // durante il lavoro create/foto girano con revalida:false (bozze invisibili),
+  // quindi home/PDP/correlati/facette si allineano qui in un colpo invece di
+  // migliaia di volte durante l'import. Guard con ref: una volta sola per run,
+  // riarmata quando si esce dal riepilogo (nuovo batch).
+  const revalidatoRef = useRef(false);
+  useEffect(() => {
+    if (fase === "riepilogo") {
+      if (!revalidatoRef.current) {
+        revalidatoRef.current = true;
+        void revalidaCatalogoAction();
+      }
+    } else {
+      revalidatoRef.current = false;
+    }
+  }, [fase]);
+
   async function attesaPausa() {
     while (pausaRef.current && !abortRef.current) await sleep(300);
   }
@@ -318,6 +336,9 @@ export default function ImportaBatch({
       colore: dati.colore,
       categoriaId: dati.categoriaId,
       soloOnline: dati.soloOnline,
+      // Batch: niente revalidate globale per ogni scheda (sono bozze invisibili);
+      // una sola revalidaCatalogoAction() a fine batch. Vedi useEffect su "fase".
+      revalida: false,
     });
     if (!c.ok || !c.prodottoId) {
       if (c.duplicato) {
@@ -365,6 +386,7 @@ export default function ImportaBatch({
             c.prodottoId,
             dati.fotoSel[f],
             urlScheda,
+            false, // batch: solo scheda gestore, revalidate globale a fine corsa
           );
           if (esito.ok) fotoOk++;
         } catch {

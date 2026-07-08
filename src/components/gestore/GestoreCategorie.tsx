@@ -33,6 +33,7 @@ import {
 } from "@/lib/gestore/categorie-actions";
 import { useToast } from "@/components/gestore/Toaster";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
+import { inputCls } from "@/components/gestore/ui";
 import {
   useSortableList,
   type ContestoRiga,
@@ -40,9 +41,6 @@ import {
   type NestSortable,
 } from "@/components/gestore/useSortableList";
 import type { Categoria } from "@/lib/types";
-
-const inputCls =
-  "h-11 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea";
 
 // Riferimento stabile per i gruppi figli vuoti: un `[]` nuovo a ogni render
 // farebbe scattare inutilmente l'allineamento render-phase di useSortableList.

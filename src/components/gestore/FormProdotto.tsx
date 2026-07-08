@@ -34,6 +34,7 @@ import { gruppiCategorie, type GruppoCategorie } from "@/lib/categorie-albero";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import EditorVarianti from "@/components/gestore/EditorVarianti";
 import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
+import { Campo, inputCls } from "@/components/gestore/ui";
 import type { Categoria, VarianteInput } from "@/lib/types";
 
 export interface ProdottoForm {
@@ -59,9 +60,6 @@ function comboKey(colore: string | null, taglia: string | null): string {
 function stessoSet(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((x) => b.includes(x));
 }
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 export default function FormProdotto({
   prodotto,
@@ -534,37 +532,6 @@ export default function FormProdotto({
         onAnnulla={() => setConfermaApri(false)}
       />
     </form>
-  );
-}
-
-function Campo({
-  label,
-  htmlFor,
-  errore,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  errore?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-sm font-bold text-foreground"
-      >
-        {label}
-      </label>
-      {children}
-      {errore ? (
-        <p className="text-xs font-bold text-coral-ink">{errore}</p>
-      ) : hint ? (
-        <p className="text-xs text-muted">{hint}</p>
-      ) : null}
-    </div>
   );
 }
 

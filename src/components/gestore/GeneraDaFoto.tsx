@@ -26,6 +26,7 @@ import { slugify } from "@/lib/gestore/slug";
 import { coloreCanonico } from "@/lib/catalogo";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import { gruppiCategorie } from "@/lib/categorie-albero";
+import { Campo, inputCls } from "@/components/gestore/ui";
 import type { Categoria } from "@/lib/types";
 
 interface FotoLocale {
@@ -36,9 +37,6 @@ interface ColoreBozza {
   nome: string;
   foto_indici: number[];
 }
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 const MAX_FOTO = 10;
 
@@ -567,27 +565,3 @@ function ZonaUpload({
   );
 }
 
-function Campo({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-sm font-bold text-foreground"
-      >
-        {label}
-      </label>
-      {children}
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
-    </div>
-  );
-}

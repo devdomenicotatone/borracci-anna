@@ -14,7 +14,9 @@ Terzo audit completo del codebase Anna Shop, a valle del blocco "sync giacenze B
 >
 > **Minori corretti in un secondo giro (multi-agente)**: 20, 21, 32, 36, 37, 38, 39, 40, 41 (server; cablaggio batch client deferito), 43, 50, 52, 53, 54, 55. Verificati con tsc + eslint + next build puliti e una review avversariale (un solo fix incompleto trovato e sistemato).
 >
-> **Ancora da fare**: 16 (zona spedizione — decisione di policy tua). Deferral minori e sicuri: cablaggio client del finding 41 (passare `revalida:false` nel mass-import di ImportaBatch/ImportaDaUrl + una revalidate finale), e l'adozione di `ui.tsx`/`revalida.ts` negli ultimi file non nel set degli agenti (FormProdotto, GestoreCategorie, GeneraDaFoto).
+> **Deferral chiusi**: cablaggio client del finding 41 (ImportaBatch passa `revalida:false` su create+foto e fa UNA `revalidaCatalogoAction()` a fine batch via effetto su `fase`; ImportaDaUrl resta a default perché è import singolo), e adozione di `ui.tsx` in FormProdotto/GeneraDaFoto/GestoreCategorie (il `Campo` condiviso ora supporta anche l'errore di validazione).
+>
+> **Ancora da fare**: solo il **16** (zona spedizione — decisione di policy tua: tariffa unica nazionale o sovrapprezzo isole gestito a parte).
 
 ## Sintesi esecutiva
 
