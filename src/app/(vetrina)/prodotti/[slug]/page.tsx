@@ -3,7 +3,7 @@
 // foto da Supabase per slug. Se le env Supabase non sono configurate degrada
 // con grazia a un prodotto d'esempio, cosi il progetto builda anche senza DB.
 
-import { cache, Suspense } from "react";
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -299,12 +299,12 @@ export default async function PaginaProdotto({ params }: PdpProps) {
         soloOnline={prodottoBase.solo_online ?? false}
       />
 
-      {/* Suggerimenti correlati: caricamento indipendente (streaming), cosi
-          non ritardano il contenuto principale della scheda. Se sono troppo
+      {/* Suggerimenti correlati: renderizzati inline (niente Suspense) cosi la
+          sezione fa parte dell'HTML iniziale e non "salta" dentro dopo il paint
+          (evita il layout shift). La query e cachata (unstable_cache, 30 min):
+          bloccarci sopra costa ~0 a cache calda. Se i correlati sono troppo
           pochi la sezione non compare (vedi ProdottiCorrelati). */}
-      <Suspense fallback={null}>
-        <ProdottiCorrelati slug={prodottoBase.slug} />
-      </Suspense>
+      <ProdottiCorrelati slug={prodottoBase.slug} />
     </main>
   );
 }
