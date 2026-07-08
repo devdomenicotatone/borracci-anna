@@ -1,11 +1,13 @@
 // Blocco catalogo condiviso da home e pagine categoria: toolbar (ordinamento +
-// filtri), griglia di card, stati vuoti e paginazione "Mostra altri".
+// filtri), griglia di card, stati vuoti e paginazione a scorrimento infinito
+// (sentinella CaricamentoAutomatico + link "Mostra altri" come fallback).
 // Server component: riceve dati gia caricati; l'interattivita sta nella
 // ToolbarCatalogo (client), lo stato dei filtri nell'URL.
 
 import Link from "next/link";
 
 import ProductCard from "@/components/ProductCard";
+import CaricamentoAutomatico from "@/components/catalogo/CaricamentoAutomatico";
 import EtichettaMostraAltri from "@/components/catalogo/EtichettaMostraAltri";
 import ToolbarCatalogo from "@/components/catalogo/ToolbarCatalogo";
 import Wordmark from "@/components/Wordmark";
@@ -99,13 +101,18 @@ export default function CatalogoSezione({
               <p className="text-sm tabular-nums text-muted">
                 Hai visto {prodotti.length} prodotti su {totale}
               </p>
-              <Link
-                href={`${basePath}?${qsAltri.toString()}`}
-                scroll={false}
-                className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+              <CaricamentoAutomatico
+                pagina={pagina}
+                urlPaginaSuccessiva={`${basePath}?${qsAltri.toString()}`}
               >
-                <EtichettaMostraAltri />
-              </Link>
+                <Link
+                  href={`${basePath}?${qsAltri.toString()}`}
+                  scroll={false}
+                  className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+                >
+                  <EtichettaMostraAltri />
+                </Link>
+              </CaricamentoAutomatico>
             </div>
           )}
         </>
