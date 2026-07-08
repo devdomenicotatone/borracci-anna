@@ -103,6 +103,24 @@ function IconaVetrina({ className }: { className?: string }) {
   );
 }
 
+function IconaScudo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 2 4 5.5V11c0 5 3.4 9.2 8 10.5 4.6-1.3 8-5.5 8-10.5V5.5L12 2z" />
+      <path d="m8.8 11.8 2.3 2.3 4.1-4.6" />
+    </svg>
+  );
+}
+
 function IconaMedia({ className }: { className?: string }) {
   return (
     <svg
@@ -141,6 +159,7 @@ export default function AdminNav({
   const suCategorie = pathname.startsWith("/gestore/categorie");
   const suOrdini = pathname.startsWith("/gestore/ordini");
   const suMedia = pathname.startsWith("/gestore/media");
+  const suSicurezza = pathname.startsWith("/gestore/sicurezza");
   // Sulle pagine di form (nuovo / modifica) la save-bar prende il fondo:
   // nascondiamo la bottom-nav mobile per non sovrapporle.
   const suFormProdotto = /^\/gestore\/prodotti\/.+/.test(pathname);
@@ -157,6 +176,13 @@ export default function AdminNav({
           />
         </Link>
         <div className="flex items-center gap-1">
+          <Link
+            href="/gestore/sicurezza"
+            aria-label="Sicurezza account"
+            className={`grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-surface ${suSicurezza ? "text-sea" : "text-muted"}`}
+          >
+            <IconaScudo className="h-5 w-5" />
+          </Link>
           <PulsanteInstallaApp variante="compatta" />
           <form action={logoutGestore}>
             <button
@@ -234,6 +260,13 @@ export default function AdminNav({
             </div>
           </div>
           <div className="mt-3">
+            <Link
+              href="/gestore/sicurezza"
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-background hover:text-foreground ${suSicurezza ? "text-sea" : "text-muted"}`}
+            >
+              <IconaScudo className="h-5 w-5" />
+              Sicurezza
+            </Link>
             <PulsanteInstallaApp variante="sidebar" />
             <form action={logoutGestore}>
               <button

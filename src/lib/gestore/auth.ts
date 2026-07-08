@@ -33,6 +33,14 @@ export const verifySession = cache(
     } = await supabase.auth.getUser();
     if (!user) return null;
 
+    // MFA: se l'utente ha un authenticator verificato (nextLevel aal2) la
+    // sessione DEVE essere aal2 (codice TOTP inserito in questo login) —
+    // altrimenti e' un login a meta' e si respinge come non autorizzato.
+    // Il muro definitivo e' comunque la RLS: is_gestore() applica lo stesso
+    // criterio sul DB (migration 20260709120000_mfa_gestore).
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") return null;
+
     const { data: profilo } = await supabase
       .from("profili")
       .select("id, ruolo, nome")

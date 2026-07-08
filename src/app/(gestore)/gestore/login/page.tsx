@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import FormLogin from "@/components/gestore/FormLogin";
 import Wordmark from "@/components/Wordmark";
+import { createServerSupabase } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Accesso gestore — Anna Shop",
@@ -9,7 +10,17 @@ export const metadata: Metadata = {
 
 // Pagina di login del gestore. Sta FUORI dalla shell autenticata (il sotto-group
 // (app)): non chiama requireGestore(), qui ci si arriva da non loggati.
-export default function LoginPage() {
+// Se esiste gia' una sessione "a meta'" (password ok ma TOTP mai inserito,
+// es. pagina ricaricata al passo 2) il form riparte direttamente dal codice.
+export default async function LoginPage() {
+  let richiediSubitoCodice = false;
+  const supabase = await createServerSupabase();
+  if (supabase) {
+    const { data: aal } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    richiediSubitoCodice =
+      aal?.currentLevel === "aal1" && aal.nextLevel === "aal2";
+  }
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-sea-gradient px-5 py-10">
       {/* Decoro balneare: puntini bianchi + sole sfumato */}
@@ -31,7 +42,7 @@ export default function LoginPage() {
               Area gestore
             </p>
           </div>
-          <FormLogin />
+          <FormLogin richiediSubitoCodice={richiediSubitoCodice} />
         </div>
       </div>
     </div>
