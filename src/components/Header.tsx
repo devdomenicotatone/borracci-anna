@@ -58,7 +58,7 @@ export default async function Header() {
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea"
+                    className="h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea group-has-[:focus-visible]:rotate-180 group-has-[:focus-visible]:text-sea"
                     aria-hidden="true"
                   >
                     <path d="m6 9 6 6 6-6" />
@@ -68,8 +68,12 @@ export default async function Header() {
 
               {figlie.length > 0 && (
                 // pt-2 senza gap reale: il puntatore non "cade" tra trigger e
-                // pannello. Visibile su hover del gruppo o focus interno (Tab).
-                <div className="invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+                // pannello. Visibile su hover del gruppo o focus DA TASTIERA
+                // interno (:focus-visible via :has). NON usiamo focus-within: il
+                // click del mouse lascia il focus sul trigger <Link> e terrebbe
+                // il pannello aperto, cosi passando col mouse su un'altra voce se
+                // ne aprivano due insieme.
+                <div className="invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100">
                   {/* max-h + scroll: con figlie e nipoti il pannello puo
                       superare il viewport (header sticky a 4rem). */}
                   <div className="max-h-[calc(100vh-6rem)] min-w-48 overflow-y-auto rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
