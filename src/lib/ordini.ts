@@ -285,32 +285,37 @@ export async function creaCheckoutOrdineAction(
     if (perVariante.size > 0) {
       const { data: varStock } = await admin
         .from("varianti")
-        .select("id, stock, prodotti (disponibilita_su_richiesta)")
+        .select("id, stock, prodotti (attivo, disponibilita_su_richiesta)")
         .in("id", [...perVariante.keys()]);
-      const insufficienti: string[] = [];
+      const nonDisponibili: string[] = [];
       for (const v of varStock ?? []) {
         const rel = (
           v as unknown as {
             prodotti:
-              | { disponibilita_su_richiesta: boolean }
-              | { disponibilita_su_richiesta: boolean }[]
+              | { attivo: boolean; disponibilita_su_richiesta: boolean }
+              | { attivo: boolean; disponibilita_su_richiesta: boolean }[]
               | null;
           }
         ).prodotti;
-        const suRichiesta = Array.isArray(rel)
-          ? rel[0]?.disponibilita_su_richiesta
-          : rel?.disponibilita_su_richiesta;
-        if (suRichiesta) continue;
+        const info = Array.isArray(rel) ? rel[0] : rel;
         const serve = perVariante.get(v.id as string);
-        if (serve && (v.stock ?? 0) < serve.qta) {
-          insufficienti.push(serve.nome);
+        if (!serve) continue;
+        // Prodotto ritirato dal catalogo dopo la conferma: mai farlo pagare,
+        // nemmeno se su richiesta (il soft-delete non azzera lo stock).
+        if (info?.attivo === false) {
+          nonDisponibili.push(serve.nome);
+          continue;
+        }
+        if (info?.disponibilita_su_richiesta) continue;
+        if ((v.stock ?? 0) < serve.qta) {
+          nonDisponibili.push(serve.nome);
         }
       }
-      if (insufficienti.length > 0) {
+      if (nonDisponibili.length > 0) {
         return {
           ok: false,
-          error: `Alcuni articoli non sono più disponibili nella quantità richiesta: ${[
-            ...new Set(insufficienti),
+          error: `Alcuni articoli non sono più disponibili (o non nella quantità richiesta): ${[
+            ...new Set(nonDisponibili),
           ].join(", ")}. Contatta il negozio prima di pagare.`,
         };
       }
@@ -387,10 +392,26 @@ export async function creaCheckoutOrdineAction(
       locale: "it",
     });
 
-    await admin
+    // Il legame ordine<->sessione e cio che permette al webhook di ritrovare
+    // l'ordine: se non riusciamo a salvarlo, consegnare comunque l'URL creerebbe
+    // un ordine "pagato" duplicato senza righe (fallback RPC) e lascerebbe
+    // l'originale ancora pagabile. Meglio far scadere la sessione e far riprovare.
+    const { error: errSessione } = await admin
       .from("ordini")
       .update({ stripe_session_id: session.id })
       .eq("id", ordine.id);
+    if (errSessione) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch {
+        // Best effort: non recuperabile, scade comunque da sola in 24h.
+      }
+      return {
+        ok: false,
+        error:
+          "Non è stato possibile avviare il pagamento. Riprova tra qualche istante.",
+      };
+    }
 
     if (!session.url) {
       return { ok: false, error: "URL di pagamento assente." };
