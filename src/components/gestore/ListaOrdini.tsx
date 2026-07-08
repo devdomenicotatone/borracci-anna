@@ -157,7 +157,10 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
       setLista((l) =>
         l.map((o) => (o.id === id ? { ...o, stato: nuovoStato } : o)),
       );
-      mostra(successo, "ok");
+      // Avviso collaterale (es. email al cliente non partita): stile errore
+      // perche richiede un'azione della titolare, anche se l'operazione e ok.
+      if (esito.avviso) mostra(esito.avviso, "errore");
+      else mostra(successo, "ok");
     });
   }
 
@@ -256,12 +259,18 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
         return copia;
       });
       setDialogoId(null);
-      mostra(
-        daRimuovere.length > 0
-          ? "Disponibilità confermata (parziale)."
-          : "Disponibilità confermata.",
-        "ok",
-      );
+      // Email al cliente non partita: avviso con stile errore (serve un'azione
+      // della titolare: mandargli il link a mano), anche se la conferma e ok.
+      if (esito.avviso) {
+        mostra(esito.avviso, "errore");
+      } else {
+        mostra(
+          daRimuovere.length > 0
+            ? "Disponibilità confermata (parziale)."
+            : "Disponibilità confermata.",
+          "ok",
+        );
+      }
     });
   }
 

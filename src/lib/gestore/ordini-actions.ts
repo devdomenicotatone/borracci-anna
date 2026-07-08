@@ -61,6 +61,9 @@ export interface RimozioneRiga {
 export interface EsitoOrdine {
   ok: boolean;
   error?: string;
+  /** Operazione riuscita MA con un problema collaterale da segnalare alla
+   *  titolare (es. email al cliente non partita): il pannello lo mostra. */
+  avviso?: string;
 }
 
 /**
@@ -329,11 +332,21 @@ export async function confermaOrdineAction(
               )
               .join("\n")}`
           : "";
-      await inviaEmail({
+      // Quell'email e l'UNICO canale con cui il cliente scopre che l'ordine e
+      // pagabile: se non parte (inviaEmail non lancia, ritorna false) la
+      // titolare deve saperlo, altrimenti aspetta un pagamento che non arrivera.
+      const inviata = await inviaEmail({
         to: ordine.email,
         subject: "La tua richiesta è disponibile — completa l'ordine · Anna Shop",
         text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\nArticoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)}\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
+      if (!inviata) {
+        return {
+          ok: true,
+          avviso:
+            "Ordine confermato, ma l'email al cliente NON è partita: contattalo direttamente con il link di pagamento (Copia link).",
+        };
+      }
     }
     return { ok: true };
   } catch {
@@ -347,9 +360,38 @@ export async function annullaOrdineAction(id: string): Promise<EsitoOrdine> {
     "in_attesa",
     "confermato",
   ]);
+  if (!esito.ok) return esito;
   // Ordine annullato: se c'era una sessione di pagamento aperta, falla scadere
   // cosi il cliente non puo piu pagarla (e il webhook non lo resuscita a pagato).
-  if (esito.ok) await scadiSessioneOrdine(id);
+  await scadiSessioneOrdine(id);
+
+  // Cortesia (best effort): la conferma di ricezione promette al cliente una
+  // risposta — senza questa email resterebbe in attesa per sempre. Solo se
+  // abbiamo un'email (i checkout diretti abbandonati non ne hanno).
+  try {
+    const admin = createAdminSupabase();
+    const { data } = await admin
+      .from("ordini")
+      .select("email, nome")
+      .eq("id", id)
+      .maybeSingle();
+    if (data?.email) {
+      const inviata = await inviaEmail({
+        to: data.email,
+        subject: "La tua richiesta — Anna Shop",
+        text: `Ciao ${data.nome ?? ""},\n\ngrazie per la tua richiesta. Purtroppo questa volta non possiamo darle seguito: gli articoli richiesti non sono disponibili.\n\nSe vuoi, rispondi a questa email o passa a trovarci in negozio: troviamo un'alternativa insieme.\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+      });
+      if (!inviata) {
+        return {
+          ok: true,
+          avviso:
+            "Richiesta rifiutata, ma l'email di cortesia al cliente NON è partita: se serve, avvisalo direttamente.",
+        };
+      }
+    }
+  } catch {
+    // Best effort: il rifiuto e comunque andato a buon fine.
+  }
   return esito;
 }
 
