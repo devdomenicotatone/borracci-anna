@@ -54,7 +54,7 @@ export default function ProductCard({
       aria-label={`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
     >
       <div
-        className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl ${
+        className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-white ${
           esaurito ? "opacity-75" : ""
         }`}
       >
@@ -114,7 +114,7 @@ export default function ProductCard({
             // fetchPriority="high". Le altre restano lazy (default).
             loading={priorita ? "eager" : "lazy"}
             fetchPriority={priorita ? "high" : "auto"}
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.04]"
           />
         ) : (
           // Tile gradiente pop + icona indumento + nome in basso.

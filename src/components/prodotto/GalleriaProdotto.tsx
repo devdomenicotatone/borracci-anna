@@ -5,10 +5,11 @@
 // quando c'e piu di una foto. L'indice attivo e controllato dall'esterno
 // (ProdottoDettaglio) cosi resta sincronizzato col selettore colore.
 //
-// Le foto entrano gia ritagliate ai bordi uniformi (vedi lib/trim.ts): il capo
-// riempie il riquadro senza bianco di troppo, quindi qui basta un object-cover
-// netto — niente piu selettore Fronte/Retro/Intera, che serviva solo a rimediare
-// alle foto orizzontali "annegate nel bianco".
+// Le foto entrano gia ritagliate ai bordi uniformi (vedi lib/trim.ts). Qui le
+// mostriamo con object-contain su fondo bianco + un filo di padding: il capo si
+// vede SEMPRE per intero (niente lati tagliati, es. il logo "Made in Italy" negli
+// angoli) con un margine di respiro uniforme, invece di riempire il riquadro con
+// un object-cover che ne mangiava i bordi.
 
 import Image from "next/image";
 
@@ -63,14 +64,14 @@ export default function GalleriaProdotto({
   return (
     <div className="flex flex-col gap-3">
       {/* Foto principale */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-surface shadow-sea">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-white shadow-sea">
         {urlPrincipale ? (
           <Image
             src={urlPrincipale}
             alt={principale ? `${nome} — ${principale.etichetta}` : nome}
             fill
             sizes="(max-width: 768px) 100vw, 50vw"
-            className="object-cover"
+            className="object-contain p-5 sm:p-6"
             // Foto grande della scheda: quality alta cosi l'ottimizzazione non
             // somma una seconda perdita visibile sopra la foto gia caricata.
             quality={90}
@@ -137,7 +138,7 @@ export default function GalleriaProdotto({
                 aria-pressed={sel}
                 title={f.etichetta}
                 className={[
-                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl transition-all sm:w-[4.5rem]",
+                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl bg-white transition-all sm:w-[4.5rem]",
                   sel
                     ? "ring-2 ring-sea"
                     : "opacity-70 ring-1 ring-line hover:-translate-y-0.5 hover:opacity-100",
@@ -148,7 +149,7 @@ export default function GalleriaProdotto({
                   alt={f.etichetta}
                   fill
                   sizes="80px"
-                  className="object-cover"
+                  className="object-contain p-1"
                   placeholder={f.blurDataUrl ? "blur" : PLACEHOLDER_GENERICO}
                   blurDataURL={f.blurDataUrl ?? undefined}
                 />
