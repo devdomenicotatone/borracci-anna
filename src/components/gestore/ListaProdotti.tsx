@@ -28,6 +28,7 @@ import {
 } from "@/lib/categorie-albero";
 import {
   assegnaCategoriaBulkAction,
+  cambiaVisibilitaBulkAction,
   eliminaProdottiBulkAction,
   idsProdottiFiltratiAction,
 } from "@/lib/gestore/actions";
@@ -243,6 +244,25 @@ export default function ListaProdotti({
       } else {
         mostra(esito.error ?? "Impossibile aggiornare la categoria.", "errore");
       }
+    });
+  }
+
+  function cambiaVisibilita(attivo: boolean) {
+    const ids = [...selezionati];
+    startTransition(async () => {
+      const esito = await cambiaVisibilitaBulkAction(ids, attivo);
+      if (!esito.ok) {
+        mostra(esito.error ?? "Operazione non riuscita.", "errore");
+        return;
+      }
+      const n = esito.aggiornati ?? ids.length;
+      mostra(
+        attivo
+          ? `${n} ${n === 1 ? "prodotto messo" : "prodotti messi"} in vendita.`
+          : `${n} ${n === 1 ? "prodotto nascosto" : "prodotti nascosti"}.`,
+      );
+      svuotaSelezione();
+      router.refresh();
     });
   }
 
@@ -737,6 +757,22 @@ export default function ListaProdotti({
                     : bulkCategoria
                       ? "Assegna"
                       : "Rimuovi categoria"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cambiaVisibilita(true)}
+                  disabled={inCorso}
+                  className="inline-flex h-11 shrink-0 items-center rounded-full px-4 font-display text-sm font-bold text-white ring-1 ring-white/30 transition-colors hover:bg-white/10 disabled:opacity-60"
+                >
+                  In vendita
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cambiaVisibilita(false)}
+                  disabled={inCorso}
+                  className="inline-flex h-11 shrink-0 items-center rounded-full px-4 font-display text-sm font-bold text-white/80 ring-1 ring-white/30 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"
+                >
+                  Nascondi
                 </button>
                 <button
                   type="button"

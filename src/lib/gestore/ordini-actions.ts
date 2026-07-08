@@ -14,11 +14,37 @@ import { revalidatePath } from "next/cache";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { getStripe } from "@/lib/stripe";
 import { inviaEmail } from "@/lib/email";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 import type { StatoOrdine } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
+
+/**
+ * Fa scadere la sessione Stripe eventualmente aperta di un ordine (best effort).
+ * Dopo un annullamento o un pagamento manuale (in negozio) il cliente non deve
+ * poter completare un pagamento Stripe di una sessione ancora aperta: sarebbe un
+ * doppio incasso, o un ordine annullato che "risuscita" pagato dal webhook.
+ * Se la sessione risulta gia pagata non c'e nulla da fare qui (va gestito a mano
+ * con un rimborso): expire e un no-op sulle sessioni gia complete.
+ */
+async function scadiSessioneOrdine(id: string): Promise<void> {
+  if (!process.env.STRIPE_SECRET_KEY) return;
+  try {
+    const admin = createAdminSupabase();
+    const { data } = await admin
+      .from("ordini")
+      .select("stripe_session_id")
+      .eq("id", id)
+      .maybeSingle();
+    const sid = data?.stripe_session_id;
+    if (!sid) return;
+    await getStripe().checkout.sessions.expire(sid);
+  } catch {
+    // Sessione gia scaduta/completata/inesistente: niente da fare.
+  }
+}
 
 /** Cap di sicurezza per il costo di spedizione inserito dal gestore (100 EUR). */
 const MAX_SPEDIZIONE_CENTS = 10_000;
@@ -294,7 +320,14 @@ export async function confermaOrdineAction(
 
 /** Rifiuta/annulla l'ordine. Non si annulla un ordine gia pagato. */
 export async function annullaOrdineAction(id: string): Promise<EsitoOrdine> {
-  return aggiornaStato(id, { stato: "annullato" }, ["in_attesa", "confermato"]);
+  const esito = await aggiornaStato(id, { stato: "annullato" }, [
+    "in_attesa",
+    "confermato",
+  ]);
+  // Ordine annullato: se c'era una sessione di pagamento aperta, falla scadere
+  // cosi il cliente non puo piu pagarla (e il webhook non lo resuscita a pagato).
+  if (esito.ok) await scadiSessioneOrdine(id);
+  return esito;
 }
 
 /**
@@ -315,6 +348,10 @@ export async function segnaPagatoOrdineAction(id: string): Promise<EsitoOrdine> 
       // La RPC solleva un'eccezione sulle transizioni non consentite.
       return { ok: false, error: "Operazione non consentita per questo ordine." };
     }
+
+    // Pagato in negozio: fai scadere l'eventuale sessione Stripe aperta, cosi il
+    // cliente non completa anche il pagamento online (doppio incasso).
+    await scadiSessioneOrdine(id);
 
     revalidatePath("/gestore/ordini");
     return { ok: true };

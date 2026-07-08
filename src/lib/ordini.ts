@@ -255,7 +255,7 @@ export async function creaCheckoutOrdineAction(
     const { data: righe } = await admin
       .from("ordine_righe")
       .select(
-        "nome_prodotto, sku, taglia, colore, prezzo_cents, quantita, rimossa_il",
+        "variante_id, nome_prodotto, sku, taglia, colore, prezzo_cents, quantita, rimossa_il",
       )
       .eq("ordine_id", ordine.id);
     if (!righe || righe.length === 0) {
@@ -267,6 +267,53 @@ export async function creaCheckoutOrdineAction(
     const attive = righe.filter((r) => !r.rimossa_il);
     if (attive.length === 0) {
       return { ok: false, error: "Ordine senza articoli disponibili." };
+    }
+
+    // Riverifica le giacenze: tra la conferma del gestore e il pagamento lo stock
+    // puo essere cambiato (sync BLT, altre vendite). Per i prodotti a magazzino
+    // non facciamo mai pagare merce non piu disponibile; i "su richiesta" sono
+    // esclusi (giacenza non in tempo reale, gia validata dal gestore).
+    const perVariante = new Map<string, { nome: string; qta: number }>();
+    for (const r of attive) {
+      if (!r.variante_id) continue;
+      const cur = perVariante.get(r.variante_id);
+      perVariante.set(r.variante_id, {
+        nome: r.nome_prodotto,
+        qta: (cur?.qta ?? 0) + r.quantita,
+      });
+    }
+    if (perVariante.size > 0) {
+      const { data: varStock } = await admin
+        .from("varianti")
+        .select("id, stock, prodotti (disponibilita_su_richiesta)")
+        .in("id", [...perVariante.keys()]);
+      const insufficienti: string[] = [];
+      for (const v of varStock ?? []) {
+        const rel = (
+          v as unknown as {
+            prodotti:
+              | { disponibilita_su_richiesta: boolean }
+              | { disponibilita_su_richiesta: boolean }[]
+              | null;
+          }
+        ).prodotti;
+        const suRichiesta = Array.isArray(rel)
+          ? rel[0]?.disponibilita_su_richiesta
+          : rel?.disponibilita_su_richiesta;
+        if (suRichiesta) continue;
+        const serve = perVariante.get(v.id as string);
+        if (serve && (v.stock ?? 0) < serve.qta) {
+          insufficienti.push(serve.nome);
+        }
+      }
+      if (insufficienti.length > 0) {
+        return {
+          ok: false,
+          error: `Alcuni articoli non sono più disponibili nella quantità richiesta: ${[
+            ...new Set(insufficienti),
+          ].join(", ")}. Contatta il negozio prima di pagare.`,
+        };
+      }
     }
 
     const lineItems = attive.map((r) => ({
@@ -300,14 +347,31 @@ export async function creaCheckoutOrdineAction(
 
     const stripe = getStripe();
 
-    // Se esiste gia una sessione per questo ordine, falla scadere PRIMA di
-    // crearne una nuova: cosi la vecchia non e piu pagabile e si impedisce il
-    // doppio addebito (e il doppio scarico stock via webhook di due sessioni).
+    // Se esiste gia una sessione per questo ordine, gestiscila PRIMA di crearne
+    // una nuova. Se risulta gia COMPLETATA (il cliente ha pagato, magari col
+    // webhook ancora in ritardo), NON creare una nuova sessione: orfanerebbe
+    // quella pagata (il webhook cerca l'ordine per stripe_session_id e non lo
+    // ritroverebbe piu) e aprirebbe la porta a un secondo addebito. Altrimenti
+    // (sessione ancora aperta o scaduta non pagata) la si fa scadere e si ricrea.
     if (ordine.stripe_session_id) {
       try {
+        const esistente = await stripe.checkout.sessions.retrieve(
+          ordine.stripe_session_id,
+        );
+        if (
+          esistente.status === "complete" ||
+          esistente.payment_status === "paid"
+        ) {
+          return {
+            ok: false,
+            error:
+              "Un pagamento per questo ordine risulta già ricevuto: aggiorna la pagina tra qualche secondo.",
+          };
+        }
         await stripe.checkout.sessions.expire(ordine.stripe_session_id);
       } catch {
-        // Gia scaduta/completata: ignora.
+        // Sessione non piu recuperabile (inesistente/scaduta): si procede a
+        // crearne una nuova.
       }
     }
 

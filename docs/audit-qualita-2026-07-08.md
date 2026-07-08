@@ -2,7 +2,13 @@
 
 Terzo audit completo del codebase Anna Shop, a valle del blocco "sync giacenze BLT + taglie cappello/pallone", dopo l'[audit del 5 luglio](./audit-qualita-2026-07-05.md).
 
-> **Stato: nessun finding è ancora stato corretto.** Questo documento è il punto di ripresa: i finding sono ordinati per priorità e ognuno ha una proposta di fix concreta.
+> **Aggiornamento 8 lug 2026 (sessione fix):** corretti a lotti tutti i finding ad alta priorità più molti a media. Vedi lo stato per finding qui sotto.
+>
+> **Corretti e verificati** (tsc + eslint + next build puliti): 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 15, 18, 19, 22, 25, 26, 27, 28, 30, 31, 33, 34, 35, 44, 45–46 (parziale via 3), 47, 48, 51 — più il dedup dei loop di scansione in `vetrina.ts`.
+>
+> **Richiede azione manuale:** la migration [`20260708120000_ordine_pagato_notifica.sql`](../supabase/migrations/20260708120000_ordine_pagato_notifica.sql) va applicata nel SQL Editor di Supabase (finché non lo fai, le email d'ordine non partono ma tutto il resto funziona).
+>
+> **Ancora da fare** (richiedono migration DB o modifiche al percorso caldo della vetrina, da affrontare mirati): 9 (badge «Esaurito» in griglia), 11 (esito sync BLT visibile), 29 (filtro «Esauriti»), 16 (zona spedizione — decisione di policy), 20/21 (ORDER BY e prezzo nel sync), 36–41 (finding extra), e i finding «bassa»/architettura non elencati sopra (32, 43, 50, 52, 53, 54, 55).
 
 ## Sintesi esecutiva
 

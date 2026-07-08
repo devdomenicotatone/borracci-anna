@@ -111,8 +111,84 @@ export default function ToolbarCatalogo({
       : [...lista, voce];
   }
 
+  // — Ricerca testuale — Il backend la supporta gia (filtri.q → ricerca per
+  // token su nome/descrizione in lib/vetrina), ma il campo mancava del tutto.
+  // Stato locale + debounce per non navigare a ogni tasto; un ref tiene i filtri
+  // correnti senza rieseguire l'effetto a ogni render.
+  const [ricerca, setRicerca] = useState(filtri.q);
+  // Riallinea il campo se `q` cambia da fuori (back del browser): pattern React
+  // "aggiusta lo stato durante il render", non un effetto con setState.
+  const [qVista, setQVista] = useState(filtri.q);
+  if (filtri.q !== qVista) {
+    setQVista(filtri.q);
+    setRicerca(filtri.q);
+  }
+  // Ref ai filtri correnti, aggiornato in un effetto (mai durante il render):
+  // serve a costruire la navigazione nel debounce senza rieseguire l'effetto a
+  // ogni tasto (i filtri come dipendenza lo farebbero ripartire di continuo).
+  const filtriRef = useRef(filtri);
+  useEffect(() => {
+    filtriRef.current = filtri;
+  });
+  // Debounce: naviga 350 ms dopo l'ultimo tasto, solo se il testo e cambiato.
+  useEffect(() => {
+    const pulita = ricerca.trim();
+    if (pulita === filtriRef.current.q) return;
+    const t = setTimeout(() => naviga({ ...filtriRef.current, q: pulita }), 350);
+    return () => clearTimeout(t);
+  }, [ricerca, naviga]);
+
   return (
     <div className="mb-6">
+      {/* Ricerca testuale del catalogo (nome/descrizione, multi-parola). */}
+      <div className="mb-3">
+        <label className="relative block">
+          <span className="sr-only">Cerca nel catalogo</span>
+          <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-5 w-5"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            value={ricerca}
+            onChange={(e) => setRicerca(e.target.value)}
+            placeholder="Cerca un prodotto, una squadra, un personaggio…"
+            aria-label="Cerca nel catalogo"
+            className="h-12 w-full rounded-full bg-white pl-12 pr-11 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 hover:ring-sea focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:hidden"
+          />
+          {ricerca && (
+            <button
+              type="button"
+              onClick={() => setRicerca("")}
+              aria-label="Cancella la ricerca"
+              className="absolute inset-y-0 right-3 flex items-center text-muted transition-colors hover:text-foreground"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </label>
+      </div>
       {/* Chip franchise: scorciatoie per saga/serie presenti nella categoria,
           derivate dai nomi (vedi lib/franchise). Servono alla scoperta: mostrano
           cosa c'e senza doverlo cercare. Stessa riga scorribile con frecce delle

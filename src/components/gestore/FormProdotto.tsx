@@ -15,6 +15,7 @@
 import {
   startTransition,
   useActionState,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -234,6 +235,20 @@ export default function FormProdotto({
       soloOnline !== prodotto.solo_online ||
       variantiCambiate
     : true;
+
+  // Guardia modifiche non salvate: con dati modificati e non ancora salvati,
+  // avvisa prima di chiudere/ricaricare la pagina o seguire un link esterno (il
+  // browser mostra il suo prompt nativo). Non copre la navigazione interna via
+  // Link, ma intercetta la perdita di dati piu comune (chiusura/refresh).
+  useEffect(() => {
+    if (!dirty || pending) return;
+    const avvisa = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", avvisa);
+    return () => window.removeEventListener("beforeunload", avvisa);
+  }, [dirty, pending]);
 
   const errori = erroriVisibili ? (stato.errors ?? {}) : {};
 

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 import { getStripe } from "@/lib/stripe";
 import { createAdminSupabase } from "@/lib/supabase/admin";
-import { leggiCarrello } from "@/lib/cart";
+import { leggiCarrello, riconciliaCarrello } from "@/lib/cart";
 import { opzioniSpedizione } from "@/lib/spedizione";
 import type { RigaCarrello } from "@/lib/types";
 
@@ -63,6 +63,27 @@ export async function POST(): Promise<Response> {
   if (righe.some((riga) => riga.prodotto.disponibilita_su_richiesta)) {
     return erroreJson(
       "Alcuni articoli sono disponibili su richiesta: invia prima la richiesta dal carrello.",
+      409,
+    );
+  }
+
+  // Riverifica le giacenze reali: il carrello resta nel cookie per 30 giorni ma
+  // lo stock cambia ogni giorno (sync BLT, altre vendite, ritiri dal catalogo).
+  // Se qualcosa non e piu disponibile, riallinea il carrello e ferma il checkout:
+  // non si crea mai una sessione di pagamento per merce che non c'e.
+  const riconc = await riconciliaCarrello();
+  if (riconc.modificato) {
+    const parti: string[] = [];
+    if (riconc.rimossi.length > 0) {
+      parti.push(`non più disponibili: ${riconc.rimossi.join(", ")}`);
+    }
+    if (riconc.cappati.length > 0) {
+      parti.push(
+        `quantità aggiornate per: ${riconc.cappati.map((c) => c.nome).join(", ")}`,
+      );
+    }
+    return erroreJson(
+      `Le disponibilità sono cambiate (${parti.join("; ")}). Abbiamo aggiornato il carrello: controllalo e riprova.`,
       409,
     );
   }
@@ -204,8 +225,12 @@ export async function POST(): Promise<Response> {
       headers: { "content-type": "application/json" },
     });
   } catch (err) {
-    const messaggio =
-      err instanceof Error ? err.message : "Errore sconosciuto.";
-    return erroreJson(`Errore nella creazione del checkout: ${messaggio}`, 500);
+    // Il dettaglio (spesso in inglese, tecnico) resta nei log: al cliente va un
+    // messaggio chiaro in italiano, non l'errore grezzo di Stripe.
+    console.error("[checkout] creazione sessione fallita:", err);
+    return erroreJson(
+      "Non è stato possibile avviare il pagamento. Riprova tra poco o scrivici per completare l'ordine.",
+      500,
+    );
   }
 }

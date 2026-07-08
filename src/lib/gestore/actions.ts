@@ -297,7 +297,11 @@ async function applicaVarianti(
         taglia: r.taglia,
         colore: r.colore,
         sku: r.sku.trim(),
-        stock: r.stock,
+        // `stock` NON viene aggiornato per le varianti esistenti: il form non ha
+        // un campo giacenza, quindi il valore inviato e quello letto al render
+        // (stantio) e riscriverlo qui riporterebbe indietro le vendite gia
+        // scalate dal webhook e il sync BLT giornaliero. Lo stock e governato
+        // solo da import, sync fornitore e finalizzazione pagamenti.
       })
       .eq("id", r.id as string)
       .eq("prodotto_id", prodottoId);
@@ -781,6 +785,46 @@ export async function assegnaCategoriaBulkAction(
         }
         return { ok: false, error: error.message };
       }
+      aggiornati += data?.length ?? 0;
+    }
+
+    revalidatePath("/gestore/prodotti");
+    revalidatePath("/");
+    revalidateTag(TAG_CORRELATI, "max");
+    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    return { ok: true, aggiornati };
+  } catch {
+    return { ok: false, error: "Errore di rete. Riprova." };
+  }
+}
+
+/**
+ * Mette in vendita (attivo=true) o nasconde (attivo=false) piu prodotti in blocco.
+ * Dopo un import massivo consente di pubblicare tutte le bozze in un colpo, invece
+ * di un prodotto alla volta. A blocchi per non sforare l'URL PostgREST; ritorna
+ * il numero di prodotti effettivamente toccati (non la lunghezza dell'input).
+ */
+export async function cambiaVisibilitaBulkAction(
+  ids: string[],
+  attivo: boolean,
+): Promise<EsitoAzione & { aggiornati?: number }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+
+  const unici = [...new Set(ids)].filter(Boolean);
+  if (unici.length === 0) {
+    return { ok: false, error: "Nessun prodotto selezionato." };
+  }
+
+  try {
+    let aggiornati = 0;
+    for (const blocco of aBlocchi(unici, BLOCCO_BULK)) {
+      const { data, error } = await sessione.supabase
+        .from("prodotti")
+        .update({ attivo })
+        .in("id", blocco)
+        .select("id");
+      if (error) return { ok: false, error: error.message };
       aggiornati += data?.length ?? 0;
     }
 

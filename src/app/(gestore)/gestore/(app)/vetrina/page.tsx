@@ -1,6 +1,7 @@
 import { requireGestore } from "@/lib/gestore/auth";
 import { caricaCategorie } from "@/lib/categorie";
 import { leggiSezioniAdmin, type VetrinaSezioneAdmin } from "@/lib/gestore/vetrina";
+import { leggiTutteLeRighe } from "@/lib/supabase/scansione";
 import GestoreVetrina from "@/components/gestore/GestoreVetrina";
 import type { Prodotto } from "@/lib/types";
 
@@ -11,15 +12,22 @@ export const dynamic = "force-dynamic";
 export default async function VetrinaPage() {
   const { supabase } = await requireGestore();
 
-  const [categorie, prodRes] = await Promise.all([
+  const [categorie, prodotti] = await Promise.all([
     caricaCategorie(supabase),
-    // Catalogo completo per il selettore "aggiungi prodotto" (ricerca locale:
-    // il catalogo boutique e piccolo). Anche i non attivi, cosi il gestore vede
-    // e gestisce i pinnati messi in bozza.
-    supabase
-      .from("prodotti")
-      .select("id, slug, nome, immagine_url, prezzo_cents, valuta, attivo")
-      .order("nome", { ascending: true }),
+    // Catalogo completo per il selettore "aggiungi prodotto". A blocchi: con
+    // ~1840 prodotti una select non paginata verrebbe troncata a max-rows e
+    // meta catalogo non sarebbe pinnabile. Anche i non attivi, cosi il gestore
+    // vede e gestisce i pinnati messi in bozza. Tie-break su id (blocchi stabili).
+    leggiTutteLeRighe<Prodotto>((conteggio) =>
+      supabase
+        .from("prodotti")
+        .select(
+          "id, slug, nome, immagine_url, prezzo_cents, valuta, attivo",
+          conteggio ? { count: "exact" } : undefined,
+        )
+        .order("nome", { ascending: true })
+        .order("id", { ascending: true }),
+    ).catch(() => [] as Prodotto[]),
   ]);
 
   // La tabella potrebbe non esistere se la migration non e ancora applicata:
@@ -30,8 +38,6 @@ export default async function VetrinaPage() {
   } catch {
     sezioni = [];
   }
-
-  const prodotti = (prodRes.data as Prodotto[] | null) ?? [];
 
   return (
     <div className="mx-auto max-w-xl pb-24 lg:max-w-4xl">

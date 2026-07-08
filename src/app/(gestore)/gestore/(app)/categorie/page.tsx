@@ -8,20 +8,23 @@ import type { Categoria } from "@/lib/types";
 export default async function CategoriePage() {
   const { supabase } = await requireGestore();
 
-  const [catRes, prodRes] = await Promise.all([
+  // I conteggi arrivano da una RPC che li aggrega a Postgres (group by): niente
+  // scansione di tutti i prodotti nel browser, che oltre le 1000 righe verrebbe
+  // troncata da max-rows falsando i numeri del menu.
+  const [catRes, conteggiRes] = await Promise.all([
     supabase
       .from("categorie")
       .select("id, slug, nome, parent_id, ordine")
       .order("ordine", { ascending: true }),
-    supabase.from("prodotti").select("categoria_id"),
+    supabase.rpc("conteggi_categorie_gestore"),
   ]);
 
   const categorie = (catRes.data as Categoria[] | null) ?? [];
 
   const conteggiProdotti: Record<string, number> = {};
-  for (const riga of prodRes.data ?? []) {
-    const cid = (riga as { categoria_id: string | null }).categoria_id;
-    if (cid) conteggiProdotti[cid] = (conteggiProdotti[cid] ?? 0) + 1;
+  for (const riga of conteggiRes.data ?? []) {
+    const { categoria_id, n } = riga as { categoria_id: string | null; n: number };
+    if (categoria_id) conteggiProdotti[categoria_id] = Number(n);
   }
 
   return (

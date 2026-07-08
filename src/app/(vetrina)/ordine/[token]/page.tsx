@@ -161,7 +161,10 @@ export default async function PaginaOrdine({
         <p className="mt-4 max-w-prose leading-relaxed text-muted">{ui.testo}</p>
       )}
 
-      {ordine.stato === "confermato" && (
+      {/* "Paga ora" nascosto mentre un pagamento e in elaborazione (ritorno da
+          Stripe con webhook ancora in ritardo): evita che un secondo clic apra
+          una nuova sessione mentre la prima e gia stata pagata. */}
+      {ordine.stato === "confermato" && !inElaborazione && (
         <div className="mt-6">
           <PulsantePaga token={token} />
         </div>

@@ -125,11 +125,15 @@ function IconaMedia({ className }: { className?: string }) {
 export default function AdminNav({
   nome,
   ruolo,
+  ordiniDaConfermare = 0,
 }: {
   nome: string | null;
   ruolo: string;
+  /** Richieste in attesa: mostra un badge sulla voce Ordini. */
+  ordiniDaConfermare?: number;
 }) {
   const pathname = usePathname();
+  const badgeOrdini = ordiniDaConfermare > 99 ? "99+" : String(ordiniDaConfermare);
   const suNuovo = pathname.startsWith("/gestore/prodotti/nuovo");
   const suProdotti = pathname.startsWith("/gestore/prodotti") && !suNuovo;
   const suVetrina = pathname.startsWith("/gestore/vetrina");
@@ -195,6 +199,11 @@ export default function AdminNav({
           <Link href="/gestore/ordini" className={voceSidebar(suOrdini)}>
             <IconaOrdini className="h-5 w-5" />
             Ordini
+            {ordiniDaConfermare > 0 && (
+              <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white">
+                {badgeOrdini}
+              </span>
+            )}
           </Link>
           <Link href="/gestore/media" className={voceSidebar(suMedia)}>
             <IconaMedia className="h-5 w-5" />
@@ -247,7 +256,14 @@ export default function AdminNav({
             <span>Categorie</span>
           </Link>
           <Link href="/gestore/ordini" className={voceBottom(suOrdini)}>
-            <IconaOrdini className="h-5 w-5" />
+            <span className="relative">
+              <IconaOrdini className="h-5 w-5" />
+              {ordiniDaConfermare > 0 && (
+                <span className="absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-coral px-1 text-[10px] font-bold text-white">
+                  {badgeOrdini}
+                </span>
+              )}
+            </span>
             <span>Ordini</span>
           </Link>
           <Link href="/gestore/media" className={voceBottom(suMedia)}>

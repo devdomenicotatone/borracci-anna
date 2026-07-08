@@ -48,6 +48,11 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
             src={immagine}
             alt=""
             aria-hidden="true"
+            // Immagine LCP della home: priorita alta e decoding sincrono per non
+            // ritardare il render del testo dell'hero (l'URL e libero, quindi resta
+            // un <img> nativo invece di next/image).
+            fetchPriority="high"
+            decoding="async"
             className="absolute inset-0 -z-20 h-full w-full object-cover"
           />
           <span
