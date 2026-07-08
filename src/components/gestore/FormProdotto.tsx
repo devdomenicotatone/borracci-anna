@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import {
   salvaProdottoAction,
@@ -103,6 +104,9 @@ export default function FormProdotto({
     ),
   );
   const [confermaApri, setConfermaApri] = useState(false);
+  // Dialog "Scartare le modifiche?" per l'Annulla con lavoro non salvato.
+  const [confermaAnnulla, setConfermaAnnulla] = useState(false);
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
   // Gli errori per-campo del server scompaiono appena l'utente ricomincia a
@@ -503,6 +507,16 @@ export default function FormProdotto({
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3 lg:max-w-5xl">
           <Link
             href="/gestore/prodotti"
+            onClick={(e) => {
+              // Modifiche non salvate: chiedi conferma invece di scartarle in
+              // silenzio (il beforeunload copre solo chiusura/refresh, non le
+              // navigazioni client). Adiacente a "Salva": un tap sbagliato
+              // non deve costare dieci minuti di lavoro.
+              if (dirty && !pending) {
+                e.preventDefault();
+                setConfermaAnnulla(true);
+              }
+            }}
             className="flex h-12 items-center rounded-full px-4 font-display text-sm font-bold text-muted transition-colors hover:text-foreground"
           >
             Annulla
@@ -521,6 +535,18 @@ export default function FormProdotto({
           </button>
         </div>
       </div>
+
+      <ConfermaDialog
+        aperto={confermaAnnulla}
+        titolo="Scartare le modifiche?"
+        messaggio="Ci sono modifiche non salvate: uscendo dalla scheda andranno perse."
+        etichettaConferma="Scarta ed esci"
+        onConferma={() => {
+          setConfermaAnnulla(false);
+          router.push("/gestore/prodotti");
+        }}
+        onAnnulla={() => setConfermaAnnulla(false)}
+      />
 
       <ConfermaDialog
         aperto={confermaApri}

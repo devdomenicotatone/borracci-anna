@@ -508,7 +508,13 @@ export default function ImportaBatch({
         creato = true;
         if (!primoId) primoId = cur.prodottoId;
         if (cur.stato === "pubblicato") pubblicato = true;
-        if (jobs.length > 1 && cur.nota) note.push(`${j.pubblico}: ${cur.nota}`);
+        // Conserva la nota anche col job singolo (il caso piu comune): prima
+        // veniva raccolta solo con jobs.length > 1 e l'aggiornamento finale la
+        // sovrascriveva con undefined — avvisi tipo "3 foto non importate"
+        // sparivano dal riepilogo.
+        if (cur.nota) {
+          note.push(jobs.length > 1 ? `${j.pubblico}: ${cur.nota}` : cur.nota);
+        }
       } else {
         if (cur.stato !== "duplicato") tuttiDup = false;
         note.push(
