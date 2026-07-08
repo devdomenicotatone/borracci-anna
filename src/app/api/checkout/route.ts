@@ -118,9 +118,10 @@ export async function POST(): Promise<Response> {
     0,
   );
 
-  // Opzioni di spedizione: calcolate server-side dal subtotale merce (fonte di
-  // verita = carrello server-side, mai input del client). Stripe le mostra come
-  // scelte sulla pagina hosted; il costo reale scelto torna nel webhook.
+  // Spedizione: calcolata server-side dal subtotale merce (fonte di verita =
+  // carrello server-side, mai input del client). SEMPRE una sola opzione
+  // (gratuita sopra soglia, tariffa unica Italia sotto): niente scelta di zona
+  // lasciata al cliente su Stripe (finding 16). Il costo torna nel webhook.
   const shippingOptions = opzioniSpedizione(totaleCents).map((opzione) => ({
     shipping_rate_data: {
       type: "fixed_amount" as const,

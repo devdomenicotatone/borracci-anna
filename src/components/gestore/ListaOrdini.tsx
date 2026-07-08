@@ -110,8 +110,8 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   const [pending, startTransition] = useTransition();
   // Costo spedizione (in euro, come digitato) per ordine in conferma. Il default
   // rispetta la soglia di spedizione gratuita promessa nel carrello: 0 se la
-  // merce la supera, altrimenti 5,90 (tariffa Italia continentale). Il gestore
-  // lo regola comunque caso per caso.
+  // merce la supera, altrimenti 5,90 (tariffa unica Italia, default di
+  // spedizione.ts). Il gestore lo regola comunque caso per caso.
   const [sped, setSped] = useState<Record<string, string>>({});
   const merceAttivaCents = (o: OrdineGestore) =>
     (o.ordine_righe ?? []).reduce(
