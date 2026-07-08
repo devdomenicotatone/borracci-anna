@@ -40,8 +40,12 @@ export default function CatalogoSezione({
   const attivi = contaFiltriAttivi(filtri);
 
   // Link "Mostra altri": stessi filtri, pagina successiva. scroll={false}
-  // perche la griglia si estende sotto la posizione corrente.
-  const qsAltri = new URLSearchParams(serializzaFiltri(filtri));
+  // perche la griglia si estende sotto la posizione corrente. La chiave dei
+  // soli filtri (serializzaFiltri non include mai `pagina`) dice alla
+  // sentinella quando l'esplorazione riparte e il tetto auto si azzera.
+  const qsFiltri = new URLSearchParams(serializzaFiltri(filtri));
+  const chiaveFiltri = `${basePath}?${qsFiltri.toString()}`;
+  const qsAltri = new URLSearchParams(qsFiltri);
   qsAltri.set("pagina", String(pagina + 1));
 
   return (
@@ -104,6 +108,7 @@ export default function CatalogoSezione({
               <CaricamentoAutomatico
                 pagina={pagina}
                 urlPaginaSuccessiva={`${basePath}?${qsAltri.toString()}`}
+                chiaveFiltri={chiaveFiltri}
               >
                 <Link
                   href={`${basePath}?${qsAltri.toString()}`}

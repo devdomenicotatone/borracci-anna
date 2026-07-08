@@ -8,18 +8,29 @@
 // con lo spinner, cosi non si accumulano click mentre arrivano le card.
 // Si usa router.replace (non push): 40 blocchi caricati scorrendo non devono
 // diventare 40 voci di cronologia da ripercorrere col tasto indietro.
+//
+// TETTO: dopo MAX_AUTO caricamenti automatici consecutivi la sentinella si
+// mette in pausa e resta solo il bottone — senza pausa il footer sarebbe
+// irraggiungibile con ~1800 prodotti. Il click sul bottone (intercettato in
+// capture sul wrapper) azzera il conteggio e riattiva l'automatico.
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
+/** Blocchi caricati da soli tra un click e l'altro (~120 card). */
+const MAX_AUTO = 5;
+
 export default function CaricamentoAutomatico({
   pagina,
   urlPaginaSuccessiva,
+  chiaveFiltri,
   children,
 }: {
   /** Pagina corrente (1-based): riarma la sentinella quando cambia. */
   pagina: number;
   urlPaginaSuccessiva: string;
+  /** Percorso + filtri SENZA pagina: quando cambia, il tetto riparte da zero. */
+  chiaveFiltri: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -28,6 +39,13 @@ export default function CaricamentoAutomatico({
   // Ultima pagina richiesta: l'observer scatta a raffica durante lo scroll,
   // ma una sola navigazione per pagina deve partire.
   const richiesta = useRef(pagina);
+  // Caricamenti automatici consecutivi dall'ultimo click (o cambio filtri).
+  const autoConsecutivi = useRef(0);
+
+  // Filtri o percorso nuovi = esplorazione nuova: il tetto riparte.
+  useEffect(() => {
+    autoConsecutivi.current = 0;
+  }, [chiaveFiltri]);
 
   useEffect(() => {
     // Props nuove (pagina caricata, o filtri cambiati -> URL nuovo): si riarma.
@@ -40,7 +58,9 @@ export default function CaricamentoAutomatico({
       (voci) => {
         if (!voci.some((v) => v.isIntersecting)) return;
         if (richiesta.current > pagina) return;
+        if (autoConsecutivi.current >= MAX_AUTO) return;
         richiesta.current = pagina + 1;
+        autoConsecutivi.current += 1;
         startTransition(() => {
           router.replace(urlPaginaSuccessiva, { scroll: false });
         });
@@ -67,7 +87,16 @@ export default function CaricamentoAutomatico({
           Carico…
         </span>
       ) : (
-        children
+        // display:contents — il wrapper serve solo a intercettare il click sul
+        // link (che e' un server component: non puo' avere onClick suo).
+        <span
+          className="contents"
+          onClickCapture={() => {
+            autoConsecutivi.current = 0;
+          }}
+        >
+          {children}
+        </span>
       )}
     </>
   );
