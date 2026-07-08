@@ -187,8 +187,13 @@ export default function VieniATrovarciPage() {
             </div>
           </div>
 
-          {/* Mappa interattiva con pin brandizzato */}
-          <div className="relative min-h-[340px] overflow-hidden rounded-3xl shadow-sea ring-1 ring-line lg:min-h-0">
+          {/* Mappa interattiva con pin brandizzato.
+              `isolate`: crea uno stacking context cosi i z-index interni di
+              Leaflet (pane/controlli/popup, fino a ~1000) restano confinati qui
+              e non salgono sopra l'header sticky (il menu a tendina ci passava
+              dietro). La pillola "Indicazioni" a z-[1100] resta comunque sopra
+              la mappa perche e nello stesso contesto. */}
+          <div className="relative isolate min-h-[340px] overflow-hidden rounded-3xl shadow-sea ring-1 ring-line lg:min-h-0">
             <MappaNegozio />
             {/* Pillola indicazioni sovrapposta (sopra i controlli Leaflet) */}
             <a
