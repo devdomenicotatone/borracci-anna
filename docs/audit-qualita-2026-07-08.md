@@ -12,7 +12,9 @@ Terzo audit completo del codebase Anna Shop, a valle del blocco "sync giacenze B
 > - [`20260708150000_sync_stato.sql`](../supabase/migrations/20260708150000_sync_stato.sql) — banner esito sync (degrada in sicurezza: nessun banner)
 > - [`20260708160000_prodotto_stock_totale.sql`](../supabase/migrations/20260708160000_prodotto_stock_totale.sql) — **DA APPLICARE PRIMA DEL DEPLOY**: aggiunge `prodotti.stock_totale`, referenziata dalle query delle card. Se il codice va live senza questa colonna, la griglia vetrina si svuota.
 >
-> **Ancora da fare** (scelta/minori): 16 (zona spedizione — decisione di policy), 20/21 (ORDER BY e prezzo nel sync), 36–41 (finding extra), «bassa»/architettura (32, 43, 50, 52, 53, 54, 55).
+> **Minori corretti in un secondo giro (multi-agente)**: 20, 21, 32, 36, 37, 38, 39, 40, 41 (server; cablaggio batch client deferito), 43, 50, 52, 53, 54, 55. Verificati con tsc + eslint + next build puliti e una review avversariale (un solo fix incompleto trovato e sistemato).
+>
+> **Ancora da fare**: 16 (zona spedizione — decisione di policy tua). Deferral minori e sicuri: cablaggio client del finding 41 (passare `revalida:false` nel mass-import di ImportaBatch/ImportaDaUrl + una revalidate finale), e l'adozione di `ui.tsx`/`revalida.ts` negli ultimi file non nel set degli agenti (FormProdotto, GestoreCategorie, GeneraDaFoto).
 
 ## Sintesi esecutiva
 

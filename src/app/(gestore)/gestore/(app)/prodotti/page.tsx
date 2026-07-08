@@ -47,6 +47,7 @@ export default async function ProdottiPage({
         pagina={pagina}
         categorie={categorie}
         conteggi={conteggi}
+        errore={esito.errore}
       />
     </>
   );

@@ -2,9 +2,11 @@
 
 // Toolbar del catalogo vetrina: chip franchise, ordinamento, bottone "Filtri"
 // con drawer (prezzo, taglie, colori) e chip dei filtri attivi rimovibili.
-// Lo stato vive nell'URL: ogni modifica naviga (router.replace, scroll
-// invariato) e il server ri-renderizza la griglia. Cosi i filtri sono
-// condivisibili via link, il back del browser funziona e niente stato doppio.
+// Lo stato vive nell'URL: ogni modifica naviga (router.push, scroll invariato)
+// e il server ri-renderizza la griglia. Cosi i filtri sono condivisibili via
+// link, il back del browser annulla l'ultimo cambiamento e niente stato doppio.
+// La sola ricerca testuale usa replace (via debounce) per non creare una voce
+// di cronologia a ogni tasto.
 //
 // Accessibilita drawer: stesso pattern del CartDrawer (dialog modale, ESC,
 // click sull'overlay, scroll-lock, focus trap, focus ripristinato).
@@ -73,12 +75,23 @@ export default function ToolbarCatalogo({
   // Difensivo: facette da una cache precedente potrebbero non avere i franchise.
   const franchiseDisponibili = facette.franchise ?? [];
 
-  /** Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1). */
+  /**
+   * Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1).
+   * Di default usa push: ogni filtro/ordinamento/chip crea una voce di
+   * cronologia, cosi il back del browser annulla l'ultimo cambiamento invece di
+   * uscire dal catalogo. La ricerca testuale passa `sostituisci` per NON
+   * intasare la cronologia con una voce a ogni tasto digitato.
+   */
   const naviga = useCallback(
-    (nuovi: FiltriCatalogo) => {
+    (nuovi: FiltriCatalogo, sostituisci = false) => {
       const qs = serializzaFiltri(nuovi);
+      const url = qs ? `${basePath}?${qs}` : basePath;
       startTransition(() => {
-        router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+        if (sostituisci) {
+          router.replace(url, { scroll: false });
+        } else {
+          router.push(url, { scroll: false });
+        }
       });
     },
     [basePath, router],
@@ -134,7 +147,10 @@ export default function ToolbarCatalogo({
   useEffect(() => {
     const pulita = ricerca.trim();
     if (pulita === filtriRef.current.q) return;
-    const t = setTimeout(() => naviga({ ...filtriRef.current, q: pulita }), 350);
+    const t = setTimeout(
+      () => naviga({ ...filtriRef.current, q: pulita }, true),
+      350,
+    );
     return () => clearTimeout(t);
   }, [ricerca, naviga]);
 

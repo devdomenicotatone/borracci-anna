@@ -74,7 +74,15 @@ interface RigaVariante {
 async function leggiTutto<T>(sb: Db, tabella: string, colonne: string): Promise<T[]> {
   const acc: T[] = [];
   for (let da = 0; ; da += 1000) {
-    const { data, error } = await sb.from(tabella).select(colonne).range(da, da + 999);
+    // Senza ORDER BY stabile Postgres puo rimescolare le righe tra un blocco e
+    // l'altro (full-scan concorrenti): alcune varianti verrebbero lette due volte
+    // e altre saltate, restando con la giacenza vecchia. `id` e la chiave, ordine
+    // deterministico su tutte le tabelle lette qui.
+    const { data, error } = await sb
+      .from(tabella)
+      .select(colonne)
+      .order("id", { ascending: true })
+      .range(da, da + 999);
     if (error) throw new Error(`Lettura ${tabella} fallita: ${error.message}`);
     const righe = (data ?? []) as T[];
     acc.push(...righe);
@@ -136,7 +144,12 @@ export async function eseguiSyncCatalogo(opts: { dryRun?: boolean } = {}): Promi
       if (costo !== null && p.costo_cents !== null && costo !== p.costo_cents) {
         avvisiPrezzo.push({ codice, nome: p.nome, daCents: p.costo_cents, aCents: costo });
       }
-      updProdotti.push({ id: p.id, costo_cents: costo });
+      // Aggiorna il costo solo con un valore valido: se il CSV ha un prezzo
+      // illeggibile (costo null) NON spingere costo_cents:null, altrimenti la RPC
+      // cancellerebbe silenziosamente il costo registrato dai sync precedenti.
+      if (costo !== null) {
+        updProdotti.push({ id: p.id, costo_cents: costo });
+      }
     }
 
     // 4. Varianti: giacenza target da semaforo, solo dove cambia.

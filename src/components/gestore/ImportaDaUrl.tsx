@@ -28,13 +28,11 @@ import ImportaBatch from "@/components/gestore/ImportaBatch";
 import RevisioneBozza, {
   type DatiRevisione,
 } from "@/components/gestore/RevisioneBozza";
+import { Campo, inputCls } from "@/components/gestore/ui";
 import { useToast } from "@/components/gestore/Toaster";
 import { slugify } from "@/lib/gestore/slug";
 import { dividiTagliePerPubblico } from "@/lib/catalogo";
 import type { Categoria } from "@/lib/types";
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 // Tetto pagine listing lato client (allineato al server: 40 x 25 = 1000 card).
 const MAX_PAGINE = 40;
@@ -429,29 +427,4 @@ export default function ImportaDaUrl({ categorie }: { categorie: Categoria[] }) 
   }
 
   return null;
-}
-
-function Campo({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-sm font-bold text-foreground"
-      >
-        {label}
-      </label>
-      {children}
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
-    </div>
-  );
 }

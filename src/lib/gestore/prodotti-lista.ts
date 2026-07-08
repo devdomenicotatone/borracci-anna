@@ -20,6 +20,9 @@ export interface EsitoListaGestore {
   prodotti: ProdottoLista[];
   /** Totale dei prodotti che rispettano i filtri (oltre la pagina corrente). */
   totale: number;
+  /** true se la RPC ha fallito: distingue un errore transitorio (Supabase giu)
+   *  dal catalogo davvero vuoto, cosi la UI non mostra "Crea il primo prodotto". */
+  errore?: boolean;
 }
 
 /** Riga grezza ritornata da cerca_prodotti_gestore. */
@@ -62,8 +65,9 @@ function argomentiCategoria(
 /**
  * Una pagina di prodotti del gestore che rispettano i filtri, con gli aggregati
  * (num varianti, stock totale) e il totale dei match. Modello "Mostra altri"
- * cumulativo: offset 0, limit crescente (come la vetrina). Degrada a vuoto su
- * errore. Il client Supabase e quello di sessione (RLS: il gestore vede anche i
+ * cumulativo: offset 0, limit crescente (come la vetrina). Su errore RPC ritorna
+ * lista vuota ma con `errore: true`, cosi la UI lo distingue dal catalogo vuoto.
+ * Il client Supabase e quello di sessione (RLS: il gestore vede anche i
  * nascosti).
  */
 export async function caricaProdottiGestore(
@@ -92,7 +96,7 @@ export async function caricaProdottiGestore(
         ...cat,
       })
       .range(da, a);
-    if (error) return { prodotti: [], totale: 0 };
+    if (error) return { prodotti: [], totale: 0, errore: true };
     const blocco = (data as RigaRpc[] | null) ?? [];
     righe.push(...blocco);
     if (blocco.length < a - da + 1) break; // blocco corto = match esauriti

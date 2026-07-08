@@ -47,6 +47,7 @@ import {
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import ToggleAttivo from "@/components/gestore/ToggleAttivo";
 import CondividiProdotto from "@/components/prodotto/CondividiProdotto";
+import { ChevronSelect, Spinner } from "@/components/gestore/ui";
 import { useToast } from "@/components/gestore/Toaster";
 
 /** Una riga della lista, gia proiettata dal server (niente sku/codice: la
@@ -77,6 +78,7 @@ export default function ListaProdotti({
   pagina,
   categorie,
   conteggi,
+  errore = false,
 }: {
   /** Pagina di risultati (cumulativa fino a `pagina`), gia filtrata/ordinata. */
   prodotti: ProdottoLista[];
@@ -88,6 +90,9 @@ export default function ListaProdotti({
   categorie: Categoria[];
   /** Conteggi per categoria (intero catalogo), per i numeri del menu. */
   conteggi: ConteggiCategorie;
+  /** La RPC di caricamento e fallita: mostra lo stato "errore" invece del
+   *  catalogo vuoto (un hiccup di Supabase non e un catalogo senza prodotti). */
+  errore?: boolean;
 }) {
   const router = useRouter();
   const [navPending, startNav] = useTransition();
@@ -487,9 +492,11 @@ export default function ListaProdotti({
           >
             {navPending
               ? "Aggiorno…"
-              : prodotti.length >= totale
-                ? `${totale} ${totale === 1 ? "prodotto" : "prodotti"}`
-                : `${prodotti.length} di ${totale}`}
+              : errore
+                ? ""
+                : prodotti.length >= totale
+                  ? `${totale} ${totale === 1 ? "prodotto" : "prodotti"}`
+                  : `${prodotti.length} di ${totale}`}
           </span>
 
           {attivi > 0 && (
@@ -527,7 +534,9 @@ export default function ListaProdotti({
           </div>
         )}
 
-      {prodotti.length === 0 ? (
+      {errore ? (
+        <StatoErrore onRiprova={() => router.refresh()} />
+      ) : prodotti.length === 0 ? (
         <StatoVuoto conFiltri={attivi > 0} onAzzera={azzeraFiltri} />
       ) : (
         // A lg la lista diventa una "tabella in card": sotto restano le card di sempre.
@@ -685,12 +694,7 @@ export default function ListaProdotti({
             disabled={navPending}
             className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:opacity-60"
           >
-            {navPending && (
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 animate-spin rounded-full border-2 border-sea/30 border-t-sea"
-              />
-            )}
+            {navPending && <Spinner className="h-4 w-4 text-sea" />}
             {navPending ? "Carico…" : "Mostra altri"}
           </button>
         </div>
@@ -822,26 +826,6 @@ export default function ListaProdotti({
   );
 }
 
-/** Freccia dei select "pill" della toolbar. */
-function ChevronSelect() {
-  return (
-    <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-muted">
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="h-4 w-4"
-        aria-hidden="true"
-      >
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </span>
-  );
-}
-
 function BadgeCategoria({
   categorie,
   categoriaId,
@@ -954,6 +938,40 @@ function BadgeStock({
     );
   }
   return <span className="text-xs text-muted">{stock} pz</span>;
+}
+
+/** Errore transitorio di caricamento (RPC fallita): distinto dal catalogo vuoto,
+ *  invita a riprovare senza suggerire di "creare il primo prodotto". */
+function StatoErrore({ onRiprova }: { onRiprova: () => void }) {
+  return (
+    <div className="rounded-3xl bg-surface px-6 py-12 text-center ring-1 ring-dashed ring-line">
+      <span className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-coral/15 text-coral">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-8 w-8"
+          aria-hidden="true"
+        >
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+          <path d="M12 9v4M12 17h.01" />
+        </svg>
+      </span>
+      <p className="text-sm text-muted">
+        Impossibile caricare i prodotti, riprova.
+      </p>
+      <button
+        type="button"
+        onClick={onRiprova}
+        className="mt-4 inline-flex h-11 items-center rounded-full bg-sea px-5 font-display text-sm font-bold text-white shadow-sea transition-all hover:-translate-y-0.5"
+      >
+        Riprova
+      </button>
+    </div>
+  );
 }
 
 function StatoVuoto({

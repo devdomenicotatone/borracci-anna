@@ -76,6 +76,20 @@ export function eTagliaPallone(t: string | null | undefined): boolean {
 export const TAGLIA_UNICA = "Taglia unica";
 
 /**
+ * Riporta una taglia adulto alla scala del negozio: MAIUSCOLO + alias del
+ * fornitore ("XXL"→"2XL", "XXXL"→"3XL"; a DB mai la forma "XXL"). E l'unico
+ * punto in cui vive questo alias: lo usano sia il parser import (normalizzaTaglia)
+ * sia la creazione prodotto. Le forme non-adulto (bambino, "Misura N") passano
+ * inalterate a MAIUSCOLO e vengono riconosciute a valle da chi chiama.
+ */
+export function tagliaCanonica(t: string): string {
+  const maiuscola = t.trim().toUpperCase();
+  if (maiuscola === "XXL") return "2XL";
+  if (maiuscola === "XXXL") return "3XL";
+  return maiuscola;
+}
+
+/**
  * Indice di ordinamento di una taglia. Le taglie BAMBINO (range "A-B", numero
  * singolo, o "N anni") si ordinano per eta e vengono PRIMA della scala adulto
  * XXS→6XL; "Taglia unica" sta subito dopo la scala adulto; le sconosciute vanno
@@ -92,9 +106,8 @@ export function ordineTaglia(t: string | null | undefined): number {
   // misura crescente (intercettata PRIMA del numero bambino, che vale fino a 16).
   if (eTagliaCappello(s)) return 15_000 + parseInt(s, 10);
   // Pallone: "Misura 1".."Misura 5" — banda propria (ne adulto ne bambino),
-  // ordinata per misura crescente.
-  const pallone = s.match(/^misura\s+([1-5])$/i);
-  if (pallone) return 16_000 + parseInt(pallone[1], 10);
+  // ordinata per misura crescente (come il cappello sopra: helper + numero).
+  if (eTagliaPallone(s)) return 16_000 + parseInt(s.replace(/^\D+/, ""), 10);
   // Bambino per eta: "N anni", range "A-B"/"A/B", numero singolo.
   const anni = s.match(/^(\d{1,2})\s*anni$/i);
   if (anni) return parseInt(anni[1], 10) * 10;

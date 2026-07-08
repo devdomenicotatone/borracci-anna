@@ -15,6 +15,7 @@ import {
 } from "@/lib/gestore/actions";
 import { useToast } from "@/components/gestore/Toaster";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
+import { Spinner } from "@/components/gestore/ui";
 import { generaBlurDataUrl } from "@/lib/blur";
 import { autoTrimmaImmagine } from "@/lib/trim";
 
@@ -195,7 +196,7 @@ export default function GestoreMedia({
           <div className="mt-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-line">
             <div className="flex items-center justify-between gap-3 text-sm font-bold text-foreground">
               <span className="inline-flex items-center gap-2">
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sea/30 border-t-sea" />
+                <Spinner className="h-3.5 w-3.5 text-sea" />
                 Ripulisco le foto… {ripulitura.fatte}/{ripulitura.totale}
               </span>
               <span className="text-sea">

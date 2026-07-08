@@ -7,12 +7,11 @@
 //   2) mutazione via anon key + sessione + RLS (is_gestore), in try/catch;
 //   3) revalidatePath e/o redirect FUORI dal try/catch.
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { verifySession } from "@/lib/gestore/auth";
-import { TAG_CORRELATI } from "@/lib/correlati";
-import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
+import { revalidaProdotto } from "@/lib/gestore/revalida";
 import { slugify } from "@/lib/gestore/slug";
 import { caricaCategorie } from "@/lib/categorie";
 import { idsProdottiGestore } from "@/lib/gestore/prodotti-lista";
@@ -39,6 +38,21 @@ export interface EsitoAzione {
 }
 
 /**
+ * Errore DB non previsto (fuori dai casi gia mappati): il messaggio grezzo di
+ * PostgREST arriva in inglese e spesso e criptico per chi non e tecnico (es.
+ * "new row violates row-level security policy for table prodotti"). Non deve
+ * finire nei toast della titolare: lo logghiamo server-side per la diagnosi e
+ * restituiamo un testo generico in italiano.
+ */
+function messaggioErroreGenerico(
+  error: { code?: string; message?: string },
+  contesto: string,
+): string {
+  console.error(`[${contesto}]`, error?.code ?? "", error?.message ?? error);
+  return "Salvataggio non riuscito, riprova. Se succede ancora contatta l'assistenza.";
+}
+
+/**
  * Attiva/disattiva un prodotto (soft-delete: sparisce dalla vetrina, resta
  * visibile al gestore). Ritorna l'esito per il revert ottimistico lato client.
  */
@@ -54,12 +68,11 @@ export async function toggleAttivoAction(
       .from("prodotti")
       .update({ attivo })
       .eq("id", id);
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      return { ok: false, error: messaggioErroreGenerico(error, "toggleAttivoAction") };
+    }
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath("/");
-    revalidateTag(TAG_CORRELATI, "max");
-    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    revalidaProdotto();
     return { ok: true };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
@@ -105,7 +118,9 @@ function mappaErroreProdotto(error: {
       },
     };
   }
-  return { errors: { generale: error.message } };
+  return {
+    errors: { generale: messaggioErroreGenerico(error, "salvaProdottoAction") },
+  };
 }
 
 /**
@@ -206,15 +221,7 @@ export async function salvaProdottoAction(
     return { errors: { generale: "Errore di rete. Riprova." } };
   }
 
-  revalidatePath("/gestore/prodotti");
-  revalidatePath(`/gestore/prodotti/${nuovoId}`);
-  revalidatePath("/");
-  // PDP pubblica: rotta dinamica -> pattern + tipo 'page' (non la URL letterale).
-  revalidatePath("/prodotti/[slug]", "page");
-  // Correlati: un prodotto nuovo/modificato cambia i suggerimenti anche di ALTRI
-  // (stessa entita/categoria), quindi si invalida l'intero tag, non una pagina.
-  revalidateTag(TAG_CORRELATI, "max");
-  revalidateTag(TAG_FACETTE_VETRINA, "max");
+  revalidaProdotto(nuovoId);
 
   // In creazione si va alla pagina di modifica (per foto/varianti).
   // redirect() lancia NEXT_REDIRECT: deve stare fuori dal try/catch.
@@ -243,7 +250,7 @@ export interface EsitoVarianti {
 
 function mappaErroreSku(error: { code?: string; message: string }): string {
   if (error.code === "23505") return "SKU gia in uso (deve essere univoco).";
-  return error.message;
+  return messaggioErroreGenerico(error, "applicaVarianti");
 }
 
 /**
@@ -281,7 +288,9 @@ async function applicaVarianti(
     .from("varianti")
     .select("id")
     .eq("prodotto_id", prodottoId);
-  if (errLeggi) return { ok: false, error: errLeggi.message };
+  if (errLeggi) {
+    return { ok: false, error: messaggioErroreGenerico(errLeggi, "applicaVarianti") };
+  }
 
   const idsAttuali = new Set((attuali ?? []).map((v) => v.id as string));
   const idsForm = new Set(righe.filter((r) => r.id).map((r) => r.id as string));
@@ -336,7 +345,9 @@ async function applicaVarianti(
       .from("varianti")
       .delete()
       .in("id", daEliminare);
-    if (errDel) return { ok: false, error: errDel.message };
+    if (errDel) {
+      return { ok: false, error: messaggioErroreGenerico(errDel, "applicaVarianti") };
+    }
   }
 
   const { data: finali } = await supabase
@@ -447,17 +458,6 @@ async function sincronizzaCopertina(
   if (error) throw error;
 }
 
-function revalidaProdotto(prodottoId: string): void {
-  revalidatePath("/gestore/prodotti");
-  revalidatePath(`/gestore/prodotti/${prodottoId}`);
-  revalidatePath("/");
-  revalidatePath("/prodotti/[slug]", "page");
-  // La copertina (immagine_url) cambia dalla galleria: rinfresca anche le card
-  // correlate degli altri prodotti che lo mostrano.
-  revalidateTag(TAG_CORRELATI, "max");
-  revalidateTag(TAG_FACETTE_VETRINA, "max");
-}
-
 /** Carica una foto WebP nella galleria del prodotto (in coda). */
 export async function aggiungiFotoGalleriaAction(
   prodottoId: string,
@@ -509,7 +509,7 @@ export async function aggiungiFotoGalleriaAction(
     if (ins) {
       // rollback del file appena caricato per non lasciare orfani
       await supabase.storage.from("prodotti").remove([path]);
-      return { ok: false, error: ins.message };
+      return { ok: false, error: messaggioErroreGenerico(ins, "aggiungiFotoGalleriaAction") };
     }
 
     const foto = await leggiGalleria(supabase, prodottoId);
@@ -578,7 +578,7 @@ export async function sostituisciFotoAction(
     if (upd) {
       // rollback del nuovo file per non lasciare orfani
       await supabase.storage.from("prodotti").remove([path]);
-      return { ok: false, error: upd.message };
+      return { ok: false, error: messaggioErroreGenerico(upd, "sostituisciFotoAction") };
     }
 
     // Cancella il vecchio file (best-effort: un orfano e innocuo, non blocca).
@@ -617,7 +617,9 @@ export async function rimuoviFotoGalleriaAction(
       .delete()
       .eq("id", fotoId)
       .eq("prodotto_id", prodottoId);
-    if (del) return { ok: false, error: del.message };
+    if (del) {
+      return { ok: false, error: messaggioErroreGenerico(del, "rimuoviFotoGalleriaAction") };
+    }
 
     // Pulizia Storage best-effort (un orfano e innocuo, non blocca).
     const path = storagePathDaUrl(riga.url as string);
@@ -648,7 +650,9 @@ export async function riordinaFotoGalleriaAction(
         .update({ ordine: i })
         .eq("id", idsInOrdine[i])
         .eq("prodotto_id", prodottoId);
-      if (error) return { ok: false, error: error.message };
+      if (error) {
+        return { ok: false, error: messaggioErroreGenerico(error, "riordinaFotoGalleriaAction") };
+      }
     }
     const foto = await leggiGalleria(supabase, prodottoId);
     await sincronizzaCopertina(supabase, prodottoId, foto);
@@ -676,7 +680,9 @@ export async function associaColoreFotoAction(
       .update({ colore: coloreNorm })
       .eq("id", fotoId)
       .eq("prodotto_id", prodottoId);
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      return { ok: false, error: messaggioErroreGenerico(error, "associaColoreFotoAction") };
+    }
 
     const foto = await leggiGalleria(supabase, prodottoId);
     revalidaProdotto(prodottoId);
@@ -722,28 +728,43 @@ export async function eliminaProdottoAction(id: string): Promise<EsitoElimina> {
         .from("prodotti")
         .update({ attivo: false })
         .eq("id", id);
-      if (error) return { ok: false, error: error.message };
-      revalidatePath("/gestore/prodotti");
-      revalidatePath("/");
-      revalidateTag(TAG_CORRELATI, "max");
-      revalidateTag(TAG_FACETTE_VETRINA, "max");
+      if (error) {
+        return { ok: false, error: messaggioErroreGenerico(error, "eliminaProdottoAction") };
+      }
+      revalidaProdotto();
       return { ok: true, soft: true };
     }
 
-    const { data: files } = await supabase.storage.from("prodotti").list(id);
-    if (files && files.length > 0) {
-      await supabase.storage
-        .from("prodotti")
-        .remove(files.map((f) => `${id}/${f.name}`));
+    // Mai venduto (per quanto ne sappiamo qui): hard delete. La DELETE va PRIMA
+    // del cleanup Storage, non dopo: il trigger BEFORE DELETE
+    // prodotto_nascondi_se_venduto puo sopprimerla (RETURN NULL) se un ordine e
+    // arrivato tra il count qui sopra e ora. PostgREST non torna errore, solo
+    // zero righe. `.select("id")` ci dice se la riga e stata DAVVERO cancellata:
+    // solo allora si rimuovono i file, altrimenti distruggeremmo le immagini di
+    // un prodotto sopravvissuto (soft-deleted dal trigger) lasciando immagine_url
+    // e prodotto_foto a puntare a file inesistenti.
+    const { data: cancellati, error } = await supabase
+      .from("prodotti")
+      .delete()
+      .eq("id", id)
+      .select("id");
+    if (error) {
+      return { ok: false, error: messaggioErroreGenerico(error, "eliminaProdottoAction") };
     }
-    const { error } = await supabase.from("prodotti").delete().eq("id", id);
-    if (error) return { ok: false, error: error.message };
+    const eliminato = (cancellati?.length ?? 0) === 1;
+    if (eliminato) {
+      const { data: files } = await supabase.storage.from("prodotti").list(id);
+      if (files && files.length > 0) {
+        await supabase.storage
+          .from("prodotti")
+          .remove(files.map((f) => `${id}/${f.name}`));
+      }
+    }
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath("/");
-    revalidateTag(TAG_CORRELATI, "max");
-    revalidateTag(TAG_FACETTE_VETRINA, "max");
-    return { ok: true, soft: false };
+    revalidaProdotto();
+    // !eliminato = la DELETE e stata soppressa dal trigger (nel frattempo
+    // venduto): il prodotto resta, solo nascosto -> esito soft come il ramo sopra.
+    return { ok: true, soft: !eliminato };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
   }
@@ -783,15 +804,12 @@ export async function assegnaCategoriaBulkAction(
             error: "La categoria selezionata non esiste più. Aggiorna la pagina.",
           };
         }
-        return { ok: false, error: error.message };
+        return { ok: false, error: messaggioErroreGenerico(error, "assegnaCategoriaBulkAction") };
       }
       aggiornati += data?.length ?? 0;
     }
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath("/");
-    revalidateTag(TAG_CORRELATI, "max");
-    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    revalidaProdotto();
     return { ok: true, aggiornati };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
@@ -824,14 +842,13 @@ export async function cambiaVisibilitaBulkAction(
         .update({ attivo })
         .in("id", blocco)
         .select("id");
-      if (error) return { ok: false, error: error.message };
+      if (error) {
+        return { ok: false, error: messaggioErroreGenerico(error, "cambiaVisibilitaBulkAction") };
+      }
       aggiornati += data?.length ?? 0;
     }
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath("/");
-    revalidateTag(TAG_CORRELATI, "max");
-    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    revalidaProdotto();
     return { ok: true, aggiornati };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
@@ -870,7 +887,9 @@ export async function eliminaProdottiBulkAction(
         .from("ordine_righe")
         .select("prodotto_id")
         .in("prodotto_id", blocco);
-      if (erRighe) return { ok: false, error: erRighe.message };
+      if (erRighe) {
+        return { ok: false, error: messaggioErroreGenerico(erRighe, "eliminaProdottiBulkAction") };
+      }
       for (const r of righe ?? []) if (r.prodotto_id) venduti.add(r.prodotto_id);
     }
 
@@ -887,16 +906,34 @@ export async function eliminaProdottiBulkAction(
         .update({ attivo: false })
         .in("id", blocco)
         .select("id");
-      if (error) return { ok: false, error: error.message };
+      if (error) {
+        return { ok: false, error: messaggioErroreGenerico(error, "eliminaProdottiBulkAction") };
+      }
       nNascosti += data?.length ?? 0;
     }
 
-    // Hard: per blocco, cleanup foto (best effort, cartella per prodotto) +
-    // delete. Il blocco limita anche la concorrenza delle chiamate a Storage.
+    // Hard: per blocco la DELETE va PRIMA del cleanup Storage. Il trigger
+    // prodotto_nascondi_se_venduto puo aver soppresso alcune righe (RETURN NULL)
+    // se un ordine e arrivato dopo il check ordine_righe qui sopra: PostgREST non
+    // torna errore, quindi ci fidiamo di `.select("id")` per sapere quali sono
+    // DAVVERO spariti e ripulire le cartelle SOLO di quelli, mai di un prodotto
+    // sopravvissuto (soft-deleted dal trigger). Il blocco limita anche la
+    // concorrenza delle chiamate a Storage.
     let nEliminati = 0;
     for (const blocco of aBlocchi(daEliminare, BLOCCO_BULK)) {
+      const { data, error } = await supabase
+        .from("prodotti")
+        .delete()
+        .in("id", blocco)
+        .select("id");
+      if (error) {
+        return { ok: false, error: messaggioErroreGenerico(error, "eliminaProdottiBulkAction") };
+      }
+      const idsCancellati = (data ?? []).map((r) => r.id as string);
+      nEliminati += idsCancellati.length;
+
       await Promise.all(
-        blocco.map(async (id) => {
+        idsCancellati.map(async (id) => {
           const { data: files } = await supabase.storage
             .from("prodotti")
             .list(id);
@@ -907,19 +944,9 @@ export async function eliminaProdottiBulkAction(
           }
         }),
       );
-      const { data, error } = await supabase
-        .from("prodotti")
-        .delete()
-        .in("id", blocco)
-        .select("id");
-      if (error) return { ok: false, error: error.message };
-      nEliminati += data?.length ?? 0;
     }
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath("/");
-    revalidateTag(TAG_CORRELATI, "max");
-    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    revalidaProdotto();
     return { ok: true, eliminati: nEliminati, nascosti: nNascosti };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };

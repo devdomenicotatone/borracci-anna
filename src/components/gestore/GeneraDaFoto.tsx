@@ -23,6 +23,7 @@ import { aggiungiFotoGalleriaAction } from "@/lib/gestore/actions";
 import { useToast } from "@/components/gestore/Toaster";
 import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
 import { slugify } from "@/lib/gestore/slug";
+import { coloreCanonico } from "@/lib/catalogo";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import { gruppiCategorie } from "@/lib/categorie-albero";
 import type { Categoria } from "@/lib/types";
@@ -210,9 +211,14 @@ export default function GeneraDaFoto({
       descrizione,
       prezzo_cents: prezzoCents,
       categoria_id: categoriaId || null,
+      // Canonicalizza il nome colore GIA qui: cosi le varianti a DB e il tag
+      // `colore` delle foto (colorePerIndice sotto) usano lo stesso nome della
+      // palette. Il server ricanonicalizza le varianti ma NON il tag foto: se
+      // restasse grezzo, sulla PDP variante e foto (match per uguaglianza stretta)
+      // non combacerebbero (es. digitato "blu navy" vs canonico "Navy").
       colori: colori
         .filter((c) => c.nome.trim())
-        .map((c) => ({ nome: c.nome.trim(), foto_indici: c.foto_indici })),
+        .map((c) => ({ nome: coloreCanonico(c.nome.trim()), foto_indici: c.foto_indici })),
     };
     startCrea(async () => {
       try {

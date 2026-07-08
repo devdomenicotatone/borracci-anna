@@ -230,11 +230,13 @@ export function indicizzaCatalogoCsv(testo: string): IndiceCatalogoBlt {
     }
     nRighe.set(parent, (nRighe.get(parent) ?? 0) + 1);
     ultimaVoce.set(parent, voce);
-    // Costo del prodotto: primo valore valido incontrato per il parent.
-    if (costoCents !== null && !costoPerParent.has(parent)) {
+    // Costo del prodotto: primo valore VALIDO incontrato per il parent. Una
+    // riga con prezzo illeggibile non deve fissare il parent a null, altrimenti
+    // le taglie successive con prezzo valido non lo aggiornerebbero piu (e a
+    // valle il costo salvato verrebbe azzerato). I parent senza alcun prezzo
+    // valido restano fuori dalla mappa → il chiamante li legge come null.
+    if (costoCents !== null && (costoPerParent.get(parent) ?? null) === null) {
       costoPerParent.set(parent, costoCents);
-    } else if (!costoPerParent.has(parent)) {
-      costoPerParent.set(parent, null);
     }
   }
   // Alias "Taglia unica" per gli articoli con una sola giacenza nel CSV (vedi

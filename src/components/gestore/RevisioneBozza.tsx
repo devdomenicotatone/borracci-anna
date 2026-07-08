@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import type { BozzaImport } from "@/lib/gestore/import-actions";
 import type { TargetBlt } from "@/lib/gestore/fornitori/ingrossoblt";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
+import { Campo, ChevronSelect, SwitchRiga, inputCls } from "@/components/gestore/ui";
 import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import {
@@ -22,9 +23,6 @@ import {
   dividiTagliePerPubblico,
 } from "@/lib/catalogo";
 import type { Categoria } from "@/lib/types";
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 // Chip taglia = scala del negozio (fonte unica src/lib/catalogo.ts) + "Taglia
 // unica" per gli accessori; le taglie proposte dal server fuori scala (es.
@@ -381,36 +379,18 @@ export default function RevisioneBozza({
         )}
 
         {/* Solo online: articolo non presente in negozio (badge in vetrina). */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={soloOnline}
-          onClick={() => setSoloOnline((v) => !v)}
+        <SwitchRiga
+          acceso={soloOnline}
+          onToggle={() => setSoloOnline((v) => !v)}
           disabled={busy}
-          className="flex w-full items-center justify-between gap-4 rounded-2xl bg-white px-4 py-3 text-left ring-1 ring-line transition-all hover:ring-lagoon disabled:opacity-50"
-        >
-          <span className="min-w-0">
-            <span className="block font-display text-sm font-bold text-foreground">
-              Solo online
-            </span>
-            <span className="mt-0.5 block text-xs text-muted">
+          titolo="Solo online"
+          descrizione={
+            <>
               Articolo non presente in negozio: in vetrina compare il badge
               &laquo;Solo online&raquo;.
-            </span>
-          </span>
-          <span
-            aria-hidden="true"
-            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-              soloOnline ? "bg-sea" : "bg-line"
-            }`}
-          >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                soloOnline ? "left-6" : "left-1"
-              }`}
-            />
-          </span>
-        </button>
+            </>
+          }
+        />
 
         {/* Colore: uno per scheda (rilevato dal fornitore), modificabile o
             azzerabile. Swatch + select della palette. */}
@@ -447,20 +427,7 @@ export default function RevisioneBozza({
                   </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-muted">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4"
-                  aria-hidden="true"
-                >
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </span>
+              <ChevronSelect />
             </div>
           </div>
         </Campo>
@@ -541,31 +508,6 @@ export default function RevisioneBozza({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Campo({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-sm font-bold text-foreground"
-      >
-        {label}
-      </label>
-      {children}
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
     </div>
   );
 }

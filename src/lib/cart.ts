@@ -347,10 +347,21 @@ export async function aggiornaQuantita(
     const suRichiesta = !!primo(variante?.prodotti ?? null)
       ?.disponibilita_su_richiesta;
 
+    // Variante passata a stock 0 (sync BLT, vendite, ritiro): la riga non e piu
+    // acquistabile. La togliamo del tutto invece di cappare a 1, che lascerebbe
+    // in carrello un articolo esaurito con l'avviso assurdo "Disponibili solo 0".
+    if (!suRichiesta && typeof stock === "number" && stock <= 0) {
+      const esito = await rimuoviDalCarrello(rigaId);
+      if (esito.ok) {
+        esito.avviso = "Articolo esaurito, rimosso dal carrello.";
+      }
+      return esito;
+    }
+
     let finale = quantita;
     let cappata = false;
     if (!suRichiesta && typeof stock === "number" && quantita > stock) {
-      finale = Math.max(1, stock);
+      finale = stock;
       cappata = true;
     }
 

@@ -190,8 +190,11 @@ export async function generaSchedaDaFotoAction(
 
   try {
     // Timeout esplicito piu corto del cap della piattaforma (Vercel), cosi un
-    // ritardo viene gestito qui dal catch invece di un 504 opaco.
-    const client = new Anthropic({ timeout: 55_000 });
+    // ritardo viene gestito qui dal catch invece di un 504 opaco. maxRetries: 0
+    // perche il default (2) ritenta 429/529/5xx col backoff e sfora maxDuration=60
+    // (55s a tentativo): la funzione verrebbe uccisa con un 504 opaco. Il "retry"
+    // logico e gia il messaggio d'errore del catch (come in import-actions.ts).
+    const client = new Anthropic({ timeout: 55_000, maxRetries: 0 });
     const msg = await client.messages.create({
       model: MODELLO,
       max_tokens: 4096,

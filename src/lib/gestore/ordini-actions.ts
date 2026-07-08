@@ -63,6 +63,20 @@ export interface EsitoOrdine {
   error?: string;
 }
 
+/**
+ * Errore DB non previsto: il messaggio grezzo di PostgREST arriva in inglese e
+ * spesso e criptico per chi non e tecnico. Non deve finire nei toast della
+ * titolare: lo logghiamo server-side per la diagnosi e restituiamo un testo
+ * generico in italiano.
+ */
+function messaggioErroreGenerico(
+  error: { code?: string; message?: string },
+  contesto: string,
+): string {
+  console.error(`[${contesto}]`, error?.code ?? "", error?.message ?? error);
+  return "Operazione non riuscita, riprova. Se succede ancora contatta l'assistenza.";
+}
+
 type OrdiniUpdate = Database["public"]["Tables"]["ordini"]["Update"];
 
 /**
@@ -86,7 +100,7 @@ async function aggiornaStato(
       .in("stato", statiAmmessi)
       .select("id")
       .maybeSingle();
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: messaggioErroreGenerico(error, "aggiornaStato") };
     if (!data) {
       return { ok: false, error: "Operazione non consentita per questo ordine." };
     }
@@ -163,7 +177,9 @@ export async function confermaOrdineAction(
       .select("stato, costo_spedizione_cents, totale_cents")
       .eq("id", id)
       .maybeSingle();
-    if (errStato) return { ok: false, error: errStato.message };
+    if (errStato) {
+      return { ok: false, error: messaggioErroreGenerico(errStato, "confermaOrdineAction") };
+    }
     if (!corrente || corrente.stato !== "in_attesa") {
       return {
         ok: false,
@@ -178,7 +194,9 @@ export async function confermaOrdineAction(
       .from("ordine_righe")
       .select("id, nome_prodotto, taglia, colore, prezzo_cents, quantita")
       .eq("ordine_id", id);
-    if (errRighe) return { ok: false, error: errRighe.message };
+    if (errRighe) {
+      return { ok: false, error: messaggioErroreGenerico(errRighe, "confermaOrdineAction") };
+    }
     const tutte = righe ?? [];
 
     // Ogni rigaId deve appartenere all'ordine: id estranei = richiesta corrotta.
@@ -217,7 +235,9 @@ export async function confermaOrdineAction(
       .eq("stato", "in_attesa")
       .select("email, nome, token")
       .maybeSingle();
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      return { ok: false, error: messaggioErroreGenerico(error, "confermaOrdineAction") };
+    }
     if (!ordine) {
       return {
         ok: false,
@@ -276,7 +296,10 @@ export async function confermaOrdineAction(
           errRipristinoRighe?.message ?? errRipristinoOrdine?.message,
         );
       }
-      return { ok: false, error: erroreRighe };
+      return {
+        ok: false,
+        error: messaggioErroreGenerico({ message: erroreRighe }, "confermaOrdineAction"),
+      };
     }
 
     revalidatePath("/gestore/ordini");
