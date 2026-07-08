@@ -42,6 +42,12 @@ export const SPEDIZIONE_ISOLE_CENTS = leggiTariffaDaEnv(
   DEFAULT_ISOLE_CENTS,
 );
 
+// Stima di consegna comunicata al cliente (giorni lavorativi). UNICO punto di
+// verita: usata sia dalle shipping option Stripe (checkout) sia dalla pagina di
+// successo, che prima divergevano (2-5 vs 2-4).
+export const CONSEGNA_MIN_GG = 2;
+export const CONSEGNA_MAX_GG = 5;
+
 /** Zona di spedizione (Italia). "gratuita" = soglia free-shipping raggiunta. */
 export type ZonaSpedizione = "continentale" | "isole" | "gratuita";
 

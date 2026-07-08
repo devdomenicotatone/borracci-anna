@@ -9,7 +9,11 @@ export const dynamic = "force-dynamic";
 import { getStripe } from "@/lib/stripe";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { leggiCarrello, riconciliaCarrello } from "@/lib/cart";
-import { opzioniSpedizione } from "@/lib/spedizione";
+import {
+  CONSEGNA_MAX_GG,
+  CONSEGNA_MIN_GG,
+  opzioniSpedizione,
+} from "@/lib/spedizione";
 import type { RigaCarrello } from "@/lib/types";
 
 /** Costruisce un'etichetta leggibile per una riga (nome + taglia/colore). */
@@ -123,8 +127,8 @@ export async function POST(): Promise<Response> {
       display_name: opzione.etichetta,
       fixed_amount: { amount: opzione.costoCents, currency: "eur" },
       delivery_estimate: {
-        minimum: { unit: "business_day" as const, value: 2 },
-        maximum: { unit: "business_day" as const, value: 5 },
+        minimum: { unit: "business_day" as const, value: CONSEGNA_MIN_GG },
+        maximum: { unit: "business_day" as const, value: CONSEGNA_MAX_GG },
       },
     },
   }));

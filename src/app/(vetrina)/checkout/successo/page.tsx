@@ -7,6 +7,7 @@
 import Link from "next/link";
 
 import SvuotaCarrelloAlSuccesso from "@/components/cart/SvuotaCarrelloAlSuccesso";
+import { CONSEGNA_MAX_GG, CONSEGNA_MIN_GG } from "@/lib/spedizione";
 import { getStripe } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -22,15 +23,20 @@ async function statoPagamento(sessionId?: string): Promise<EsitoPagamento> {
   if (!sessionId || !process.env.STRIPE_SECRET_KEY) return "sconosciuto";
   try {
     const sessione = await getStripe().checkout.sessions.retrieve(sessionId);
+    // "Pagato" SOLO su payment_status: una sessione puo essere complete ma
+    // unpaid (metodi a regolamento asincrono) — in quel caso il webhook aspetta
+    // async_payment_succeeded e qui non va dichiarato il successo.
     if (
       sessione.payment_status === "paid" ||
-      sessione.payment_status === "no_payment_required" ||
-      sessione.status === "complete"
+      sessione.payment_status === "no_payment_required"
     ) {
       return "pagato";
     }
-    if (sessione.status === "open") return "in_attesa";
-    return "in_attesa";
+    // Checkout inviato, pagamento in registrazione (metodo asincrono).
+    if (sessione.status === "complete") return "in_attesa";
+    // Sessione ancora aperta o scaduta: nessun pagamento inviato (es. URL
+    // aperto a mano o ritorno dalla history) -> non svuotare, non confermare.
+    return "sconosciuto";
   } catch {
     // session_id assente/invalido o Stripe non raggiungibile.
     return "sconosciuto";
@@ -82,9 +88,10 @@ export default async function CheckoutSuccessoPage({
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
-      {/* Solo con una sessione verificata (pagata o in registrazione) svuotiamo
-          il carrello: il badge torna a 0. La verita dell'ordine e nel webhook. */}
-      <SvuotaCarrelloAlSuccesso />
+      {/* Svuotiamo il carrello SOLO a pagamento verificato: se il pagamento e
+          ancora in registrazione (asincrono) e poi fallisse, il cliente non
+          deve aver perso il carrello. La verita dell'ordine e nel webhook. */}
+      {!inAttesa && <SvuotaCarrelloAlSuccesso />}
 
       <div className="w-full max-w-md rounded-3xl bg-surface p-10 text-center shadow-soft ring-1 ring-line">
         <div className="bg-sea-gradient mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full text-white shadow-sea">
@@ -118,7 +125,10 @@ export default async function CheckoutSuccessoPage({
           </li>
           <li className="flex items-start gap-2.5">
             <span aria-hidden="true">📦</span>
-            <span>Prepariamo la spedizione: consegna in 2–4 giorni lavorativi.</span>
+            <span>
+              Prepariamo la spedizione: consegna in {CONSEGNA_MIN_GG}–
+              {CONSEGNA_MAX_GG} giorni lavorativi.
+            </span>
           </li>
           <li className="flex items-start gap-2.5">
             <span aria-hidden="true">🏖️</span>
