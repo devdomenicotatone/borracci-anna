@@ -7,7 +7,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { getStripe } from "@/lib/stripe";
-import { createAdminSupabase } from "@/lib/supabase/admin";
 import { leggiCarrello, riconciliaCarrello } from "@/lib/cart";
 import {
   CONSEGNA_MAX_GG,
@@ -149,74 +148,14 @@ export async function POST(): Promise<Response> {
       locale: "it",
     });
 
-    // 5) Salva l'ordine "in_attesa" + le righe con lo stripe_session_id (client
-    //    ADMIN: `ordini` non ha policy anon, l'anon key verrebbe respinta dalla
-    //    RLS). Cosi il webhook AGGIORNA un record gia completo invece di ricrearlo
-    //    monco. Best effort: non blocca il checkout, il webhook resta autoritativo.
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      try {
-        const admin = createAdminSupabase();
-        const { data: ordine, error } = await admin
-          .from("ordini")
-          .insert({
-            stato: "in_attesa",
-            totale_cents: totaleCents,
-            email: session.customer_details?.email ?? null,
-            stripe_session_id: session.id,
-          })
-          .select("id")
-          .single();
-        if (error || !ordine) throw error ?? new Error("insert ordine vuoto");
-
-        // Snapshot foto per riga (stessa logica di inviaRichiestaAction): la
-        // prima foto del colore della variante, fallback copertina prodotto.
-        // Best effort: senza foto la riga resta valida (miniatura generica).
-        const prodottoIds = [...new Set(righe.map((r) => r.prodotto.id))];
-        let foto: { prodotto_id: string; colore: string | null; url: string }[] =
-          [];
-        try {
-          const { data: dataFoto } = await admin
-            .from("prodotto_foto")
-            .select("prodotto_id, colore, url, ordine")
-            .in("prodotto_id", prodottoIds)
-            .order("ordine", { ascending: true });
-          foto = dataFoto ?? [];
-        } catch {
-          foto = [];
-        }
-        const fotoRiga = (r: RigaCarrello): string | null => {
-          if (r.variante.colore) {
-            const match = foto.find(
-              (f) =>
-                f.prodotto_id === r.prodotto.id &&
-                f.colore === r.variante.colore,
-            );
-            if (match) return match.url;
-          }
-          return r.prodotto.immagine_url;
-        };
-
-        const righeOrdine = righe.map((riga) => ({
-          ordine_id: ordine.id,
-          prodotto_id: riga.prodotto.id,
-          variante_id: riga.variante.id,
-          nome_prodotto: riga.prodotto.nome,
-          sku: riga.variante.sku,
-          taglia: riga.variante.taglia,
-          colore: riga.variante.colore,
-          prezzo_cents: riga.prodotto.prezzo_cents,
-          quantita: riga.quantita,
-          immagine_url: fotoRiga(riga),
-        }));
-        const { error: errRighe } = await admin
-          .from("ordine_righe")
-          .insert(righeOrdine);
-        if (errRighe) throw errRighe;
-      } catch (err) {
-        // Best effort: il webhook creera/aggiornera l'ordine dalle line item.
-        console.error("[checkout] salvataggio ordine pre-pagamento fallito:", err);
-      }
-    }
+    // 5) NIENTE ordine salvato qui. Un checkout abbandonato (cliente che torna
+    //    indietro senza pagare) NON deve lasciare un ordine fantasma "da
+    //    confermare" nel pannello: l'ordine si registra SOLO a pagamento
+    //    riuscito. Lo crea il webhook Stripe (checkout.session.completed), dove
+    //    la RPC finalizza_ordine_pagato inserisce l'ordine gia "pagato" con le
+    //    righe complete, ricostruite dallo SKU (nome/taglia/colore/prezzo/foto).
+    //    Vedi 20260708170000_ordine_righe_fallback.sql e api/stripe/webhook.
+    //    Lo SKU della variante viaggia nei metadata del product Stripe (sopra).
 
     if (!session.url) {
       return erroreJson(
