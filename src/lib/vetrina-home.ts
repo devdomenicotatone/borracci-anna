@@ -25,6 +25,8 @@ import {
   CAMPI_CARD,
   PRODOTTI_ESEMPIO,
   caricaProdottiVetrina,
+  normalizzaCard,
+  type RigaCard,
 } from "@/lib/vetrina";
 
 type Supabase = SupabaseClient<Database>;
@@ -159,8 +161,9 @@ async function prodottiPinnati(
     .limit(limite);
   if (error || !data) return [];
   return data
-    .map((r) => (r as unknown as { prodotti: Prodotto }).prodotti)
-    .filter(Boolean);
+    .map((r) => (r as unknown as { prodotti: RigaCard }).prodotti)
+    .filter(Boolean)
+    .map(normalizzaCard);
 }
 
 /** Prodotti di una fascia automatica secondo la regola, + href "vedi tutti". */
@@ -195,7 +198,10 @@ async function prodottiAuto(
     .order("id", { ascending: true })
     .limit(limite);
   if (error || !data) return { prodotti: [], href };
-  return { prodotti: data as unknown as Prodotto[], href };
+  return {
+    prodotti: (data as unknown as RigaCard[]).map(normalizzaCard),
+    href,
+  };
 }
 
 /** True per i tipi che mostrano un carosello di prodotti. */

@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import CartBadge from "@/components/cart/CartBadge";
 import MenuMobile from "@/components/MenuMobile";
+import PreferitiBadge from "@/components/preferiti/PreferitiBadge";
 import Wordmark from "@/components/Wordmark";
 import { caricaCategoriePubbliche } from "@/lib/categorie";
 import { gruppiCategorie } from "@/lib/categorie-albero";
@@ -113,6 +114,28 @@ export default async function Header() {
             className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea sm:inline-flex"
           >
             Vieni a trovarci
+          </Link>
+
+          {/* Preferiti: cuore con badge, stessi codici visivi del carrello. */}
+          <Link
+            href="/preferiti"
+            aria-label="I tuoi preferiti"
+            className="relative grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 20.7S4.6 16 2.8 11.6C1.5 8.6 3.2 5.3 6.4 4.9c2-.3 3.8.7 4.7 2.2h1.8c.9-1.5 2.7-2.5 4.7-2.2 3.2.4 4.9 3.7 3.6 6.7C19.4 16 12 20.7 12 20.7Z" />
+            </svg>
+            <PreferitiBadge />
           </Link>
 
           {/* Carrello: icon-btn tondo (tap target 44px) con badge corallo. */}

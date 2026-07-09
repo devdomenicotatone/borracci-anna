@@ -150,8 +150,10 @@ const caricaProdotto = cache(async (
 });
 
 interface PdpProps {
-  // Next 16: params e una Promise.
+  // Next 16: params e searchParams sono Promise.
   params: Promise<{ slug: string }>;
+  /** `?taglia=M` dal quick add delle card: taglia preselezionata in scheda. */
+  searchParams?: Promise<{ taglia?: string | string[] }>;
 }
 
 /**
@@ -187,13 +189,21 @@ export async function generateMetadata({
   };
 }
 
-export default async function PaginaProdotto({ params }: PdpProps) {
+export default async function PaginaProdotto({
+  params,
+  searchParams,
+}: PdpProps) {
   const { slug } = await params;
   const prodotto = await caricaProdotto(slug);
 
   if (!prodotto) {
     notFound();
   }
+
+  // Taglia preselezionata dal quick add (?taglia=M). La validazione vera
+  // (esiste? ha stock?) sta in ProdottoDettaglio: qui si normalizza soltanto.
+  const { taglia } = (await searchParams) ?? {};
+  const tagliaIniziale = typeof taglia === "string" ? taglia : null;
 
   const { foto, percorso, ...prodottoBase } = prodotto;
 
@@ -297,6 +307,7 @@ export default async function PaginaProdotto({ params }: PdpProps) {
         foto={foto}
         suRichiesta={prodottoBase.disponibilita_su_richiesta ?? true}
         soloOnline={prodottoBase.solo_online ?? false}
+        tagliaIniziale={tagliaIniziale}
       />
 
       {/* Suggerimenti correlati: renderizzati inline (niente Suspense) cosi la

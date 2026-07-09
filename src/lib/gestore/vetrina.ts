@@ -15,7 +15,7 @@ import type {
   VetrinaSezione,
 } from "@/lib/types";
 import { TIPI_SEZIONE_VETRINA } from "@/lib/types";
-import { CAMPI_CARD } from "@/lib/vetrina";
+import { CAMPI_CARD, normalizzaCard, type RigaCard } from "@/lib/vetrina";
 
 /** Una sezione com'e vista dal pannello: include i prodotti pinnati a mano. */
 export interface VetrinaSezioneAdmin extends VetrinaSezione {
@@ -58,9 +58,10 @@ async function pinnatiGestore(
     .eq("sezione_id", sezioneId)
     .order("ordine", { ascending: true });
   if (error || !data) return [];
-  return (data as unknown as Array<{ prodotti: Prodotto | null }>)
+  return (data as unknown as Array<{ prodotti: RigaCard | null }>)
     .map((r) => r.prodotti)
-    .filter((p): p is Prodotto => p !== null);
+    .filter((p): p is RigaCard => p !== null)
+    .map(normalizzaCard);
 }
 
 /**

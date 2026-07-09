@@ -187,6 +187,14 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
                 ))}
 
                 <Link
+                  href="/preferiti"
+                  onClick={chiudi}
+                  className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
+                >
+                  I tuoi preferiti
+                </Link>
+
+                <Link
                   href="/vieni-a-trovarci"
                   onClick={chiudi}
                   className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"

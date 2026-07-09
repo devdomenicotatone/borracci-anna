@@ -1,9 +1,17 @@
 // Card prodotto per la griglia della vetrina.
 // Mostra immagine (tile gradiente pop con icona indumento se mancante), nome,
-// prezzo formattato e rimanda alla PDP /prodotti/[slug].
+// prezzo formattato e rimanda alla PDP /prodotti/[slug]. Sopra il link vivono
+// tre controlli client che NON navigano (fermano l'evento):
+//   - cuoricino preferiti (in alto a destra);
+//   - mini-carosello foto se il listino porta piu foto (frecce/swipe/pallini);
+//   - quick add "+" con le taglie (solo vendita diretta con stock).
 
 import Image from "next/image";
 import Link from "next/link";
+
+import FotoCard from "@/components/card/FotoCard";
+import QuickAddTaglie from "@/components/card/QuickAddTaglie";
+import CuorePreferito from "@/components/preferiti/CuorePreferito";
 import type { Prodotto } from "@/lib/types";
 import { formatPrezzo } from "@/lib/format";
 
@@ -47,6 +55,19 @@ export default function ProductCard({
     prodotto.disponibilita_su_richiesta === false &&
     (prodotto.stock_totale ?? 0) <= 0;
 
+  // Foto del mini-carosello: copertina + galleria del listino, deduplicate.
+  // Una sola foto (o dati non caricati, es. correlati via RPC) = card statica.
+  const cover = prodotto.immagine_url;
+  const fotoCarosello = [
+    ...(cover ? [cover] : []),
+    ...(prodotto.foto_urls ?? []).filter((u) => u && u !== cover),
+  ];
+
+  // Quick add solo in vendita diretta con stock: i "su richiesta" passano dal
+  // contatto in scheda, gli esauriti non hanno nulla da aggiungere.
+  const conQuickAdd =
+    prodotto.disponibilita_su_richiesta === false && !esaurito;
+
   return (
     <Link
       href={`/prodotti/${prodotto.slug}`}
@@ -59,10 +80,18 @@ export default function ProductCard({
         }`}
       >
         {esaurito && (
-          <span className="absolute right-2 top-2 z-20 inline-flex items-center rounded-full bg-foreground/85 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">
+          // Pill centrata sulla foto (il cuoricino occupa l'angolo in alto a dx).
+          <span className="absolute left-1/2 top-1/2 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full bg-foreground/85 px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">
             Esaurito
           </span>
         )}
+
+        {/* Cuoricino preferiti (client): ferma l'evento, non apre la scheda. */}
+        <CuorePreferito
+          prodottoId={prodotto.id}
+          nome={prodotto.nome}
+          className="absolute right-2 top-2 z-20"
+        />
         {prodotto.solo_online ? (
           <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-sea ring-1 ring-sea/25 backdrop-blur">
             <svg
@@ -98,7 +127,14 @@ export default function ProductCard({
             In negozio
           </span>
         )}
-        {prodotto.immagine_url ? (
+        {fotoCarosello.length > 1 ? (
+          // Piu foto dal listino: mini-carosello con frecce/swipe/pallini.
+          <FotoCard
+            urls={fotoCarosello}
+            nome={prodotto.nome}
+            priorita={priorita}
+          />
+        ) : prodotto.immagine_url ? (
           // Le copertine sono sempre url del bucket Supabase Storage (whitelisted
           // in next.config.ts): next/image negozia AVIF/WebP e genera lo srcset
           // responsive. `sizes` rispecchia la griglia 2/3/4 colonne, cosi in 2-col
@@ -147,6 +183,9 @@ export default function ProductCard({
             </span>
           </div>
         )}
+
+        {/* Quick add taglie (client): "+" in basso a destra, pannello sopra. */}
+        {conQuickAdd && <QuickAddTaglie prodotto={prodotto} />}
       </div>
 
       <div className="px-2 pb-1 pt-3">

@@ -30,9 +30,32 @@ type Supabase = SupabaseClient<Database>;
 /** Prodotti per "pagina" della griglia (il bottone Mostra altri ne carica altrettanti). */
 export const PRODOTTI_PER_PAGINA = 24;
 
-/** Campi letti per le card della vetrina (condivisi con la home a fasce). */
+/** Campi letti per le card della vetrina (condivisi con la home a fasce).
+ *  L'embed `prodotto_foto(url, ordine)` alimenta il mini-carosello delle card:
+ *  le righe grezze vanno appiattite con {@link normalizzaCard}. */
 export const CAMPI_CARD =
-  "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online, categoria_id, disponibilita_su_richiesta, stock_totale";
+  "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online, categoria_id, disponibilita_su_richiesta, stock_totale, prodotto_foto(url, ordine)";
+
+/** Riga card grezza: l'embed foto e ancora da appiattire in `foto_urls`. */
+export type RigaCard = Prodotto & {
+  prodotto_foto?: Array<{ url: string; ordine: number }> | null;
+};
+
+/** Cap foto per card: oltre le prime il carosello in griglia non aggiunge nulla. */
+const MAX_FOTO_CARD = 8;
+
+/** Appiattisce l'embed foto di una riga card in `Prodotto.foto_urls` (ordinate). */
+export function normalizzaCard(riga: RigaCard): Prodotto {
+  const { prodotto_foto, ...prodotto } = riga;
+  return {
+    ...prodotto,
+    foto_urls: (prodotto_foto ?? [])
+      .slice()
+      .sort((a, b) => a.ordine - b.ordine)
+      .slice(0, MAX_FOTO_CARD)
+      .map((f) => f.url),
+  };
+}
 
 /**
  * Prodotti di esempio usati SOLO quando Supabase non e configurato
@@ -201,10 +224,10 @@ export async function caricaProdottiVetrina(
       // si ferma a max-rows quando una categoria o un filtro supera le 1000 card
       // (senza scansione, .range(0, pagina*24-1) verrebbe troncato a 1000). Il
       // totale resta il count completo dei match, per sapere se c'e altro.
-      const { righe, totale } = await scansionaBlocchi<Prodotto>(costruisci, {
+      const { righe, totale } = await scansionaBlocchi<RigaCard>(costruisci, {
         limite: pagina * PRODOTTI_PER_PAGINA,
       });
-      return { prodotti: righe, totale };
+      return { prodotti: righe.map(normalizzaCard), totale };
     }
 
     // — Percorso tema: match in JS sulla scansione leggera (gia ordinata) —
@@ -244,8 +267,8 @@ export async function caricaProdottiVetrina(
     // L'IN non conserva l'ordine: si riassembla su quello della scansione.
     const perId = new Map(
       esiti
-        .flatMap((e) => (e.data as unknown as Prodotto[] | null) ?? [])
-        .map((p) => [p.id, p]),
+        .flatMap((e) => (e.data as unknown as RigaCard[] | null) ?? [])
+        .map((p) => [p.id, normalizzaCard(p)]),
     );
     const prodotti = ids
       .map((id) => perId.get(id))

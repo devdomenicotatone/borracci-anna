@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import BloccoAcquisto from "@/components/prodotto/BloccoAcquisto";
 import BloccoRichiesta from "@/components/prodotto/BloccoRichiesta";
 import CondividiProdotto from "@/components/prodotto/CondividiProdotto";
+import CuorePreferito from "@/components/preferiti/CuorePreferito";
 import GalleriaProdotto, {
   type FotoGalleria,
 } from "@/components/prodotto/GalleriaProdotto";
@@ -29,12 +30,15 @@ export default function ProdottoDettaglio({
   foto,
   suRichiesta,
   soloOnline = false,
+  tagliaIniziale = null,
 }: {
   prodotto: ProdottoConVarianti;
   foto: ProdottoFoto[];
   suRichiesta: boolean;
   /** Articolo non presente in negozio: mostra il badge "Solo online". */
   soloOnline?: boolean;
+  /** Taglia da preselezionare (?taglia= dal quick add), se esiste davvero. */
+  tagliaIniziale?: string | null;
 }) {
   const varianti = prodotto.varianti;
 
@@ -77,15 +81,31 @@ export default function ProdottoDettaglio({
         v.stock > 0,
     );
 
+  // Taglia richiesta dall'esterno (?taglia= dal quick add): vale solo se
+  // esiste davvero tra le taglie del prodotto.
+  const tagliaRichiesta =
+    tagliaIniziale && taglie.includes(tagliaIniziale) ? tagliaIniziale : null;
+
   // Selezione iniziale: primo colore (con stock se vendita diretta) + prima
-  // taglia coerente.
+  // taglia coerente. Con una taglia richiesta si preferisce un colore che la
+  // abbia disponibile, e poi la taglia stessa.
   const coloreIniziale = (): string | null => {
     if (colori.length === 0) return null;
     if (suRichiesta) return colori[0];
+    if (tagliaRichiesta) {
+      const conTaglia = colori.find((c) => tagliaHaStock(c, tagliaRichiesta));
+      if (conTaglia) return conTaglia;
+    }
     return colori.find((c) => coloreHaStock(c)) ?? colori[0];
   };
   const tagliaPer = (c: string | null): string | null => {
     if (taglie.length === 0) return null;
+    if (
+      tagliaRichiesta &&
+      (suRichiesta || tagliaHaStock(c, tagliaRichiesta))
+    ) {
+      return tagliaRichiesta;
+    }
     if (suRichiesta) return taglie[0];
     return taglie.find((t) => tagliaHaStock(c, t)) ?? taglie[0];
   };
@@ -182,12 +202,15 @@ export default function ProdottoDettaglio({
             </svg>
             Dettaglio prodotto
           </span>
-          <CondividiProdotto
-            slug={prodotto.slug}
-            nome={prodotto.nome}
-            immagine={prodotto.immagine_url}
-            prezzo={formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
-          />
+          <div className="flex items-center gap-2">
+            <CuorePreferito prodottoId={prodotto.id} nome={prodotto.nome} />
+            <CondividiProdotto
+              slug={prodotto.slug}
+              nome={prodotto.nome}
+              immagine={prodotto.immagine_url}
+              prezzo={formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
+            />
+          </div>
         </div>
 
         <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">

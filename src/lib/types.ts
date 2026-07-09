@@ -54,6 +54,12 @@ export interface Prodotto {
    * informativo in vetrina. Default false (vedi migration 20260705120000).
    */
   solo_online?: boolean;
+  /**
+   * URL delle foto della galleria (gia ordinate), per il mini-carosello delle
+   * card. Presente solo nelle query dei listini (vedi CAMPI_CARD/normalizzaCard);
+   * assente altrove (es. correlati via RPC): la card degrada alla sola copertina.
+   */
+  foto_urls?: string[];
 }
 
 // --- Vetrina curata (home a fasce, gestibile dal pannello) -------------------
