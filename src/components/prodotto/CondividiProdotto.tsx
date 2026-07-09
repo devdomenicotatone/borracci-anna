@@ -1,19 +1,22 @@
 "use client";
 
-// Pannello "Condividi" del prodotto: QR scaricabile/stampabile + condivisione
-// nativa del telefono (con la FOTO, dove supportata), copia link, WhatsApp ed
-// email. Rende disponibile ai clienti (e al gestore) cio che il browser fa dalla
-// barra indirizzi.
+// Pannello "Condividi" del prodotto: condivisione nativa del telefono (con la
+// FOTO, dove supportata), copia link, WhatsApp ed email.
 //
-// Due varianti d'innesto, stesso contenuto:
+// Due varianti d'innesto, con una differenza voluta di contenuto:
 //   - "pill"  (default): bottone testuale con popover ancorato. Usato nella PDP.
+//              In testa mostra la MINI-ANTEPRIMA (foto + nome + prezzo) di cio
+//              che si sta per mandare: al cliente il QR non serviva (e gia sulla
+//              pagina col suo dispositivo) ed era ingombrante.
 //   - "icona": bottoncino tondo che apre una MODALE centrata (portale su body).
 //              Serve nella lista gestore, dove il contenitore ha overflow-hidden
-//              e un popover ancorato verrebbe tagliato.
+//              e un popover ancorato verrebbe tagliato. QUI resta il QR
+//              scaricabile: il gestore lo stampa per il negozio.
 //
-// Il QR e la libreria `qrcode` sono caricati LAZY alla prima apertura (import
-// dinamico), cosi non entrano nel bundle iniziale.
+// Il QR e la libreria `qrcode` sono caricati LAZY alla prima apertura della
+// modale gestore (import dinamico), cosi non entrano nel bundle iniziale.
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -160,10 +163,11 @@ export default function CondividiProdotto({
     };
   }, [aperto, variante]);
 
-  // Apre e genera il QR alla prima apertura (import dinamico di `qrcode`).
+  // Apre il pannello; solo la modale gestore genera il QR alla prima apertura
+  // (import dinamico di `qrcode`): in vetrina il QR non c'e piu.
   async function apri() {
     setAperto(true);
-    if (qr || qrErrore) return;
+    if (variante !== "icona" || qr || qrErrore) return;
     try {
       const QRCode = (await import("qrcode")).default;
       const dataUrl = await QRCode.toDataURL(risolviUrl(), {
@@ -237,54 +241,91 @@ export default function CondividiProdotto({
     }
   }
 
-  // Contenuto condiviso da popover e modale: QR + canali di condivisione.
-  const pannello = (
-    <>
-      <div className="flex flex-col items-center">
-        <div className="grid h-40 w-40 place-items-center rounded-xl bg-white ring-1 ring-line">
-          {qr ? (
-            // eslint-disable-next-line @next/next/no-img-element -- data URL locale, next/image non adatto
-            <img
-              src={qr}
-              alt={`Codice QR del prodotto ${nome}`}
-              className="h-36 w-36"
-            />
-          ) : qrErrore ? (
-            <span className="px-3 text-center text-xs text-muted">
-              QR non disponibile
-            </span>
-          ) : (
-            <span className="text-xs text-muted">Genero il QR…</span>
-          )}
-        </div>
-        <p className="mt-2 text-center text-xs text-muted">
-          Inquadra col telefono per aprire questa pagina
-        </p>
-        <button
-          type="button"
-          onClick={scaricaQr}
-          disabled={!qr}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25 transition-colors hover:bg-sea/10 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-            aria-hidden="true"
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-          </svg>
-          Scarica QR
-        </button>
+  // Blocco QR: SOLO nella modale gestore (scarica/stampa per il negozio).
+  const bloccoQr = (
+    <div className="flex flex-col items-center">
+      <div className="grid h-40 w-40 place-items-center rounded-xl bg-white ring-1 ring-line">
+        {qr ? (
+          // eslint-disable-next-line @next/next/no-img-element -- data URL locale, next/image non adatto
+          <img
+            src={qr}
+            alt={`Codice QR del prodotto ${nome}`}
+            className="h-36 w-36"
+          />
+        ) : qrErrore ? (
+          <span className="px-3 text-center text-xs text-muted">
+            QR non disponibile
+          </span>
+        ) : (
+          <span className="text-xs text-muted">Genero il QR…</span>
+        )}
       </div>
+      <p className="mt-2 text-center text-xs text-muted">
+        Inquadra col telefono per aprire questa pagina
+      </p>
+      <button
+        type="button"
+        onClick={scaricaQr}
+        disabled={!qr}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25 transition-colors hover:bg-sea/10 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+          aria-hidden="true"
+        >
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+        </svg>
+        Scarica QR
+      </button>
+    </div>
+  );
 
-      <div className="my-3 h-px bg-line" />
+  // Mini-anteprima di cio che si sta per mandare: foto + nome + prezzo.
+  // Sostituisce il QR nel popover della vetrina.
+  const anteprima = (
+    <div className="flex items-center gap-3 rounded-2xl bg-surface p-2.5 ring-1 ring-line">
+      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-line">
+        {immagine ? (
+          <Image
+            src={immagine}
+            alt={nome}
+            fill
+            sizes="56px"
+            className="object-contain p-1"
+          />
+        ) : (
+          <svg
+            viewBox="0 0 100 100"
+            fill="currentColor"
+            aria-hidden="true"
+            className="absolute inset-0 m-auto h-8 w-8 text-line"
+          >
+            <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+          </svg>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="line-clamp-2 font-display text-sm font-bold leading-snug text-foreground">
+          {nome}
+        </p>
+        {prezzo && (
+          <p className="mt-0.5 font-display text-sm font-extrabold text-coral">
+            {prezzo}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 
-      <div className="flex flex-col gap-1">
+  // Canali di condivisione, comuni a popover e modale.
+  const azioni = (
+    <div className="flex flex-col gap-1">
         {nativoOk && (
           <button type="button" onClick={condividiNativo} className={RIGA_AZIONE}>
             <IconaShare className="h-4 w-4 text-sea" />
@@ -357,7 +398,6 @@ export default function CondividiProdotto({
           Email
         </a>
       </div>
-    </>
   );
 
   // --- Variante "icona": trigger tondo + modale centrata (portale) -----------
@@ -395,7 +435,7 @@ export default function CondividiProdotto({
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-display text-xs font-bold uppercase tracking-wide text-sea">
-                      Condividi
+                      Condividi / QR
                     </p>
                     <p className="truncate font-display text-sm font-bold text-foreground">
                       {nome}
@@ -421,7 +461,9 @@ export default function CondividiProdotto({
                     </svg>
                   </button>
                 </div>
-                {pannello}
+                {bloccoQr}
+                <div className="my-3 h-px bg-line" />
+                {azioni}
               </div>
             </div>,
             document.body,
@@ -453,7 +495,9 @@ export default function CondividiProdotto({
           tabIndex={-1}
           className="animate-pop-in absolute right-0 top-full z-30 mt-2 w-72 origin-top-right rounded-2xl bg-white p-4 text-left shadow-xl outline-none ring-1 ring-line"
         >
-          {pannello}
+          {anteprima}
+          <div className="my-3 h-px bg-line" />
+          {azioni}
         </div>
       )}
     </div>
