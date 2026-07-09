@@ -3,6 +3,9 @@ import { ImageResponse } from "next/og";
 import { fontOg } from "@/lib/og-fonts";
 import { caricaProdottoCard, qrDataUrl, taglineDisponibilita } from "@/lib/social-card";
 
+// Node.js (default): la conversione WebP->JPEG della copertina usa sharp.
+export const runtime = "nodejs";
+
 // Immagine social verticale del prodotto, con QR ben visibile: pensata per
 // essere SCARICATA e pubblicata/stampata, li dove il link non e cliccabile
 // (storie/feed IG, vetrina, volantini). Due formati via ?formato=:
