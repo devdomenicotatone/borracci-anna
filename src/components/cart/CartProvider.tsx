@@ -7,21 +7,23 @@
 // e lo passa come `statoIniziale`; da li in poi il provider e la fonte di
 // verita client per badge, mini-cart e pagina carrello.
 //
-// Feedback istantaneo: useOptimistic (React 19) applica subito la modifica
-// (incremento badge, +/- quantita, rimozione) mentre la Server Action gira;
-// alla risposta lo stato reale rimpiazza l'ottimistico. Le Server Actions
-// ritornano l'EsitoCarrello aggiornato, quindi niente round-trip extra.
+// Feedback istantaneo (ottimistico "manuale"): ogni metodo applica SUBITO la
+// modifica allo stato reale (incremento badge, +/- quantita, rimozione) e, alla
+// risposta della Server Action, RIMPIAZZA lo stato con l'esito vero. In caso di
+// errore ripristina lo snapshot pre-modifica.
 //
-// IMPORTANTE: i metodi chiamano `applica()` (dispatch ottimistico) PRIMA del
-// primo await; vanno percio invocati dentro una transition del chiamante
-// (es. startTransition in AddToCart/CartItem), come da pattern React 19.
+// Perche non useOptimistic: la sua azione "aggiungi" e un DELTA che resta
+// applicato sopra lo stato base finche la transition non si chiude; ma noi
+// aggiorniamo lo stato base al valore server appena la Server Action risponde,
+// e nell'istante di sovrapposizione il carrello mostrava base + delta = DOPPIO
+// (es. aggiungi 4 -> lampeggia 8 -> torna 4). Rimpiazzare invece di sommare
+// elimina la sovrapposizione: la riconciliazione e idempotente.
 
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
-  useOptimistic,
   useState,
 } from "react";
 
@@ -45,7 +47,7 @@ type AzioneOttimistica =
   | { tipo: "rimuovi"; rigaId: string }
   | { tipo: "svuota" };
 
-/** Riduce lo stato ottimistico applicando una singola azione. */
+/** Riduce lo stato applicando una singola azione (usato per l'ottimistico). */
 function riduci(
   righe: RigaCarrello[],
   azione: AzioneOttimistica,
@@ -118,93 +120,113 @@ export function CartProvider({
 }) {
   const { mostra } = useToast();
   const [righe, setRighe] = useState<RigaCarrello[]>(statoIniziale.righe);
-  const [righeOttimistiche, applica] = useOptimistic(righe, riduci);
   const [drawerAperto, setDrawerAperto] = useState(false);
+
+  // `righe` (closure) e lo snapshot pre-modifica per il rollback in caso di
+  // errore: e tra le dipendenze dei metodi, che quindi si rigenerano a ogni
+  // cambio del carrello — nessun costo extra, il context cambia comunque.
 
   const apriDrawer = useCallback(() => setDrawerAperto(true), []);
   const chiudiDrawer = useCallback(() => setDrawerAperto(false), []);
 
-  /** Allinea lo stato reale all'esito server (solo se ok). */
-  const riconcilia = useCallback((esito: EsitoCarrello) => {
-    if (esito.ok) {
-      setRighe(esito.righe);
-    }
-  }, []);
-
   const aggiungi = useCallback<CartContextValue["aggiungi"]>(
     async ({ prodotto, variante, quantita }) => {
-      // Riga ottimistica (id provvisorio, rimpiazzata dall'esito reale).
-      applica({
-        tipo: "aggiungi",
-        riga: { id: `ott-${variante.id}`, quantita, prodotto, variante },
-      });
+      const snapshot = righe;
+      // Feedback immediato: id provvisorio, rimpiazzato dall'esito reale.
+      setRighe(
+        riduci(righe, {
+          tipo: "aggiungi",
+          riga: { id: `ott-${variante.id}`, quantita, prodotto, variante },
+        }),
+      );
 
       const esito = await aggiungiAlCarrello(variante.id, quantita);
-      riconcilia(esito);
 
       if (esito.ok) {
+        setRighe(esito.righe);
         setDrawerAperto(true);
         if (esito.avviso) {
           mostra(esito.avviso, "errore");
         }
-      } else if (esito.motivo === "esaurito") {
-        mostra("Articolo esaurito.", "errore");
-      } else if (esito.motivo !== "non_configurato") {
-        mostra("Impossibile aggiungere al carrello. Riprova.", "errore");
+      } else {
+        setRighe(snapshot);
+        if (esito.motivo === "esaurito") {
+          mostra("Articolo esaurito.", "errore");
+        } else if (esito.motivo !== "non_configurato") {
+          mostra("Impossibile aggiungere al carrello. Riprova.", "errore");
+        }
       }
     },
-    [applica, mostra, riconcilia],
+    [righe, mostra],
   );
 
   const aggiorna = useCallback<CartContextValue["aggiorna"]>(
     async (rigaId, quantita) => {
-      applica({ tipo: "quantita", rigaId, quantita });
+      const snapshot = righe;
+      setRighe(riduci(righe, { tipo: "quantita", rigaId, quantita }));
+
       const esito = await aggiornaQuantita(rigaId, quantita);
-      riconcilia(esito);
-      if (esito.ok && esito.avviso) {
-        mostra(esito.avviso, "errore");
-      } else if (!esito.ok && esito.motivo !== "non_configurato") {
-        mostra("Aggiornamento non riuscito. Riprova.", "errore");
+
+      if (esito.ok) {
+        setRighe(esito.righe);
+        if (esito.avviso) {
+          mostra(esito.avviso, "errore");
+        }
+      } else {
+        setRighe(snapshot);
+        if (esito.motivo !== "non_configurato") {
+          mostra("Aggiornamento non riuscito. Riprova.", "errore");
+        }
       }
     },
-    [applica, mostra, riconcilia],
+    [righe, mostra],
   );
 
   const rimuovi = useCallback<CartContextValue["rimuovi"]>(
     async (rigaId) => {
-      applica({ tipo: "rimuovi", rigaId });
+      const snapshot = righe;
+      setRighe(riduci(righe, { tipo: "rimuovi", rigaId }));
+
       const esito = await rimuoviDalCarrello(rigaId);
-      riconcilia(esito);
-      if (!esito.ok && esito.motivo !== "non_configurato") {
-        mostra("Rimozione non riuscita. Riprova.", "errore");
+
+      if (esito.ok) {
+        setRighe(esito.righe);
+      } else {
+        setRighe(snapshot);
+        if (esito.motivo !== "non_configurato") {
+          mostra("Rimozione non riuscita. Riprova.", "errore");
+        }
       }
     },
-    [applica, mostra, riconcilia],
+    [righe, mostra],
   );
 
   const svuota = useCallback<CartContextValue["svuota"]>(async () => {
-    applica({ tipo: "svuota" });
+    const snapshot = righe;
+    setRighe([]);
+
     const esito = await svuotaCarrello();
+
     if (esito.ok) {
-      setRighe([]);
+      setRighe(esito.righe);
     } else {
-      riconcilia(esito);
+      setRighe(snapshot);
       if (esito.motivo !== "non_configurato") {
         mostra("Svuotamento non riuscito. Riprova.", "errore");
       }
     }
-  }, [applica, mostra, riconcilia]);
+  }, [righe, mostra]);
 
-  const count = righeOttimistiche.reduce((a, r) => a + r.quantita, 0);
-  const subtotaleCents = righeOttimistiche.reduce(
+  const count = righe.reduce((a, r) => a + r.quantita, 0);
+  const subtotaleCents = righe.reduce(
     (a, r) => a + r.prodotto.prezzo_cents * r.quantita,
     0,
   );
-  const valuta = righeOttimistiche[0]?.prodotto.valuta ?? statoIniziale.valuta;
+  const valuta = righe[0]?.prodotto.valuta ?? statoIniziale.valuta;
 
   const value = useMemo<CartContextValue>(
     () => ({
-      righe: righeOttimistiche,
+      righe,
       count,
       subtotaleCents,
       valuta,
@@ -217,7 +239,7 @@ export function CartProvider({
       svuota,
     }),
     [
-      righeOttimistiche,
+      righe,
       count,
       subtotaleCents,
       valuta,
