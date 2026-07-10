@@ -11,10 +11,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { verifySession } from "@/lib/gestore/auth";
+import { sincronizzaEmbeddingProdotto } from "@/lib/embeddings";
 import { slugify } from "@/lib/gestore/slug";
 import { franchiseDiNome } from "@/lib/franchise";
 import { COLORI, coloreCanonico } from "@/lib/catalogo";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { after } from "next/server";
 import { TAG_CORRELATI } from "@/lib/correlati";
 import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
 import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
@@ -380,6 +382,11 @@ export async function creaSchedaDaFotoAction(
     revalidateTag(TAG_CORRELATI, "max");
     revalidateTag(TAG_FACETTE_VETRINA, "max");
     revalidateTag(TAG_VETRINA_HOME, "max");
+    // Embedding di ricerca DOPO la risposta (after()): la bozza e gia
+    // cercabile appena pubblicata. (Const: dentro la closure il narrowing
+    // di `prodottoId` non sopravvive.)
+    const idCreato = prodottoId;
+    after(() => sincronizzaEmbeddingProdotto(idCreato));
     return { ok: true, id: prodottoId };
   } catch {
     // Se la bozza era gia stata creata, falla aprire comunque (niente fantasma).

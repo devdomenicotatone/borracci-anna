@@ -9,9 +9,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { revalidaProdotto } from "@/lib/gestore/revalida";
+import { sincronizzaEmbeddingProdotto } from "@/lib/embeddings";
 import { slugify } from "@/lib/gestore/slug";
 import { caricaCategorie } from "@/lib/categorie";
 import { idsProdottiGestore } from "@/lib/gestore/prodotti-lista";
@@ -243,6 +245,9 @@ export async function salvaProdottoAction(
   }
 
   revalidaProdotto(nuovoId);
+  // Embedding di ricerca riallineato DOPO la risposta (after()): non allunga
+  // il salvataggio; se nome/descrizione/tema sono invariati e un no-op.
+  after(() => sincronizzaEmbeddingProdotto(nuovoId));
 
   // In creazione si va alla pagina di modifica (per foto/varianti).
   // redirect() lancia NEXT_REDIRECT: deve stare fuori dal try/catch.

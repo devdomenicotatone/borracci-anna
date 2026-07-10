@@ -23,8 +23,10 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
+import { after } from "next/server";
 
 import { verifySession } from "@/lib/gestore/auth";
+import { sincronizzaEmbeddingProdotto } from "@/lib/embeddings";
 import {
   revalidaProdotto,
   revalidaSchedaGestore,
@@ -712,6 +714,11 @@ export async function creaProdottoDaImportAction(input: {
 
   if (input.revalida === false) revalidaSchedaGestore(prodottoId);
   else revalidaProdotto(prodottoId);
+  // Embedding di ricerca DOPO la risposta (after()): anche le bozze si
+  // embeddano subito, cosi alla pubblicazione sono gia cercabili. (Const:
+  // dentro la closure il narrowing di `prodottoId` non sopravvive.)
+  const idCreato = prodottoId;
+  after(() => sincronizzaEmbeddingProdotto(idCreato));
   return { ok: true, prodottoId };
 }
 
