@@ -23,8 +23,10 @@ import { aggiungiFotoGalleriaAction } from "@/lib/gestore/actions";
 import { useToast } from "@/components/gestore/Toaster";
 import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
 import { slugify } from "@/lib/gestore/slug";
+import { coloreCanonico } from "@/lib/catalogo";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import { gruppiCategorie } from "@/lib/categorie-albero";
+import { Campo, inputCls } from "@/components/gestore/ui";
 import type { Categoria } from "@/lib/types";
 
 interface FotoLocale {
@@ -35,9 +37,6 @@ interface ColoreBozza {
   nome: string;
   foto_indici: number[];
 }
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 const MAX_FOTO = 10;
 
@@ -210,9 +209,14 @@ export default function GeneraDaFoto({
       descrizione,
       prezzo_cents: prezzoCents,
       categoria_id: categoriaId || null,
+      // Canonicalizza il nome colore GIA qui: cosi le varianti a DB e il tag
+      // `colore` delle foto (colorePerIndice sotto) usano lo stesso nome della
+      // palette. Il server ricanonicalizza le varianti ma NON il tag foto: se
+      // restasse grezzo, sulla PDP variante e foto (match per uguaglianza stretta)
+      // non combacerebbero (es. digitato "blu navy" vs canonico "Navy").
       colori: colori
         .filter((c) => c.nome.trim())
-        .map((c) => ({ nome: c.nome.trim(), foto_indici: c.foto_indici })),
+        .map((c) => ({ nome: coloreCanonico(c.nome.trim()), foto_indici: c.foto_indici })),
     };
     startCrea(async () => {
       try {
@@ -561,27 +565,3 @@ function ZonaUpload({
   );
 }
 
-function Campo({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-sm font-bold text-foreground"
-      >
-        {label}
-      </label>
-      {children}
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
-    </div>
-  );
-}

@@ -14,6 +14,8 @@ import {
   TAGLIE,
   TAGLIE_BAMBINO_ETA,
   TAGLIE_BAMBINO_NUM,
+  TAGLIE_CAPPELLO,
+  TAGLIE_PALLONE,
   coloreChiaro,
   coloreHex,
 } from "@/lib/catalogo";
@@ -245,6 +247,64 @@ export default function EditorVarianti({
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {TAGLIE_BAMBINO_NUM.map(chipTaglia)}
+        </div>
+
+        {/* Cappello: circonferenza in cm (48–62). */}
+        <div className="mt-4 flex items-center justify-between px-1">
+          <span className="font-display text-xs font-bold text-foreground">
+            Cappello{" "}
+            <span className="font-medium normal-case text-muted">
+              · misura in cm
+            </span>
+          </span>
+          <div className="flex gap-3 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => impostaScala(TAGLIE_CAPPELLO, true)}
+              className="text-sea transition-colors hover:text-lagoon"
+            >
+              Tutte
+            </button>
+            <button
+              type="button"
+              onClick={() => impostaScala(TAGLIE_CAPPELLO, false)}
+              className="text-muted transition-colors hover:text-foreground"
+            >
+              Nessuna
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {TAGLIE_CAPPELLO.map(chipTaglia)}
+        </div>
+
+        {/* Pallone: misura del pallone (1–5), etichettata "Misura N". */}
+        <div className="mt-4 flex items-center justify-between px-1">
+          <span className="font-display text-xs font-bold text-foreground">
+            Pallone{" "}
+            <span className="font-medium normal-case text-muted">
+              · misura
+            </span>
+          </span>
+          <div className="flex gap-3 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => impostaScala(TAGLIE_PALLONE, true)}
+              className="text-sea transition-colors hover:text-lagoon"
+            >
+              Tutte
+            </button>
+            <button
+              type="button"
+              onClick={() => impostaScala(TAGLIE_PALLONE, false)}
+              className="text-muted transition-colors hover:text-foreground"
+            >
+              Nessuna
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {TAGLIE_PALLONE.map(chipTaglia)}
         </div>
 
         {/* Taglia unica: accessori senza scala (berretti, cappelli, ...). */}

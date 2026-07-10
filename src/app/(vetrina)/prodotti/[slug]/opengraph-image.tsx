@@ -9,6 +9,8 @@ import { caricaProdottoCard, qrDataUrl } from "@/lib/social-card";
 export const alt = "Prodotto · Anna Shop";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+// Node.js (default): la conversione WebP->JPEG della copertina usa sharp.
+export const runtime = "nodejs";
 
 export default async function Image({
   params,
@@ -39,7 +41,7 @@ export default async function Image({
           }}
         >
           <svg width="150" height="150" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="9.5" r="4" fill="#ffd166" />
+            <circle cx="12" cy="9.5" r="4" fill="#ffd23f" />
             <path
               d="M2.5 17.5c2 0 2-1.6 4-1.6s2 1.6 4 1.6 2-1.6 4-1.6 2 1.6 4 1.6 2-1.6 3-1.6"
               stroke="#ffffff"
@@ -81,7 +83,7 @@ export default async function Image({
               {nome}
             </div>
             {prezzo ? (
-              <div style={{ display: "flex", marginTop: 18, fontSize: 54, fontWeight: 700, color: "#ffd166" }}>
+              <div style={{ display: "flex", marginTop: 18, fontSize: 54, fontWeight: 700, color: "#ffd23f" }}>
                 {prezzo}
               </div>
             ) : null}

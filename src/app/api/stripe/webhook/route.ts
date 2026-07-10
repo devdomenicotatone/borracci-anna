@@ -11,12 +11,20 @@
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Le email di notifica partono via `after()` DOPO la risposta 200 a Stripe: su
+// serverless il loro invio SMTP estende comunque la durata della funzione, quindi
+// diamo margine (default 10s troppo stretto per il connect+send SMTP).
+export const maxDuration = 30;
 
+import { after } from "next/server";
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getStripe } from "@/lib/stripe";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { inviaEmail } from "@/lib/email";
+import { NEGOZIO } from "@/lib/negozio";
+import { formatPrezzo } from "@/lib/format";
 import type { Json } from "@/lib/supabase/database.types";
 
 // Eventi che corrispondono a un pagamento andato a buon fine.
@@ -35,25 +43,31 @@ const EVENTI_PAGAMENTO_FALLITO = new Set<Stripe.Event["type"]>([
   "payment_intent.payment_failed",
 ]);
 
-/** Riga da scalare a magazzino: SKU della variante + quantita acquistata. */
-interface RigaStock {
+/**
+ * Riga della sessione: SKU + quantita (per scalare lo stock) e nome leggibile +
+ * importo (per le email di notifica). Ricavata dalle line item della sessione.
+ */
+interface LineaSessione {
   sku: string;
   qta: number;
+  nome: string;
+  importoCents: number;
 }
 
 /**
- * Ricava le righe (SKU, quantita) dalle line item della sessione. Le line item
- * non sono espanse di default: vanno richieste a Stripe. Lo SKU viaggia nei
- * metadata del product Stripe (impostato alla creazione della sessione).
+ * Ricava le righe dalle line item della sessione. Le line item non sono espanse
+ * di default: vanno richieste a Stripe. Lo SKU viaggia nei metadata del product
+ * Stripe (impostato alla creazione della sessione); il nome e la label mostrata
+ * al cliente sul checkout, riusata nelle email.
  */
-async function righeDaSessione(sessionId: string): Promise<RigaStock[]> {
+async function righeDaSessione(sessionId: string): Promise<LineaSessione[]> {
   const stripe = getStripe();
   const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, {
     limit: 100,
     expand: ["data.price.product"],
   });
 
-  const righe: RigaStock[] = [];
+  const righe: LineaSessione[] = [];
   for (const item of lineItems.data) {
     const qta = item.quantity ?? 0;
     if (qta <= 0) continue;
@@ -65,7 +79,12 @@ async function righeDaSessione(sessionId: string): Promise<RigaStock[]> {
         : null;
     if (!sku) continue;
 
-    righe.push({ sku, qta });
+    const nome =
+      prodotto && typeof prodotto !== "string" && "name" in prodotto
+        ? (prodotto.name ?? item.description ?? sku)
+        : (item.description ?? sku);
+
+    righe.push({ sku, qta, nome, importoCents: item.amount_total ?? 0 });
   }
   return righe;
 }
@@ -98,18 +117,28 @@ function indirizzoDaSessione(session: Stripe.Checkout.Session): Json {
  * Finalizza una sessione di checkout pagata: delega alla RPC atomica/idempotente
  * che segna l'ordine "pagato", decrementa lo stock una sola volta e salva costo
  * di spedizione (session.shipping_cost) e indirizzo nella stessa transazione.
+ * Ritorna true SOLO se questa invocazione ha davvero finalizzato l'ordine (la RPC
+ * distingue la prima chiamata dai retry idempotenti): il chiamante lo usa per
+ * inviare le email di notifica una volta sola.
  */
 async function finalizzaOrdine(
   supabase: SupabaseClient,
   session: Stripe.Checkout.Session,
-): Promise<void> {
-  const righe = await righeDaSessione(session.id);
-
-  const { error } = await supabase.rpc("finalizza_ordine_pagato", {
+  righe: LineaSessione[],
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("finalizza_ordine_pagato", {
     p_session_id: session.id,
     p_email: session.customer_details?.email ?? null,
     p_total: session.amount_total ?? 0,
-    p_righe: righe,
+    // nome + prezzo unitario: servono alla RPC per ricostruire le ordine_righe
+    // se il pre-save della route checkout e fallito (migration 20260708170000).
+    // Le versioni precedenti della RPC ignorano le chiavi extra.
+    p_righe: righe.map((r) => ({
+      sku: r.sku,
+      qta: r.qta,
+      nome: r.nome,
+      prezzo_cents: r.qta > 0 ? Math.round(r.importoCents / r.qta) : 0,
+    })),
     // shipping_cost.amount_total = costo della tariffa scelta dal cliente.
     p_shipping_cents: session.shipping_cost?.amount_total ?? null,
     p_indirizzo: indirizzoDaSessione(session),
@@ -117,6 +146,67 @@ async function finalizzaOrdine(
   if (error) {
     throw new Error(`Finalizzazione ordine fallita: ${error.message}`);
   }
+  // true = prima finalizzazione. Con la vecchia RPC `returns void` data e null
+  // -> false: nessuna email finche la migration 20260708120000 non e applicata
+  // (nessun doppione, degrada in sicurezza).
+  return data === true;
+}
+
+/** Indirizzo di spedizione in testo leggibile per le email. "—" se assente. */
+function indirizzoLeggibile(session: Stripe.Checkout.Session): string {
+  const d = session.collected_information?.shipping_details;
+  if (!d) return "—";
+  const a = d.address;
+  const cap = a
+    ? [a.postal_code, a.city, a.state].filter(Boolean).join(" ")
+    : "";
+  const righe = [d.name, a?.line1, a?.line2, cap, a?.country].filter(
+    (r): r is string => Boolean(r && r.trim()),
+  );
+  return righe.length > 0 ? righe.join("\n") : "—";
+}
+
+/**
+ * Notifica un ordine pagato: email alla titolare (va spedito) e conferma al
+ * cliente. Best effort (Promise.allSettled + inviaEmail non lancia mai): non
+ * deve mai far ritentare il webhook. Chiamata via `after()`, cioe dopo aver gia
+ * risposto 200 a Stripe, così l'SMTP non blocca la risposta.
+ */
+async function inviaNotificheOrdinePagato(
+  session: Stripe.Checkout.Session,
+  righe: LineaSessione[],
+): Promise<void> {
+  const clienteEmail = session.customer_details?.email ?? null;
+  const clienteNome =
+    session.customer_details?.name ??
+    session.collected_information?.shipping_details?.name ??
+    "";
+  const totale = formatPrezzo(session.amount_total ?? 0);
+  const articoli = righe.map((r) => `• ${r.qta}× ${r.nome}`).join("\n");
+  const indirizzo = indirizzoLeggibile(session);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+
+  await Promise.allSettled([
+    // 1) Notifica alla titolare: una vendita e stata pagata, va spedita.
+    inviaEmail({
+      to: NEGOZIO.email,
+      replyTo: clienteEmail ?? undefined,
+      subject: `Nuovo ordine pagato — ${totale}`,
+      text: `Un cliente ha pagato un ordine su Anna Shop.\n\n${
+        clienteNome ? `Cliente: ${clienteNome}\n` : ""
+      }${clienteEmail ? `Email: ${clienteEmail}\n` : ""}\nArticoli:\n${articoli}\n\nTotale incassato: ${totale}\n\nSpedire a:\n${indirizzo}\n\nGestisci l'ordine: ${siteUrl}/gestore/ordini`,
+    }),
+    // 2) Conferma al cliente (solo se Stripe ha raccolto un'email).
+    ...(clienteEmail
+      ? [
+          inviaEmail({
+            to: clienteEmail,
+            subject: "Ordine confermato — Anna Shop",
+            text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\nArticoli:\n${articoli}\n\nTotale: ${totale}\n\nSpedizione a:\n${indirizzo}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+          }),
+        ]
+      : []),
+  ]);
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -159,7 +249,19 @@ export async function POST(req: Request): Promise<Response> {
     if (pagato) {
       try {
         const supabase = createAdminSupabase();
-        await finalizzaOrdine(supabase, session);
+        const righe = await righeDaSessione(session.id);
+        const appenaFinalizzato = await finalizzaOrdine(
+          supabase,
+          session,
+          righe,
+        );
+        // Email di notifica solo alla PRIMA finalizzazione (idempotenza sui retry
+        // Stripe). Inviate via `after()`: partono dopo la risposta 200, così un
+        // SMTP lento non fa scadere il webhook (che Stripe interpreterebbe come
+        // fallimento, disabilitando l'endpoint dopo troppi retry).
+        if (appenaFinalizzato) {
+          after(() => inviaNotificheOrdinePagato(session, righe));
+        }
       } catch (err) {
         // Errore lato nostro (DB/Stripe): logghiamo e rispondiamo 500 cosi
         // Stripe ritenta. Nessun dettaglio interno verso l'esterno.
@@ -168,9 +270,28 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
   } else if (EVENTI_SCADUTI.has(event.type)) {
-    // Sessione scaduta senza pagamento: nessun ordine da finalizzare, nessuno
-    // stock scalato. Logghiamo per tracciabilita e restiamo idempotenti.
+    // Sessione scaduta senza pagamento: nessuno stock scalato. I checkout diretti
+    // non pre-creano piu l'ordine (si registra solo a pagamento riuscito), ma
+    // teniamo questa pulizia come rete di sicurezza per eventuali ordini
+    // "in_attesa" legacy con una sessione, creati prima di quel cambiamento: li
+    // marchiamo annullato cosi non restano fantasmi nel pannello "Da confermare".
+    // Gli ordini del flusso richiesta hanno una sessione solo DOPO la conferma
+    // (stato 'confermato'), quindi il filtro sullo stato li lascia intatti.
+    // Idempotente sui retry.
     const session = event.data.object as Stripe.Checkout.Session;
+    try {
+      const supabase = createAdminSupabase();
+      const { error } = await supabase
+        .from("ordini")
+        .update({ stato: "annullato" })
+        .eq("stripe_session_id", session.id)
+        .eq("stato", "in_attesa");
+      if (error) throw error;
+    } catch (err) {
+      // 500 -> Stripe ritenta: la pulizia e idempotente, il retry e innocuo.
+      console.error("[stripe-webhook] pulizia sessione scaduta fallita:", err);
+      return new Response("Elaborazione fallita.", { status: 500 });
+    }
     console.info(
       "[stripe-webhook] sessione scaduta:",
       `session=${session.id}`,

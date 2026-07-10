@@ -15,10 +15,13 @@ function leggiSogliaDaEnv(): number {
 /** Soglia (in centesimi) oltre la quale la spedizione e gratuita. */
 export const SOGLIA_SPEDIZIONE_GRATUITA_CENTS = leggiSogliaDaEnv();
 
-// Tariffe per zona (centesimi), modificabili via env senza toccare il codice.
-// Valori di partenza da confermare col preventivo reale dell'aggregatore.
-const DEFAULT_CONTINENTE_CENTS = 590; // 5,90 EUR
-const DEFAULT_ISOLE_CENTS = 890; // 8,90 EUR
+// Tariffa UNICA nazionale (centesimi), modificabile via env senza toccare il
+// codice. Decisione della titolare (audit lug 2026, finding 16): su Stripe le
+// shipping option sono radio a libera scelta del cliente, quindi con le due
+// zone (continentale/isole) chi spediva nelle isole poteva selezionare la
+// tariffa continentale piu bassa. Con la tariffa unica il problema sparisce;
+// l'eventuale supplemento isole del corriere resta assorbito dal negozio.
+const DEFAULT_ITALIA_CENTS = 590; // 5,90 EUR
 
 function leggiTariffaDaEnv(grezzo: string | undefined, fallback: number): number {
   if (!grezzo) return fallback;
@@ -26,24 +29,24 @@ function leggiTariffaDaEnv(grezzo: string | undefined, fallback: number): number
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-// Server-only (niente NEXT_PUBLIC): lette a runtime, non incollate a build-time,
-// cosi cambiare il prezzo richiede solo un riavvio, non un rebuild. Usate solo
-// lato server (route checkout); sul client questi const valgono il default ma non
-// vengono mai usati (la UI non mostra ancora la tariffa per zona).
-/** Tariffa Italia continentale (centesimi). */
-export const SPEDIZIONE_CONTINENTE_CENTS = leggiTariffaDaEnv(
-  process.env.SHIPPING_IT_CONTINENTE_CENTS,
-  DEFAULT_CONTINENTE_CENTS,
+// Server-only (niente NEXT_PUBLIC): letta a runtime, non incollata a build-time,
+// cosi cambiare il prezzo richiede solo un riavvio, non un rebuild. Usata solo
+// lato server (route checkout); sul client vale il default ma non viene usata.
+/** Tariffa unica Italia (centesimi). Legge SHIPPING_IT_CENTS; in fallback la
+ *  storica SHIPPING_IT_CONTINENTE_CENTS, cosi un env gia configurato resta valido. */
+export const SPEDIZIONE_ITALIA_CENTS = leggiTariffaDaEnv(
+  process.env.SHIPPING_IT_CENTS ?? process.env.SHIPPING_IT_CONTINENTE_CENTS,
+  DEFAULT_ITALIA_CENTS,
 );
 
-/** Tariffa isole e aree disagiate (centesimi). */
-export const SPEDIZIONE_ISOLE_CENTS = leggiTariffaDaEnv(
-  process.env.SHIPPING_IT_ISOLE_CENTS,
-  DEFAULT_ISOLE_CENTS,
-);
+// Stima di consegna comunicata al cliente (giorni lavorativi). UNICO punto di
+// verita: usata sia dalle shipping option Stripe (checkout) sia dalla pagina di
+// successo, che prima divergevano (2-5 vs 2-4).
+export const CONSEGNA_MIN_GG = 2;
+export const CONSEGNA_MAX_GG = 5;
 
-/** Zona di spedizione (Italia). "gratuita" = soglia free-shipping raggiunta. */
-export type ZonaSpedizione = "continentale" | "isole" | "gratuita";
+/** Zona di spedizione. "gratuita" = soglia free-shipping raggiunta. */
+export type ZonaSpedizione = "italia" | "gratuita";
 
 /** Un'opzione di spedizione offerta al cliente al checkout. */
 export interface OpzioneSpedizione {
@@ -56,10 +59,9 @@ export interface OpzioneSpedizione {
 
 /**
  * Opzioni di spedizione da offrire al checkout per un dato subtotale (centesimi).
- * Sopra la soglia di spedizione gratuita ritorna una sola opzione a 0 EUR;
- * altrimenti le due zone Italia (continentale / isole-aree disagiate), tra cui
- * il cliente sceglie su Stripe. Pura (niente IO): unico punto di verita del
- * costo, usabile sia lato server (checkout) sia lato client (stima).
+ * SEMPRE una sola opzione (mai una scelta lasciata al cliente): la gratuita
+ * sopra soglia, la tariffa unica Italia sotto. Pura (niente IO): unico punto di
+ * verita del costo, usabile sia lato server (checkout) sia lato client (stima).
  */
 export function opzioniSpedizione(subtotaleCents: number): OpzioneSpedizione[] {
   if (statoSpedizione(subtotaleCents).raggiunta) {
@@ -67,14 +69,9 @@ export function opzioniSpedizione(subtotaleCents: number): OpzioneSpedizione[] {
   }
   return [
     {
-      zona: "continentale",
-      etichetta: "Italia continentale",
-      costoCents: SPEDIZIONE_CONTINENTE_CENTS,
-    },
-    {
-      zona: "isole",
-      etichetta: "Isole e aree disagiate",
-      costoCents: SPEDIZIONE_ISOLE_CENTS,
+      zona: "italia",
+      etichetta: "Spedizione standard (Italia)",
+      costoCents: SPEDIZIONE_ITALIA_CENTS,
     },
   ];
 }

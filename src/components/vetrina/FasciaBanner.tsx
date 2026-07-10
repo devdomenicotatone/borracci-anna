@@ -37,6 +37,8 @@ export default function FasciaBanner({ fascia }: { fascia: FasciaVetrina }) {
               src={immagine}
               alt=""
               aria-hidden="true"
+              loading="lazy"
+              decoding="async"
               className="absolute inset-0 -z-20 h-full w-full object-cover"
             />
             <span

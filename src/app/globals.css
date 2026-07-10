@@ -23,7 +23,9 @@
   --lagoon: #00b4d8; /* ciano laguna — accento fresco */
   --coral: #ff5c5c; /* corallo — call-to-action / energia (fill: pulsanti, icone) */
   --coral-ink: #d62828; /* corallo "inchiostro" — testo errori/alert su sfondo chiaro (contrasto AA ~5:1) */
-  --sun: #ffd23f; /* giallo sole — highlight */
+  --sun: #ffd23f; /* giallo sole — highlight (fill) */
+  --sun-ink: #8a6500; /* giallo sole "inchiostro" — testo/chip su fondo chiaro (contrasto AA) */
+  --lagoon-ink: #076e88; /* ciano laguna scuro — testo su bianco (contrasto AA, il lagoon pieno no) */
 
   --accent: var(--sea); /* accento tipografico storico = blu mare */
 }
@@ -41,6 +43,8 @@
   --color-coral: var(--coral);
   --color-coral-ink: var(--coral-ink);
   --color-sun: var(--sun);
+  --color-sun-ink: var(--sun-ink);
+  --color-lagoon-ink: var(--lagoon-ink);
   --color-accent: var(--accent);
 
   --font-sans: var(--font-inter);

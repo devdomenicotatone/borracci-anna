@@ -13,12 +13,14 @@
 //   3) ogni mutazione ritorna la LISTA CANONICA (categorie[]) per riallineare il
 //      client (come le action galleria ritornano foto[]).
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 
 import { percorsoCategoria } from "@/lib/categorie-albero";
 import { verifySession } from "@/lib/gestore/auth";
 import { slugGerarchico, slugify } from "@/lib/gestore/slug";
-import type { Categoria } from "@/lib/types";
+import type { Categoria, ConfigVetrina } from "@/lib/types";
 
 /** Esito di un'azione categorie: su `ok` ritorna la lista canonica aggiornata. */
 export interface EsitoCategorie {
@@ -107,6 +109,7 @@ async function prossimoOrdine(
 function revalida(): void {
   revalidatePath("/gestore/categorie");
   revalidatePath("/");
+  revalidateTag(TAG_VETRINA_HOME, "max"); // le fasce home usano gli href categoria
   // Pattern dinamico -> serve il type 'page' (non la URL letterale).
   revalidatePath("/prodotti/[slug]", "page");
 }
@@ -195,72 +198,24 @@ export async function creaCategoriaAction(input: {
 }
 
 /**
- * Rigenera in blocco gli slug di TUTTE le categorie in forma gerarchica
- * leggibile (es. "uomo-t-shirt-anime-manga"), riflettendo la struttura attuale.
- * Operazione MANUALE una-tantum: le rinomine/spostamenti normali NON toccano lo
- * slug (resta stabile), qui invece si riallinea di proposito tutta la tassonomia.
- * Non crea redirect dai vecchi indirizzi -> usare finche il sito non e pubblicato.
- *
- * Due passate per non violare il vincolo UNIQUE mentre gli slug si "incrociano":
- * prima uno slug temporaneo unico per riga (l'id UUID non collide con slug
- * reali), poi quello finale.
+ * DISATTIVATA sul sito pubblicato. Riscriveva in blocco gli slug di TUTTE le
+ * categorie (forma gerarchica leggibile, es. "uomo-t-shirt-anime-manga"), ma
+ * NON crea redirect dai vecchi indirizzi: su un sito gia online ogni URL
+ * /categoria/* indicizzato (Google/social) e ogni link condiviso finirebbe in
+ * 404, e una passata fallita a meta lascerebbe categorie su slug tmp-... rotti.
+ * Il pulsante nel pannello e stato rimosso; questa guardia server-side blocca
+ * l'action anche se venisse invocata comunque. Per riabilitarla serve prima un
+ * sistema di redirect stabile dai vecchi slug ai nuovi (fuori scope qui).
  */
 export async function rigeneraSlugCategorieAction(): Promise<EsitoCategorie> {
   const sessione = await verifySession();
   if (!sessione) return NON_AUTORIZZATO;
-  const { supabase } = sessione;
 
-  try {
-    const categorie = await leggiCategorie(supabase);
-
-    // Nuovo slug gerarchico per ogni categoria, unico a livello globale.
-    const presi = new Set<string>();
-    const nuovoPerId = new Map<string, string>();
-    for (const c of categorie) {
-      const base =
-        slugGerarchico(percorsoCategoria(categorie, c.id).map((x) => x.nome)) ||
-        "categoria";
-      let k = 0;
-      let slug = base;
-      while (presi.has(slug)) {
-        k++;
-        slug = `${base}-${k + 1}`;
-      }
-      presi.add(slug);
-      nuovoPerId.set(c.id, slug);
-    }
-
-    // Solo dove lo slug cambia davvero (evita update inutili e passate a vuoto).
-    const daAggiornare = categorie.filter((c) => nuovoPerId.get(c.id) !== c.slug);
-
-    // Passata 1: slug temporaneo unico, per liberare i nomi finali prima di
-    // riassegnarli (due categorie possono scambiarsi lo slug senza collidere).
-    for (const c of daAggiornare) {
-      const { error } = await supabase
-        .from("categorie")
-        .update({ slug: `tmp-${c.id}` })
-        .eq("id", c.id);
-      if (error) {
-        return { ok: false, error: error.message, categorie: await leggiCategorie(supabase) };
-      }
-    }
-    // Passata 2: slug finale.
-    for (const c of daAggiornare) {
-      const { error } = await supabase
-        .from("categorie")
-        .update({ slug: nuovoPerId.get(c.id)! })
-        .eq("id", c.id);
-      if (error) {
-        return { ok: false, error: error.message, categorie: await leggiCategorie(supabase) };
-      }
-    }
-
-    const aggiornate = await leggiCategorie(supabase);
-    revalida();
-    return { ok: true, categorie: aggiornate };
-  } catch {
-    return ERRORE_RETE;
-  }
+  return {
+    ok: false,
+    error:
+      "Funzione non disponibile: il sito e pubblicato e rigenerare gli indirizzi romperebbe i link gia indicizzati.",
+  };
 }
 
 // Ordine di priorita dei TEMI di terzo livello (le licenze ricorrenti sotto ogni
@@ -497,6 +452,51 @@ export async function riordinaCategorieAction(
 }
 
 /**
+ * Fasce home 'prodotti_auto' che agganciano una categoria. La regola 'categoria'
+ * salva l'id in config.categoriaId, un valore jsonb e NON una FK: nessun
+ * ON DELETE lo ripulisce, quindi quando la categoria sparisce il riferimento
+ * resta appeso, la fascia trova 0 prodotti e svanisce dalla home senza avviso.
+ * Vanno sganciate a mano. Throw su errore (il try/catch del chiamante ritorna
+ * ok:false).
+ */
+async function fasceConCategoria(
+  supabase: SupabaseGestore,
+  categoriaId: string,
+): Promise<{ id: string; config: ConfigVetrina }[]> {
+  // Le fasce sono poche (vetrina curata a mano): leggo le prodotti_auto e
+  // filtro in memoria, evitando un filtro jsonb (config->>categoriaId) piu
+  // fragile da tipizzare sul client generato.
+  const { data, error } = await supabase
+    .from("vetrina_sezioni")
+    .select("id, config")
+    .eq("tipo", "prodotti_auto");
+  if (error) throw error;
+  return (data ?? [])
+    .map((r) => ({
+      id: r.id as string,
+      config: (r.config ?? {}) as ConfigVetrina,
+    }))
+    .filter((r) => r.config.categoriaId === categoriaId);
+}
+
+/**
+ * Quante fasce home puntano a questa categoria: avviso pre-eliminazione per il
+ * pannello (il dato non e in pagina come prodotti/sottocategorie). Best-effort:
+ * su errore ritorna 0, non deve bloccare la conferma di eliminazione.
+ */
+export async function contaFasceVetrinaCategoriaAction(
+  id: string,
+): Promise<number> {
+  const sessione = await verifySession();
+  if (!sessione) return 0;
+  try {
+    return (await fasceConCategoria(sessione.supabase, id)).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Elimina una categoria (sempre hard-delete, a differenza dei prodotti): entrambe
  * le FK sono ON DELETE SET NULL, quindi i prodotti restano "senza categoria".
  * I figli risalgono di un livello (sotto il padre della eliminata; a radice se
@@ -540,6 +540,20 @@ export async function eliminaCategoriaAction(id: string): Promise<EsitoCategorie
           .eq("id", figli[i].id);
         if (error) return { ok: false, error: error.message };
       }
+    }
+
+    // Sgancia le fasce home agganciate a questa categoria PRIMA del delete:
+    // config.categoriaId e jsonb, non una FK, quindi nessun SET NULL lo
+    // ripulisce. Azzerandolo la fascia ricade sul default (novita) invece di
+    // trovare 0 prodotti e sparire dalla home in silenzio. Non atomico col
+    // delete: il canonico riallinea comunque la UI.
+    const fasce = await fasceConCategoria(supabase, id);
+    for (const f of fasce) {
+      const { error } = await supabase
+        .from("vetrina_sezioni")
+        .update({ config: { ...f.config, categoriaId: null } })
+        .eq("id", f.id);
+      if (error) return { ok: false, error: error.message };
     }
 
     const { error } = await supabase.from("categorie").delete().eq("id", id);

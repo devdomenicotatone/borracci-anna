@@ -1,7 +1,10 @@
 import { ImageResponse } from "next/og";
 
 import { fontOg } from "@/lib/og-fonts";
-import { caricaProdottoCard, qrDataUrl } from "@/lib/social-card";
+import { caricaProdottoCard, qrDataUrl, taglineDisponibilita } from "@/lib/social-card";
+
+// Node.js (default): la conversione WebP->JPEG della copertina usa sharp.
+export const runtime = "nodejs";
 
 // Immagine social verticale del prodotto, con QR ben visibile: pensata per
 // essere SCARICATA e pubblicata/stampata, li dove il link non e cliccabile
@@ -30,7 +33,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
-  const { nome, prezzo, immagine } = await caricaProdottoCard(slug);
+  const { nome, prezzo, immagine, soloOnline } = await caricaProdottoCard(slug);
 
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const qr = await qrDataUrl(`${site}/prodotti/${slug}`, 400);
@@ -64,7 +67,7 @@ export async function GET(
           }}
         >
           <svg width="300" height="300" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="9.5" r="4" fill="#ffd166" />
+            <circle cx="12" cy="9.5" r="4" fill="#ffd23f" />
             <path
               d="M2.5 17.5c2 0 2-1.6 4-1.6s2 1.6 4 1.6 2-1.6 4-1.6 2 1.6 4 1.6 2-1.6 3-1.6"
               stroke="#ffffff"
@@ -113,7 +116,7 @@ export async function GET(
               {nome}
             </div>
             {prezzo ? (
-              <div style={{ display: "flex", marginTop: 20, fontSize: c.prezzo, fontWeight: 700, color: "#ffd166" }}>
+              <div style={{ display: "flex", marginTop: 20, fontSize: c.prezzo, fontWeight: 700, color: "#ffd23f" }}>
                 {prezzo}
               </div>
             ) : null}
@@ -126,7 +129,7 @@ export async function GET(
                 Inquadra e acquista
               </div>
               <div style={{ display: "flex", marginTop: 12, fontSize: c.tagline, fontWeight: 600, color: "rgba(255,255,255,0.74)" }}>
-                online o in negozio · Rimini
+                {taglineDisponibilita(soloOnline)}
               </div>
             </div>
 

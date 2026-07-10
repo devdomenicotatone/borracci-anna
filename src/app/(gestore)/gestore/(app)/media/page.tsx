@@ -1,4 +1,5 @@
 import { requireGestore } from "@/lib/gestore/auth";
+import { leggiTutteLeRighe } from "@/lib/supabase/scansione";
 import GestoreMedia, {
   type GruppoMedia,
 } from "@/components/gestore/GestoreMedia";
@@ -20,13 +21,26 @@ interface RigaFotoGrezza {
 export default async function MediaPage() {
   const { supabase } = await requireGestore();
 
-  const { data } = await supabase
-    .from("prodotto_foto")
-    .select("id, prodotto_id, colore, url, ordine, prodotti(nome, slug, attivo)")
-    .order("prodotto_id", { ascending: true })
-    .order("ordine", { ascending: true });
-
-  const righe = (data as unknown as RigaFotoGrezza[] | null) ?? [];
+  // Scansione a blocchi: con ~1840 prodotti (piu foto ciascuno) una select non
+  // paginata verrebbe troncata a max-rows e la libreria mostrerebbe solo una
+  // parte delle foto, facendo credere completa un'operazione (es. "Ripulisci
+  // bordi bianchi") in realta parziale. Tie-break su id per blocchi stabili.
+  let righe: RigaFotoGrezza[] = [];
+  try {
+    righe = await leggiTutteLeRighe<RigaFotoGrezza>((conteggio) =>
+      supabase
+        .from("prodotto_foto")
+        .select(
+          "id, prodotto_id, colore, url, ordine, prodotti(nome, slug, attivo)",
+          conteggio ? { count: "exact" } : undefined,
+        )
+        .order("prodotto_id", { ascending: true })
+        .order("ordine", { ascending: true })
+        .order("id", { ascending: true }),
+    );
+  } catch {
+    righe = [];
+  }
 
   // Raggruppa per prodotto preservando l'ordine delle foto.
   const mappa = new Map<string, GruppoMedia>();

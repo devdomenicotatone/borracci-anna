@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Categoria } from "@/lib/types";
 import type { ConteggiCategorie, FiltriGestore } from "@/lib/filtri-gestore";
 import { idConDiscendenti } from "@/lib/categorie-albero";
+import { BLOCCO_SCANSIONE, scansionaBlocchi } from "@/lib/supabase/scansione";
 import type { ProdottoLista } from "@/components/gestore/ListaProdotti";
 
 /** Prodotti per "pagina" della lista (il "Mostra altri" ne aggiunge altrettanti). */
@@ -19,6 +20,9 @@ export interface EsitoListaGestore {
   prodotti: ProdottoLista[];
   /** Totale dei prodotti che rispettano i filtri (oltre la pagina corrente). */
   totale: number;
+  /** true se la RPC ha fallito: distingue un errore transitorio (Supabase giu)
+   *  dal catalogo davvero vuoto, cosi la UI non mostra "Crea il primo prodotto". */
+  errore?: boolean;
 }
 
 /** Riga grezza ritornata da cerca_prodotti_gestore. */
@@ -61,8 +65,9 @@ function argomentiCategoria(
 /**
  * Una pagina di prodotti del gestore che rispettano i filtri, con gli aggregati
  * (num varianti, stock totale) e il totale dei match. Modello "Mostra altri"
- * cumulativo: offset 0, limit crescente (come la vetrina). Degrada a vuoto su
- * errore. Il client Supabase e quello di sessione (RLS: il gestore vede anche i
+ * cumulativo: offset 0, limit crescente (come la vetrina). Su errore RPC ritorna
+ * lista vuota ma con `errore: true`, cosi la UI lo distingue dal catalogo vuoto.
+ * Il client Supabase e quello di sessione (RLS: il gestore vede anche i
  * nascosti).
  */
 export async function caricaProdottiGestore(
@@ -71,18 +76,31 @@ export async function caricaProdottiGestore(
 ): Promise<EsitoListaGestore> {
   const { filtri, pagina, categorie } = opzioni;
   const cat = argomentiCategoria(filtri, categorie);
+  const limite = pagina * PRODOTTI_PER_PAGINA_GESTORE;
 
-  const { data, error } = await supabase.rpc("cerca_prodotti_gestore", {
-    p_q: filtri.q,
-    p_stato: filtri.stato,
-    p_ordina: filtri.ordina,
-    p_offset: 0,
-    p_limit: pagina * PRODOTTI_PER_PAGINA_GESTORE,
-    ...cat,
-  });
-
-  if (error || !data) return { prodotti: [], totale: 0 };
-  const righe = data as RigaRpc[];
+  // La RPC applica offset/limit e restituisce il totale (window count) su ogni
+  // riga, ma PostgREST tronca comunque la RISPOSTA a max-rows (1000): oltre la
+  // pagina 20 il "Mostra altri" resterebbe fermo e lo scroll infinito
+  // continuerebbe a chiedere righe che non arrivano mai. Leggiamo l'output della
+  // RPC a blocchi (l'ordinamento della funzione ha il tie-break su id, stabile).
+  const righe: RigaRpc[] = [];
+  for (let da = 0; da < limite; da += BLOCCO_SCANSIONE) {
+    const a = Math.min(da + BLOCCO_SCANSIONE, limite) - 1;
+    const { data, error } = await supabase
+      .rpc("cerca_prodotti_gestore", {
+        p_q: filtri.q,
+        p_stato: filtri.stato,
+        p_ordina: filtri.ordina,
+        p_offset: 0,
+        p_limit: limite,
+        ...cat,
+      })
+      .range(da, a);
+    if (error) return { prodotti: [], totale: 0, errore: true };
+    const blocco = (data as RigaRpc[] | null) ?? [];
+    righe.push(...blocco);
+    if (blocco.length < a - da + 1) break; // blocco corto = match esauriti
+  }
 
   const prodotti: ProdottoLista[] = righe.map((p) => ({
     id: p.id,
@@ -135,12 +153,23 @@ export async function idsProdottiGestore(
   const { filtri, categorie } = opzioni;
   const cat = argomentiCategoria(filtri, categorie);
 
-  const { data, error } = await supabase.rpc("ids_prodotti_gestore", {
-    p_q: filtri.q,
-    p_stato: filtri.stato,
-    ...cat,
-  });
-
-  if (error || !data) return [];
-  return (data as { id: string }[]).map((r) => r.id);
+  // Scansione a blocchi dell'output della RPC: anche una funzione che ritorna un
+  // SET subisce il max-rows di PostgREST, quindi con ~1840 prodotti "Seleziona
+  // tutti i N" riceverebbe solo i primi 1000 id e le azioni in blocco (elimina,
+  // assegna categoria) lascerebbero fuori il resto in silenzio. Ordine per id
+  // (stabile) e count del primo blocco come guida.
+  try {
+    const { righe } = await scansionaBlocchi<{ id: string }>((conteggio) =>
+      supabase
+        .rpc(
+          "ids_prodotti_gestore",
+          { p_q: filtri.q, p_stato: filtri.stato, ...cat },
+          conteggio ? { count: "exact" } : undefined,
+        )
+        .order("id", { ascending: true }),
+    );
+    return righe.map((r) => r.id);
+  } catch {
+    return [];
+  }
 }

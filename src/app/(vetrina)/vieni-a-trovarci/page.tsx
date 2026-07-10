@@ -21,7 +21,7 @@ export default function VieniATrovarciPage() {
       <section className="bg-sea-gradient relative isolate overflow-hidden text-white">
         <span
           aria-hidden="true"
-          className="dots-overlay absolute inset-0 -z-10 opacity-50 [mask-image:linear-gradient(180deg,#000_0%,transparent_70%)]"
+          className="dots-overlay absolute inset-0 -z-10 opacity-50 [-webkit-mask-image:linear-gradient(180deg,#000_0%,transparent_70%)] [mask-image:linear-gradient(180deg,#000_0%,transparent_70%)]"
         />
         <div className="mx-auto max-w-6xl px-5 pb-20 pt-12 sm:pb-24 sm:pt-16">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-medium ring-1 ring-white/35 backdrop-blur">
@@ -187,8 +187,13 @@ export default function VieniATrovarciPage() {
             </div>
           </div>
 
-          {/* Mappa interattiva con pin brandizzato */}
-          <div className="relative min-h-[340px] overflow-hidden rounded-3xl shadow-sea ring-1 ring-line lg:min-h-0">
+          {/* Mappa interattiva con pin brandizzato.
+              `isolate`: crea uno stacking context cosi i z-index interni di
+              Leaflet (pane/controlli/popup, fino a ~1000) restano confinati qui
+              e non salgono sopra l'header sticky (il menu a tendina ci passava
+              dietro). La pillola "Indicazioni" a z-[1100] resta comunque sopra
+              la mappa perche e nello stesso contesto. */}
+          <div className="relative isolate min-h-[340px] overflow-hidden rounded-3xl shadow-sea ring-1 ring-line lg:min-h-0">
             <MappaNegozio />
             {/* Pillola indicazioni sovrapposta (sopra i controlli Leaflet) */}
             <a

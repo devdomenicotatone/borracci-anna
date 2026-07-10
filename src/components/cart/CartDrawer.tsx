@@ -16,6 +16,7 @@ import CartItem, { CheckoutButton } from "@/components/CartItem";
 import FreeShippingBar from "@/components/cart/FreeShippingBar";
 import { useCarrello } from "@/components/cart/CartProvider";
 import { formatPrezzo } from "@/lib/format";
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 
 export default function CartDrawer() {
   const { righe, count, subtotaleCents, valuta, drawerAperto, chiudiDrawer } =
@@ -28,8 +29,7 @@ export default function CartDrawer() {
     if (!drawerAperto) return;
 
     elementoPrecedenteRef.current = document.activeElement as HTMLElement | null;
-    const overflowPrecedente = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const sbloccaScroll = bloccaScrollBody();
 
     const pannello = pannelloRef.current;
     // Focus al primo elementi focusabile (di solito il bottone chiudi).
@@ -66,7 +66,7 @@ export default function CartDrawer() {
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflowPrecedente;
+      sbloccaScroll();
       elementoPrecedenteRef.current?.focus?.();
     };
   }, [drawerAperto, chiudiDrawer]);
@@ -152,7 +152,7 @@ export default function CartDrawer() {
             </div>
 
             {/* Footer azioni */}
-            <div className="border-t border-line bg-surface px-5 py-4">
+            <div className="border-t border-line bg-surface px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted">Subtotale</span>
                 <span className="font-display text-xl font-extrabold text-sea">

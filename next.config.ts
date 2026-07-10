@@ -43,6 +43,35 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "12mb",
     },
   },
+  // Header di sicurezza su tutte le risposte. Niente CSP completa (romperebbe gli
+  // stili inline di styled-components / next-image senza un setup a nonce): qui
+  // solo le difese sicure e ad alto valore.
+  //   - frame-ancestors 'none' + X-Frame-Options DENY: niente framing del sito
+  //     (anti-clickjacking, in particolare dell'area gestore). Il checkout Stripe
+  //     e un REDIRECT, non un iframe, quindi non viene toccato.
+  //   - HSTS: forza HTTPS alle visite successive (Vercel serve gia tutto in TLS).
+  //   - nosniff / Referrer-Policy / Permissions-Policy: rifiniture standard.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

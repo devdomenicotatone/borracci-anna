@@ -48,6 +48,11 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
             src={immagine}
             alt=""
             aria-hidden="true"
+            // Immagine LCP della home: priorita alta e decoding asincrono per non
+            // ritardare il render del testo dell'hero (l'URL e libero, quindi resta
+            // un <img> nativo invece di next/image).
+            fetchPriority="high"
+            decoding="async"
             className="absolute inset-0 -z-20 h-full w-full object-cover"
           />
           <span
@@ -64,7 +69,7 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
       {/* Puntini bianchi sfumati verso il basso. */}
       <span
         aria-hidden="true"
-        className="dots-overlay absolute inset-0 -z-10 opacity-50 [mask-image:linear-gradient(180deg,#000_0%,transparent_62%)]"
+        className="dots-overlay absolute inset-0 -z-10 opacity-50 [-webkit-mask-image:linear-gradient(180deg,#000_0%,transparent_62%)] [mask-image:linear-gradient(180deg,#000_0%,transparent_62%)]"
       />
 
       {/* Sticker ruotati (decorativi), solo da md+. */}

@@ -31,6 +31,7 @@ import {
   copiaFotoTraProdottiAction,
   creaProdottoDaImportAction,
   importaFotoDaUrlAction,
+  revalidaCatalogoAction,
   type BozzaImport,
 } from "@/lib/gestore/import-actions";
 import { toggleAttivoAction } from "@/lib/gestore/actions";
@@ -43,14 +44,18 @@ import CategoriaSelect from "@/components/gestore/CategoriaSelect";
 import RevisioneBozza, {
   type DatiRevisione,
 } from "@/components/gestore/RevisioneBozza";
+import {
+  ChevronSelect,
+  Spinner,
+  SwitchMini,
+  SwitchRiga,
+  inputCls,
+} from "@/components/gestore/ui";
 import { useToast } from "@/components/gestore/Toaster";
 import { slugify } from "@/lib/gestore/slug";
 import { dividiTagliePerPubblico } from "@/lib/catalogo";
 import { gruppiCategorie } from "@/lib/categorie-albero";
 import type { Categoria } from "@/lib/types";
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 type StatoItem =
   | "attesa"
@@ -263,6 +268,23 @@ export default function ImportaBatch({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [lavoroInCorso]);
 
+  // A fine batch (fase "riepilogo") una sola revalidate completa del catalogo:
+  // durante il lavoro create/foto girano con revalida:false (bozze invisibili),
+  // quindi home/PDP/correlati/facette si allineano qui in un colpo invece di
+  // migliaia di volte durante l'import. Guard con ref: una volta sola per run,
+  // riarmata quando si esce dal riepilogo (nuovo batch).
+  const revalidatoRef = useRef(false);
+  useEffect(() => {
+    if (fase === "riepilogo") {
+      if (!revalidatoRef.current) {
+        revalidatoRef.current = true;
+        void revalidaCatalogoAction();
+      }
+    } else {
+      revalidatoRef.current = false;
+    }
+  }, [fase]);
+
   async function attesaPausa() {
     while (pausaRef.current && !abortRef.current) await sleep(300);
   }
@@ -314,6 +336,9 @@ export default function ImportaBatch({
       colore: dati.colore,
       categoriaId: dati.categoriaId,
       soloOnline: dati.soloOnline,
+      // Batch: niente revalidate globale per ogni scheda (sono bozze invisibili);
+      // una sola revalidaCatalogoAction() a fine batch. Vedi useEffect su "fase".
+      revalida: false,
     });
     if (!c.ok || !c.prodottoId) {
       if (c.duplicato) {
@@ -361,6 +386,7 @@ export default function ImportaBatch({
             c.prodottoId,
             dati.fotoSel[f],
             urlScheda,
+            false, // batch: solo scheda gestore, revalidate globale a fine corsa
           );
           if (esito.ok) fotoOk++;
         } catch {
@@ -482,7 +508,13 @@ export default function ImportaBatch({
         creato = true;
         if (!primoId) primoId = cur.prodottoId;
         if (cur.stato === "pubblicato") pubblicato = true;
-        if (jobs.length > 1 && cur.nota) note.push(`${j.pubblico}: ${cur.nota}`);
+        // Conserva la nota anche col job singolo (il caso piu comune): prima
+        // veniva raccolta solo con jobs.length > 1 e l'aggiornamento finale la
+        // sovrascriveva con undefined — avvisi tipo "3 foto non importate"
+        // sparivano dal riepilogo.
+        if (cur.nota) {
+          note.push(jobs.length > 1 ? `${j.pubblico}: ${cur.nota}` : cur.nota);
+        }
       } else {
         if (cur.stato !== "duplicato") tuttiDup = false;
         note.push(
@@ -995,20 +1027,7 @@ export default function ImportaBatch({
                       </Fragment>
                     ))}
                   </select>
-                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-4 w-4"
-                      aria-hidden="true"
-                    >
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </span>
+                  <ChevronSelect />
                 </div>
                 <button
                   type="button"
@@ -1050,19 +1069,19 @@ export default function ImportaBatch({
             <span className="font-display text-sm font-bold text-foreground">
               Opzioni
             </span>
-            <OpzioneToggle
+            <SwitchRiga
               titolo="Riscrivi i testi con l'AI"
               descrizione="Nome e descrizione riscritti in stile catalogo. Più lento ma più curato."
               acceso={riscriviAI}
               onToggle={() => setRiscriviAI((v) => !v)}
             />
-            <OpzioneToggle
+            <SwitchRiga
               titolo="Pubblica subito"
               descrizione="A fine import i prodotti con almeno una foto vanno in vendita. Spento = restano bozze da rivedere."
               acceso={pubblica}
               onToggle={() => setPubblica((v) => !v)}
             />
-            <OpzioneToggle
+            <SwitchRiga
               titolo="Solo online"
               descrizione="Articoli non presenti in negozio: in vetrina compare il badge «Solo online» su tutti i prodotti importati."
               acceso={soloOnline}
@@ -1329,22 +1348,6 @@ function BarraAvanzamento({
   );
 }
 
-function Spinner({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      className={`animate-spin ${className}`}
-      aria-hidden="true"
-    >
-      <path d="M21 12a9 9 0 1 1-6.2-8.56" />
-    </svg>
-  );
-}
-
 function RigaItem({
   item,
   indice,
@@ -1468,74 +1471,3 @@ function CardModalita({
   );
 }
 
-function OpzioneToggle({
-  titolo,
-  descrizione,
-  acceso,
-  onToggle,
-}: {
-  titolo: string;
-  descrizione: string;
-  acceso: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={acceso}
-      onClick={onToggle}
-      className="flex w-full items-center justify-between gap-4 rounded-2xl bg-white px-4 py-3 text-left ring-1 ring-line transition-all hover:ring-lagoon"
-    >
-      <span className="min-w-0">
-        <span className="block font-display text-sm font-bold text-foreground">
-          {titolo}
-        </span>
-        <span className="mt-0.5 block text-xs text-muted">{descrizione}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-          acceso ? "bg-sea" : "bg-line"
-        }`}
-      >
-        <span
-          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
-            acceso ? "left-6" : "left-1"
-          }`}
-        />
-      </span>
-    </button>
-  );
-}
-
-/** Interruttore compatto (accanto a una label), per "importa questo pubblico". */
-function SwitchMini({
-  on,
-  onClick,
-  label,
-}: {
-  on: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={onClick}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-        on ? "bg-sea" : "bg-line"
-      }`}
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all ${
-          on ? "left-6" : "left-1"
-        }`}
-      />
-    </button>
-  );
-}

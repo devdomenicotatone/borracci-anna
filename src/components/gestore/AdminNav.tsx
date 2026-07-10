@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import Wordmark from "@/components/Wordmark";
+import PulsanteInstallaApp from "@/components/gestore/PulsanteInstallaApp";
 import { logoutGestore } from "@/lib/gestore/auth-actions";
 
 function IconaProdotti({ className }: { className?: string }) {
@@ -102,6 +103,24 @@ function IconaVetrina({ className }: { className?: string }) {
   );
 }
 
+function IconaScudo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 2 4 5.5V11c0 5 3.4 9.2 8 10.5 4.6-1.3 8-5.5 8-10.5V5.5L12 2z" />
+      <path d="m8.8 11.8 2.3 2.3 4.1-4.6" />
+    </svg>
+  );
+}
+
 function IconaMedia({ className }: { className?: string }) {
   return (
     <svg
@@ -125,17 +144,22 @@ function IconaMedia({ className }: { className?: string }) {
 export default function AdminNav({
   nome,
   ruolo,
+  ordiniDaConfermare = 0,
 }: {
   nome: string | null;
   ruolo: string;
+  /** Richieste in attesa: mostra un badge sulla voce Ordini. */
+  ordiniDaConfermare?: number;
 }) {
   const pathname = usePathname();
+  const badgeOrdini = ordiniDaConfermare > 99 ? "99+" : String(ordiniDaConfermare);
   const suNuovo = pathname.startsWith("/gestore/prodotti/nuovo");
   const suProdotti = pathname.startsWith("/gestore/prodotti") && !suNuovo;
   const suVetrina = pathname.startsWith("/gestore/vetrina");
   const suCategorie = pathname.startsWith("/gestore/categorie");
   const suOrdini = pathname.startsWith("/gestore/ordini");
   const suMedia = pathname.startsWith("/gestore/media");
+  const suSicurezza = pathname.startsWith("/gestore/sicurezza");
   // Sulle pagine di form (nuovo / modifica) la save-bar prende il fondo:
   // nascondiamo la bottom-nav mobile per non sovrapporle.
   const suFormProdotto = /^\/gestore\/prodotti\/.+/.test(pathname);
@@ -151,14 +175,24 @@ export default function AdminNav({
             suffixClassName="ml-1 text-sm font-medium text-muted"
           />
         </Link>
-        <form action={logoutGestore}>
-          <button
-            type="submit"
-            className="rounded-full px-3 py-2 text-sm font-display font-bold text-sea transition-colors hover:bg-surface"
+        <div className="flex items-center gap-1">
+          <Link
+            href="/gestore/sicurezza"
+            aria-label="Sicurezza account"
+            className={`grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-surface ${suSicurezza ? "text-sea" : "text-muted"}`}
           >
-            Esci
-          </button>
-        </form>
+            <IconaScudo className="h-5 w-5" />
+          </Link>
+          <PulsanteInstallaApp variante="compatta" />
+          <form action={logoutGestore}>
+            <button
+              type="submit"
+              className="rounded-full px-3 py-2 text-sm font-display font-bold text-sea transition-colors hover:bg-surface"
+            >
+              Esci
+            </button>
+          </form>
+        </div>
       </header>
 
       {/* SIDEBAR desktop */}
@@ -180,27 +214,32 @@ export default function AdminNav({
           </Link>
         </div>
         <nav className="mt-6 flex flex-1 flex-col gap-1 px-4">
-          <Link href="/gestore/prodotti" className={voceSidebar(suProdotti)}>
+          <Link href="/gestore/prodotti" aria-current={suProdotti ? "page" : undefined} className={voceSidebar(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             Prodotti
           </Link>
-          <Link href="/gestore/vetrina" className={voceSidebar(suVetrina)}>
+          <Link href="/gestore/vetrina" aria-current={suVetrina ? "page" : undefined} className={voceSidebar(suVetrina)}>
             <IconaVetrina className="h-5 w-5" />
             Vetrina
           </Link>
-          <Link href="/gestore/categorie" className={voceSidebar(suCategorie)}>
+          <Link href="/gestore/categorie" aria-current={suCategorie ? "page" : undefined} className={voceSidebar(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />
             Categorie
           </Link>
-          <Link href="/gestore/ordini" className={voceSidebar(suOrdini)}>
+          <Link href="/gestore/ordini" aria-current={suOrdini ? "page" : undefined} className={voceSidebar(suOrdini)}>
             <IconaOrdini className="h-5 w-5" />
             Ordini
+            {ordiniDaConfermare > 0 && (
+              <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white">
+                {badgeOrdini}
+              </span>
+            )}
           </Link>
-          <Link href="/gestore/media" className={voceSidebar(suMedia)}>
+          <Link href="/gestore/media" aria-current={suMedia ? "page" : undefined} className={voceSidebar(suMedia)}>
             <IconaMedia className="h-5 w-5" />
             Media
           </Link>
-          <Link href="/gestore/prodotti/nuovo" className={voceSidebar(suNuovo)}>
+          <Link href="/gestore/prodotti/nuovo" aria-current={suNuovo ? "page" : undefined} className={voceSidebar(suNuovo)}>
             <IconaPiu className="h-5 w-5" />
             Nuovo prodotto
           </Link>
@@ -220,37 +259,54 @@ export default function AdminNav({
               <p className="truncate text-xs capitalize text-muted">{ruolo}</p>
             </div>
           </div>
-          <form action={logoutGestore} className="mt-3">
-            <button
-              type="submit"
-              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-background hover:text-foreground"
+          <div className="mt-3">
+            <Link
+              href="/gestore/sicurezza"
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-background hover:text-foreground ${suSicurezza ? "text-sea" : "text-muted"}`}
             >
-              Esci
-            </button>
-          </form>
+              <IconaScudo className="h-5 w-5" />
+              Sicurezza
+            </Link>
+            <PulsanteInstallaApp variante="sidebar" />
+            <form action={logoutGestore}>
+              <button
+                type="submit"
+                className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-muted transition-colors hover:bg-background hover:text-foreground"
+              >
+                Esci
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
 
       {/* BOTTOM-NAV mobile (nascosta sulle pagine di form) */}
       {!suFormProdotto && (
         <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-          <Link href="/gestore/prodotti" className={voceBottom(suProdotti)}>
+          <Link href="/gestore/prodotti" aria-current={suProdotti ? "page" : undefined} className={voceBottom(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             <span>Prodotti</span>
           </Link>
-          <Link href="/gestore/vetrina" className={voceBottom(suVetrina)}>
+          <Link href="/gestore/vetrina" aria-current={suVetrina ? "page" : undefined} className={voceBottom(suVetrina)}>
             <IconaVetrina className="h-5 w-5" />
             <span>Vetrina</span>
           </Link>
-          <Link href="/gestore/categorie" className={voceBottom(suCategorie)}>
+          <Link href="/gestore/categorie" aria-current={suCategorie ? "page" : undefined} className={voceBottom(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />
             <span>Categorie</span>
           </Link>
-          <Link href="/gestore/ordini" className={voceBottom(suOrdini)}>
-            <IconaOrdini className="h-5 w-5" />
+          <Link href="/gestore/ordini" aria-current={suOrdini ? "page" : undefined} className={voceBottom(suOrdini)}>
+            <span className="relative">
+              <IconaOrdini className="h-5 w-5" />
+              {ordiniDaConfermare > 0 && (
+                <span className="absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-coral px-1 text-[10px] font-bold text-white">
+                  {badgeOrdini}
+                </span>
+              )}
+            </span>
             <span>Ordini</span>
           </Link>
-          <Link href="/gestore/media" className={voceBottom(suMedia)}>
+          <Link href="/gestore/media" aria-current={suMedia ? "page" : undefined} className={voceBottom(suMedia)}>
             <IconaMedia className="h-5 w-5" />
             <span>Media</span>
           </Link>
@@ -271,7 +327,10 @@ function voceSidebar(attivo: boolean): string {
 
 function voceBottom(attivo: boolean): string {
   return [
-    "flex h-16 flex-col items-center justify-center gap-1 text-xs font-display font-bold transition-colors",
-    attivo ? "text-sea" : "text-muted",
+    "relative flex h-16 flex-col items-center justify-center gap-1 text-xs font-display font-bold transition-colors",
+    // Attivo distinto non solo dal colore (WCAG 1.4.1): anche una barretta in alto.
+    attivo
+      ? "text-sea before:absolute before:inset-x-5 before:top-0 before:h-[3px] before:rounded-full before:bg-sea before:content-['']"
+      : "text-muted",
   ].join(" ");
 }

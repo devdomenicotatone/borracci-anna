@@ -8,6 +8,7 @@ import "server-only";
 // configurato o errore degrada a una vetrina d'esempio / a quel che riesce a
 // leggere, cosi la home rende sempre (anche in build senza env).
 
+import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/database.types";
@@ -19,12 +20,15 @@ import type {
 } from "@/lib/types";
 import { TIPI_SEZIONE_VETRINA } from "@/lib/types";
 import { FILTRI_VUOTI } from "@/lib/filtri-catalogo";
-import { caricaCategoriePubbliche } from "@/lib/categorie";
+import { caricaCategorie } from "@/lib/categorie";
 import { idConDiscendenti } from "@/lib/categorie-albero";
+import { createAdminSupabase } from "@/lib/supabase/admin";
 import {
   CAMPI_CARD,
   PRODOTTI_ESEMPIO,
   caricaProdottiVetrina,
+  normalizzaCard,
+  type RigaCard,
 } from "@/lib/vetrina";
 
 type Supabase = SupabaseClient<Database>;
@@ -159,8 +163,9 @@ async function prodottiPinnati(
     .limit(limite);
   if (error || !data) return [];
   return data
-    .map((r) => (r as unknown as { prodotti: Prodotto }).prodotti)
-    .filter(Boolean);
+    .map((r) => (r as unknown as { prodotti: RigaCard }).prodotti)
+    .filter(Boolean)
+    .map(normalizzaCard);
 }
 
 /** Prodotti di una fascia automatica secondo la regola, + href "vedi tutti". */
@@ -174,7 +179,12 @@ async function prodottiAuto(
   let query = supabase.from("prodotti").select(CAMPI_CARD).eq("attivo", true);
   let href = "/prodotti";
 
-  if (regola === "categoria" && config.categoriaId) {
+  if (regola === "categoria") {
+    // Difesa: regola per categoria SENZA categoria scelta (config incompleta
+    // salvata prima della validazione, o categoria eliminata): fascia vuota
+    // (omessa in home) invece di degradare in silenzio a tutto il catalogo
+    // sotto un titolo sbagliato. La validazione vera e in salvaSezioneAction.
+    if (!config.categoriaId) return { prodotti: [], href };
     const ids = idConDiscendenti(categorie, config.categoriaId);
     query = query.in("categoria_id", ids);
     const cat = categorie.find((c) => c.id === config.categoriaId);
@@ -190,7 +200,10 @@ async function prodottiAuto(
     .order("id", { ascending: true })
     .limit(limite);
   if (error || !data) return { prodotti: [], href };
-  return { prodotti: data as unknown as Prodotto[], href };
+  return {
+    prodotti: (data as unknown as RigaCard[]).map(normalizzaCard),
+    href,
+  };
 }
 
 /** True per i tipi che mostrano un carosello di prodotti. */
@@ -222,8 +235,10 @@ export async function caricaVetrina(
   if (!righe || righe.length === 0) return [];
 
   // Le categorie servono per i href "vedi tutti" e per espandere una regola
-  // categoria ai suoi discendenti. Caricate una volta (cache di richiesta).
-  const categorie = await caricaCategoriePubbliche();
+  // categoria ai suoi discendenti. Caricate col client passato (cookieless
+  // quando la vetrina gira dentro la cache: mai caricaCategoriePubbliche(), che
+  // legge i cookie e non e ammessa dentro unstable_cache).
+  const categorie = await caricaCategorie(supabase);
 
   const fasce = await Promise.all(
     righe.map(async (riga): Promise<FasciaVetrina | null> => {
@@ -262,4 +277,37 @@ export async function caricaVetrina(
     (f): f is FasciaVetrina =>
       f !== null && (!eTipoProdotti(f.tipo) || f.prodotti.length > 0),
   );
+}
+
+/** Tag per invalidare a mano la cache della vetrina home (revalidateTag). */
+export const TAG_VETRINA_HOME = "vetrina-home";
+/** La home cambia di rado (solo quando il gestore tocca le fasce): 5 minuti. */
+const VETRINA_HOME_REVALIDATE_S = 300;
+
+/**
+ * Come caricaVetrina, ma CACHEATA (unstable_cache + tag), cosi il set di query
+ * delle fasce non gira a ogni richiesta della pagina piu trafficata. Come per le
+ * facette, l'aggregazione usa un client COOKIELESS creato internamente
+ * (unstable_cache non accetta il client Supabase ne puo leggere i cookie): i dati
+ * della vetrina sono pubblici (attivo=true), coerenti con l'anon.
+ * Le vetrina-actions / il sync / le modifiche categorie invalidano via
+ * revalidateTag(TAG_VETRINA_HOME). Senza service role si degrada alla vetrina
+ * d'esempio senza cachare nulla.
+ */
+export async function caricaVetrinaCache(): Promise<FasciaVetrina[]> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return VETRINA_ESEMPIO;
+
+  const cached = unstable_cache(
+    () => caricaVetrina(createAdminSupabase()),
+    ["vetrina-home"],
+    { revalidate: VETRINA_HOME_REVALIDATE_S, tags: [TAG_VETRINA_HOME] },
+  );
+
+  try {
+    return await cached();
+  } catch {
+    // Errore transitorio: si degrada per QUESTA richiesta senza avvelenare la
+    // cache (unstable_cache non memorizza quando la funzione lancia).
+    return VETRINA_ESEMPIO;
+  }
 }

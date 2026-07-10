@@ -23,6 +23,7 @@ import {
 import type { EsitoVetrina, VetrinaSezioneAdmin } from "@/lib/gestore/vetrina";
 import { useToast } from "@/components/gestore/Toaster";
 import CategoriaSelect from "@/components/gestore/CategoriaSelect";
+import { Campo, ChevronSelect, inputCls } from "@/components/gestore/ui";
 import {
   useSortableList,
   type ContestoRiga,
@@ -36,9 +37,6 @@ import {
   type RegolaProdottiAuto,
   type TipoSezioneVetrina,
 } from "@/lib/types";
-
-const inputCls =
-  "h-11 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea";
 
 const TIPO_META: Record<
   TipoSezioneVetrina,
@@ -891,32 +889,3 @@ function MiniFoto({ prodotto }: { prodotto: Prodotto }) {
   );
 }
 
-function ChevronSelect() {
-  return (
-    <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-muted">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </span>
-  );
-}
-
-function Campo({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="font-display text-sm font-bold text-foreground">
-        {label}
-      </span>
-      {children}
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
-    </div>
-  );
-}

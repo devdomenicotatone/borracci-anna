@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { GruppoCategorie } from "@/lib/categorie-albero";
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 import Wordmark from "@/components/Wordmark";
 
 export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
@@ -21,8 +22,7 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
     if (!aperto) return;
 
     elementoPrecedenteRef.current = document.activeElement as HTMLElement | null;
-    const overflowPrecedente = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const sbloccaScroll = bloccaScrollBody();
 
     const pannello = pannelloRef.current;
     const focusabili = () =>
@@ -58,7 +58,7 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflowPrecedente;
+      sbloccaScroll();
       elementoPrecedenteRef.current?.focus?.();
     };
   }, [aperto]);
@@ -72,7 +72,8 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
         onClick={() => setAperto(true)}
         aria-label="Apri il menu"
         aria-haspopup="dialog"
-        className="grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:hidden"
+        aria-expanded={aperto}
+        className="grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 lg:hidden"
       >
         <svg
           viewBox="0 0 24 24"
@@ -94,7 +95,7 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
           CartDrawer, che vive gia fuori dall'header nel layout). */}
       {aperto &&
         createPortal(
-          <div className="fixed inset-0 z-50 sm:hidden">
+          <div className="fixed inset-0 z-50 lg:hidden">
             {/* Overlay */}
             <button
               type="button"
@@ -187,6 +188,14 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
                 ))}
 
                 <Link
+                  href="/preferiti"
+                  onClick={chiudi}
+                  className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
+                >
+                  I tuoi preferiti
+                </Link>
+
+                <Link
                   href="/vieni-a-trovarci"
                   onClick={chiudi}
                   className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
@@ -195,7 +204,7 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
                 </Link>
               </nav>
 
-              <div className="border-t border-line bg-surface px-5 py-4">
+              <div className="border-t border-line bg-surface px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
                 <Link
                   href="/carrello"
                   onClick={chiudi}

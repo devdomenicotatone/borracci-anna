@@ -15,11 +15,13 @@
 import {
   startTransition,
   useActionState,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import {
   salvaProdottoAction,
@@ -34,6 +36,7 @@ import { gruppiCategorie, type GruppoCategorie } from "@/lib/categorie-albero";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import EditorVarianti from "@/components/gestore/EditorVarianti";
 import OpzioniCategorie from "@/components/gestore/OpzioniCategorie";
+import { Campo, inputCls } from "@/components/gestore/ui";
 import type { Categoria, VarianteInput } from "@/lib/types";
 
 export interface ProdottoForm {
@@ -66,9 +69,6 @@ function comboKey(colore: string | null, taglia: string | null): string {
 function stessoSet(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((x) => b.includes(x));
 }
-
-const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
 export default function FormProdotto({
   prodotto,
@@ -117,6 +117,9 @@ export default function FormProdotto({
     ),
   );
   const [confermaApri, setConfermaApri] = useState(false);
+  // Dialog "Scartare le modifiche?" per l'Annulla con lavoro non salvato.
+  const [confermaAnnulla, setConfermaAnnulla] = useState(false);
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
   // Gli errori per-campo del server scompaiono appena l'utente ricomincia a
@@ -254,6 +257,20 @@ export default function FormProdotto({
       tema !== (prodotto.tema ?? "") ||
       variantiCambiate
     : true;
+
+  // Guardia modifiche non salvate: con dati modificati e non ancora salvati,
+  // avvisa prima di chiudere/ricaricare la pagina o seguire un link esterno (il
+  // browser mostra il suo prompt nativo). Non copre la navigazione interna via
+  // Link, ma intercetta la perdita di dati piu comune (chiusura/refresh).
+  useEffect(() => {
+    if (!dirty || pending) return;
+    const avvisa = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", avvisa);
+    return () => window.removeEventListener("beforeunload", avvisa);
+  }, [dirty, pending]);
 
   const errori = erroriVisibili ? (stato.errors ?? {}) : {};
 
@@ -527,6 +544,16 @@ export default function FormProdotto({
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3 lg:max-w-5xl">
           <Link
             href="/gestore/prodotti"
+            onClick={(e) => {
+              // Modifiche non salvate: chiedi conferma invece di scartarle in
+              // silenzio (il beforeunload copre solo chiusura/refresh, non le
+              // navigazioni client). Adiacente a "Salva": un tap sbagliato
+              // non deve costare dieci minuti di lavoro.
+              if (dirty && !pending) {
+                e.preventDefault();
+                setConfermaAnnulla(true);
+              }
+            }}
             className="flex h-12 items-center rounded-full px-4 font-display text-sm font-bold text-muted transition-colors hover:text-foreground"
           >
             Annulla
@@ -547,6 +574,18 @@ export default function FormProdotto({
       </div>
 
       <ConfermaDialog
+        aperto={confermaAnnulla}
+        titolo="Scartare le modifiche?"
+        messaggio="Ci sono modifiche non salvate: uscendo dalla scheda andranno perse."
+        etichettaConferma="Scarta ed esci"
+        onConferma={() => {
+          setConfermaAnnulla(false);
+          router.push("/gestore/prodotti");
+        }}
+        onAnnulla={() => setConfermaAnnulla(false)}
+      />
+
+      <ConfermaDialog
         aperto={confermaApri}
         titolo="Salvare le modifiche?"
         messaggio={`${idsDaEliminare.length} variante/i non più coperta/e dalla selezione verrà/nno eliminata/e. Se sono in carrelli di clienti, quelle righe verranno svuotate.`}
@@ -556,37 +595,6 @@ export default function FormProdotto({
         onAnnulla={() => setConfermaApri(false)}
       />
     </form>
-  );
-}
-
-function Campo({
-  label,
-  htmlFor,
-  errore,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  errore?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="font-display text-sm font-bold text-foreground"
-      >
-        {label}
-      </label>
-      {children}
-      {errore ? (
-        <p className="text-xs font-bold text-coral-ink">{errore}</p>
-      ) : hint ? (
-        <p className="text-xs text-muted">{hint}</p>
-      ) : null}
-    </div>
   );
 }
 

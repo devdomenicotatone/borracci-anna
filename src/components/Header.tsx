@@ -9,14 +9,14 @@ import Link from "next/link";
 
 import CartBadge from "@/components/cart/CartBadge";
 import MenuMobile from "@/components/MenuMobile";
+import PreferitiBadge from "@/components/preferiti/PreferitiBadge";
 import Wordmark from "@/components/Wordmark";
-import { caricaCategoriePubbliche } from "@/lib/categorie";
-import { gruppiCategorie } from "@/lib/categorie-albero";
+import type { GruppoCategorie } from "@/lib/categorie-albero";
 
-export default async function Header() {
-  const categorie = await caricaCategoriePubbliche();
-  const gruppi = gruppiCategorie(categorie);
-
+// I gruppi categorie arrivano come prop dal layout: cosi il fetch categorie e
+// quello del carrello partono in parallelo (Promise.all nel layout) invece di
+// serializzarsi (statoCarrello -> render Header -> fetch categorie).
+export default function Header({ gruppi }: { gruppi: GruppoCategorie[] }) {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-5 sm:gap-4">
@@ -42,9 +42,11 @@ export default async function Header() {
             Vetrina
           </Link>
 
-          {/* Menu categorie (desktop): macro cliccabile + dropdown figlie. */}
+          {/* Menu categorie: inline solo da lg in su. Sotto lg le categorie
+              vivono nell'hamburger (MenuMobile), cosi con molte radici la riga
+              header non sfonda ne spinge fuori le icone carrello/preferiti. */}
           {gruppi.map(({ radice, figlie }) => (
-            <div key={radice.id} className="group relative hidden sm:block">
+            <div key={radice.id} className="group relative hidden lg:block">
               <Link
                 href={`/categoria/${radice.slug}`}
                 className="inline-flex items-center gap-1 rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea"
@@ -58,7 +60,7 @@ export default async function Header() {
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea"
+                    className="h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea group-has-[:focus-visible]:rotate-180 group-has-[:focus-visible]:text-sea"
                     aria-hidden="true"
                   >
                     <path d="m6 9 6 6 6-6" />
@@ -68,8 +70,12 @@ export default async function Header() {
 
               {figlie.length > 0 && (
                 // pt-2 senza gap reale: il puntatore non "cade" tra trigger e
-                // pannello. Visibile su hover del gruppo o focus interno (Tab).
-                <div className="invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+                // pannello. Visibile su hover del gruppo o focus DA TASTIERA
+                // interno (:focus-visible via :has). NON usiamo focus-within: il
+                // click del mouse lascia il focus sul trigger <Link> e terrebbe
+                // il pannello aperto, cosi passando col mouse su un'altra voce se
+                // ne aprivano due insieme.
+                <div className="invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100">
                   {/* max-h + scroll: con figlie e nipoti il pannello puo
                       superare il viewport (header sticky a 4rem). */}
                   <div className="max-h-[calc(100vh-6rem)] min-w-48 overflow-y-auto rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
@@ -109,6 +115,28 @@ export default async function Header() {
             className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea sm:inline-flex"
           >
             Vieni a trovarci
+          </Link>
+
+          {/* Preferiti: cuore con badge, stessi codici visivi del carrello. */}
+          <Link
+            href="/preferiti"
+            aria-label="I tuoi preferiti"
+            className="relative grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 20.7S4.6 16 2.8 11.6C1.5 8.6 3.2 5.3 6.4 4.9c2-.3 3.8.7 4.7 2.2h1.8c.9-1.5 2.7-2.5 4.7-2.2 3.2.4 4.9 3.7 3.6 6.7C19.4 16 12 20.7 12 20.7Z" />
+            </svg>
+            <PreferitiBadge />
           </Link>
 
           {/* Carrello: icon-btn tondo (tap target 44px) con badge corallo. */}

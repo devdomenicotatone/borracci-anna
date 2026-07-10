@@ -27,12 +27,13 @@ import {
   spostaCategoriaAction,
   riordinaCategorieAction,
   eliminaCategoriaAction,
-  rigeneraSlugCategorieAction,
+  contaFasceVetrinaCategoriaAction,
   riordinaTemiAction,
   type EsitoCategorie,
 } from "@/lib/gestore/categorie-actions";
 import { useToast } from "@/components/gestore/Toaster";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
+import { inputCls } from "@/components/gestore/ui";
 import {
   useSortableList,
   type ContestoRiga,
@@ -40,9 +41,6 @@ import {
   type NestSortable,
 } from "@/components/gestore/useSortableList";
 import type { Categoria } from "@/lib/types";
-
-const inputCls =
-  "h-11 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea";
 
 // Riferimento stabile per i gruppi figli vuoti: un `[]` nuovo a ogni render
 // farebbe scattare inutilmente l'allineamento render-phase di useSortableList.
@@ -59,7 +57,9 @@ export default function GestoreCategorie({
   const [righe, setRighe] = useState<Categoria[]>(iniziali);
   const [pending, startTransition] = useTransition();
   const [daEliminare, setDaEliminare] = useState<Categoria | null>(null);
-  const [confermaRigenera, setConfermaRigenera] = useState(false);
+  // Quante fasce home puntano alla categoria in corso di eliminazione: caricato
+  // al volo all'apertura del dialog (null = ancora ignoto/non pertinente).
+  const [fasceCollegate, setFasceCollegate] = useState<number | null>(null);
   const [confermaTemi, setConfermaTemi] = useState(false);
   const [nuovaRadice, setNuovaRadice] = useState("");
   const [annuncio, setAnnuncio] = useState("");
@@ -226,19 +226,23 @@ export default function GestoreCategorie({
     applica(() => riordinaCategorieAction(parentId, ids));
   }
 
+  // Apre la conferma di eliminazione e, in parallelo, chiede quante fasce home
+  // agganciano questa categoria: il dato non e in pagina (a differenza di
+  // prodotti/sottocategorie), serve solo per l'avviso, quindi round-trip mirato
+  // best-effort che non blocca la conferma.
+  function chiediElimina(cat: Categoria) {
+    setFasceCollegate(null);
+    setDaEliminare(cat);
+    contaFasceVetrinaCategoriaAction(cat.id)
+      .then(setFasceCollegate)
+      .catch(() => setFasceCollegate(0));
+  }
+
   function eliminaConfermato() {
     const cat = daEliminare;
     setDaEliminare(null);
     if (!cat) return;
     applica(() => eliminaCategoriaAction(cat.id), "Categoria eliminata.");
-  }
-
-  function rigeneraConfermato() {
-    setConfermaRigenera(false);
-    applica(
-      () => rigeneraSlugCategorieAction(),
-      "Indirizzi delle categorie rigenerati.",
-    );
   }
 
   function riordinaTemiConfermato() {
@@ -271,6 +275,15 @@ export default function GestoreCategorie({
         nFigli === 1
           ? `1 sottocategoria ${dove}`
           : `${nFigli} sottocategorie ${dovePlurale}`,
+      );
+    }
+    if (fasceCollegate && fasceCollegate > 0) {
+      // Sganciate lato server: la fascia non sparisce, torna a mostrare le
+      // novita al posto dei prodotti di questa categoria.
+      parti.push(
+        fasceCollegate === 1
+          ? "1 fascia della home non filtrera piu per questa categoria"
+          : `${fasceCollegate} fasce della home non filtreranno piu per questa categoria`,
       );
     }
     const coda = parti.length ? ` ${parti.join(" e ")}.` : "";
@@ -332,7 +345,7 @@ export default function GestoreCategorie({
                 dropIntent={dropIntent}
                 onRinomina={rinomina}
                 onSposta={sposta}
-                onElimina={setDaEliminare}
+                onElimina={chiediElimina}
               />
               <div className="ml-3 mt-2 border-l-2 border-line/70 pl-3">
                 <ListaSortable
@@ -358,7 +371,7 @@ export default function GestoreCategorie({
                         dropIntent={dropIntent}
                         onRinomina={rinomina}
                         onSposta={sposta}
-                        onElimina={setDaEliminare}
+                        onElimina={chiediElimina}
                       />
                       <div className="ml-3 mt-2 border-l-2 border-line/50 pl-3">
                         <ListaSortable
@@ -383,7 +396,7 @@ export default function GestoreCategorie({
                               dropIntent={dropIntent}
                               onRinomina={rinomina}
                               onSposta={sposta}
-                              onElimina={setDaEliminare}
+                              onElimina={chiediElimina}
                             />
                           )}
                         />
@@ -413,30 +426,10 @@ export default function GestoreCategorie({
 
       {righe.length > 0 && (
         <div className="mt-8 border-t border-line pt-6">
-          <button
-            type="button"
-            onClick={() => setConfermaRigenera(true)}
-            disabled={occupato}
-            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-sea ring-1 ring-line transition-colors hover:bg-surface-2 disabled:opacity-50"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-              <path d="M3 21v-5h5" />
-            </svg>
-            Rigenera indirizzi
-          </button>
-          <p className="mt-2 max-w-prose text-xs text-muted">
-            Riassegna a ogni categoria un indirizzo leggibile dal percorso (es.{" "}
-            <span className="font-semibold text-foreground">
-              uomo-t-shirt-anime-manga
-            </span>
-            ). Utile dopo aver riorganizzato la tassonomia. I vecchi indirizzi
-            smettono di funzionare: usala finche il sito non e pubblicato.
-          </p>
-
-          <div className="mt-4">
+          {/* La rigenerazione in blocco degli slug e stata rimossa: sul sito
+              pubblicato manderebbe in 404 tutti gli indirizzi /categoria/* gia
+              indicizzati (nessun redirect dai vecchi). */}
+          <div>
             <button
               type="button"
               onClick={() => setConfermaTemi(true)}
@@ -470,16 +463,6 @@ export default function GestoreCategorie({
         inCorso={pending}
         onConferma={eliminaConfermato}
         onAnnulla={() => setDaEliminare(null)}
-      />
-
-      <ConfermaDialog
-        aperto={confermaRigenera}
-        titolo="Rigenerare gli indirizzi?"
-        messaggio='Tutte le categorie riceveranno un indirizzo leggibile dal percorso (es. "/categoria/uomo-t-shirt-anime-manga"). I vecchi indirizzi smetteranno di funzionare: fallo solo finche il sito non e pubblicato o indicizzato.'
-        etichettaConferma="Rigenera"
-        inCorso={pending}
-        onConferma={rigeneraConfermato}
-        onAnnulla={() => setConfermaRigenera(false)}
       />
 
       <ConfermaDialog

@@ -2,6 +2,10 @@
 // Usato dal webhook Stripe per scrivere ordini in modo affidabile.
 // Inizializzazione LAZY: nessun accesso a process.env a livello di modulo.
 
+// Barriera di build: se questo modulo (e la service role key) finisse per errore
+// in un bundle client, la build fallisce invece di esporre la chiave a runtime.
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 

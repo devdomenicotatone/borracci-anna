@@ -3,7 +3,7 @@
 // foto da Supabase per slug. Se le env Supabase non sono configurate degrada
 // con grazia a un prodotto d'esempio, cosi il progetto builda anche senza DB.
 
-import { cache, Suspense } from "react";
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -150,8 +150,10 @@ const caricaProdotto = cache(async (
 });
 
 interface PdpProps {
-  // Next 16: params e una Promise.
+  // Next 16: params e searchParams sono Promise.
   params: Promise<{ slug: string }>;
+  /** `?taglia=M` dal quick add delle card: taglia preselezionata in scheda. */
+  searchParams?: Promise<{ taglia?: string | string[] }>;
 }
 
 /**
@@ -187,13 +189,21 @@ export async function generateMetadata({
   };
 }
 
-export default async function PaginaProdotto({ params }: PdpProps) {
+export default async function PaginaProdotto({
+  params,
+  searchParams,
+}: PdpProps) {
   const { slug } = await params;
   const prodotto = await caricaProdotto(slug);
 
   if (!prodotto) {
     notFound();
   }
+
+  // Taglia preselezionata dal quick add (?taglia=M). La validazione vera
+  // (esiste? ha stock?) sta in ProdottoDettaglio: qui si normalizza soltanto.
+  const { taglia } = (await searchParams) ?? {};
+  const tagliaIniziale = typeof taglia === "string" ? taglia : null;
 
   const { foto, percorso, ...prodottoBase } = prodotto;
 
@@ -297,14 +307,15 @@ export default async function PaginaProdotto({ params }: PdpProps) {
         foto={foto}
         suRichiesta={prodottoBase.disponibilita_su_richiesta ?? true}
         soloOnline={prodottoBase.solo_online ?? false}
+        tagliaIniziale={tagliaIniziale}
       />
 
-      {/* Suggerimenti correlati: caricamento indipendente (streaming), cosi
-          non ritardano il contenuto principale della scheda. Se sono troppo
+      {/* Suggerimenti correlati: renderizzati inline (niente Suspense) cosi la
+          sezione fa parte dell'HTML iniziale e non "salta" dentro dopo il paint
+          (evita il layout shift). La query e cachata (unstable_cache, 30 min):
+          bloccarci sopra costa ~0 a cache calda. Se i correlati sono troppo
           pochi la sezione non compare (vedi ProdottiCorrelati). */}
-      <Suspense fallback={null}>
-        <ProdottiCorrelati slug={prodottoBase.slug} />
-      </Suspense>
+      <ProdottiCorrelati slug={prodottoBase.slug} />
     </main>
   );
 }

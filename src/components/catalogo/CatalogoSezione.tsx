@@ -1,11 +1,14 @@
 // Blocco catalogo condiviso da home e pagine categoria: toolbar (ordinamento +
-// filtri), griglia di card, stati vuoti e paginazione "Mostra altri".
+// filtri), griglia di card, stati vuoti e paginazione a scorrimento infinito
+// (sentinella CaricamentoAutomatico + link "Mostra altri" come fallback).
 // Server component: riceve dati gia caricati; l'interattivita sta nella
 // ToolbarCatalogo (client), lo stato dei filtri nell'URL.
 
 import Link from "next/link";
 
 import ProductCard from "@/components/ProductCard";
+import CaricamentoAutomatico from "@/components/catalogo/CaricamentoAutomatico";
+import EtichettaMostraAltri from "@/components/catalogo/EtichettaMostraAltri";
 import ToolbarCatalogo from "@/components/catalogo/ToolbarCatalogo";
 import Wordmark from "@/components/Wordmark";
 import {
@@ -37,8 +40,12 @@ export default function CatalogoSezione({
   const attivi = contaFiltriAttivi(filtri);
 
   // Link "Mostra altri": stessi filtri, pagina successiva. scroll={false}
-  // perche la griglia si estende sotto la posizione corrente.
-  const qsAltri = new URLSearchParams(serializzaFiltri(filtri));
+  // perche la griglia si estende sotto la posizione corrente. La chiave dei
+  // soli filtri (serializzaFiltri non include mai `pagina`) dice alla
+  // sentinella quando l'esplorazione riparte e il tetto auto si azzera.
+  const qsFiltri = new URLSearchParams(serializzaFiltri(filtri));
+  const chiaveFiltri = `${basePath}?${qsFiltri.toString()}`;
+  const qsAltri = new URLSearchParams(qsFiltri);
   qsAltri.set("pagina", String(pagina + 1));
 
   return (
@@ -98,13 +105,19 @@ export default function CatalogoSezione({
               <p className="text-sm tabular-nums text-muted">
                 Hai visto {prodotti.length} prodotti su {totale}
               </p>
-              <Link
-                href={`${basePath}?${qsAltri.toString()}`}
-                scroll={false}
-                className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+              <CaricamentoAutomatico
+                pagina={pagina}
+                urlPaginaSuccessiva={`${basePath}?${qsAltri.toString()}`}
+                chiaveFiltri={chiaveFiltri}
               >
-                Mostra altri
-              </Link>
+                <Link
+                  href={`${basePath}?${qsAltri.toString()}`}
+                  scroll={false}
+                  className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+                >
+                  <EtichettaMostraAltri />
+                </Link>
+              </CaricamentoAutomatico>
             </div>
           )}
         </>

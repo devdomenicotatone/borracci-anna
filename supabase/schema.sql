@@ -225,7 +225,9 @@ create policy "carrello_righe_all"
 --    (webhook Stripe, createAdminSupabase) puo operarvi, bypassando la RLS.
 
 -- Finalizzazione ordini atomica/idempotente (migration 20260623200000) +
--- persistenza costo spedizione/indirizzo (migration 20260625100000).
+-- persistenza costo spedizione/indirizzo (migration 20260625100000) +
+-- ritorno boolean e ricostruzione righe (20260708120000/20260708170000) +
+-- scarico stock per variante_id anziche SKU (20260710120000).
 drop function if exists public.finalizza_ordine_pagato(text, text, integer, jsonb);
 create or replace function public.finalizza_ordine_pagato(
   p_session_id     text,
@@ -234,20 +236,21 @@ create or replace function public.finalizza_ordine_pagato(
   p_righe          jsonb,
   p_shipping_cents integer default null,
   p_indirizzo      jsonb   default null
-) returns void
+) returns boolean
   language plpgsql
   security definer
   set search_path = ''
 as $$
 declare
   v_ordine public.ordini%rowtype;
-  v_riga   jsonb;
 begin
+  -- Lock della riga ordine: serializza le finalizzazioni concorrenti.
   select * into v_ordine
     from public.ordini
    where stripe_session_id = p_session_id
    for update;
 
+  -- Nessun ordine pre-creato (fallback direct-buy): lo creiamo gia "pagato".
   if not found then
     insert into public.ordini (
       stato, totale_cents, email, stripe_session_id, stock_scalato,
@@ -265,16 +268,51 @@ begin
     end if;
   end if;
 
+  -- Idempotenza: gia finalizzato -> niente (false = nessuna nuova finalizzazione).
   if v_ordine.stato = 'pagato' and v_ordine.stock_scalato then
-    return;
+    return false;
   end if;
 
-  for v_riga in select * from jsonb_array_elements(coalesce(p_righe, '[]'::jsonb))
-  loop
-    update public.varianti
-       set stock = greatest(0, stock - greatest(0, coalesce((v_riga->>'qta')::int, 0)))
-     where sku = (v_riga->>'sku');
-  end loop;
+  -- Righe mancanti (pre-save fallito): ricostruiscile da p_righe risolvendo la
+  -- variante per SKU (unico riferimento dai metadata Stripe nel fallback).
+  if not exists (
+    select 1 from public.ordine_righe where ordine_id = v_ordine.id
+  ) then
+    insert into public.ordine_righe (
+      ordine_id, prodotto_id, variante_id, nome_prodotto, sku,
+      taglia, colore, prezzo_cents, quantita, immagine_url
+    )
+    select
+      v_ordine.id,
+      v.prodotto_id,
+      v.id,
+      coalesce(nullif(r->>'nome', ''), 'Articolo ' || coalesce(r->>'sku', '?')),
+      r->>'sku',
+      v.taglia,
+      v.colore,
+      greatest(0, coalesce((r->>'prezzo_cents')::int, 0)),
+      coalesce((r->>'qta')::int, 1),
+      p.immagine_url
+    from jsonb_array_elements(coalesce(p_righe, '[]'::jsonb)) as r
+    left join public.varianti v on v.sku = (r->>'sku')
+    left join public.prodotti p on p.id = v.prodotto_id
+    where coalesce((r->>'qta')::int, 0) > 0;
+  end if;
+
+  -- Decremento per variante_id (immutabile) dalle ordine_righe attive: robusto al
+  -- rename dello SKU. Salta variante_id null e righe rimosse. Stesso criterio di
+  -- segna_ordine_pagato_manuale.
+  update public.varianti vv
+     set stock = greatest(0, vv.stock - agg.qta)
+    from (
+      select variante_id, sum(quantita)::int as qta
+        from public.ordine_righe
+       where ordine_id = v_ordine.id
+         and variante_id is not null
+         and rimossa_il is null
+       group by variante_id
+    ) agg
+   where agg.variante_id = vv.id;
 
   update public.ordini
      set stato = 'pagato',
@@ -284,6 +322,8 @@ begin
          costo_spedizione_cents = coalesce(p_shipping_cents, costo_spedizione_cents),
          spedizione_indirizzo = coalesce(p_indirizzo, spedizione_indirizzo)
    where id = v_ordine.id;
+
+  return true;
 end;
 $$;
 revoke all on function public.finalizza_ordine_pagato(text, text, integer, jsonb, integer, jsonb) from public;
@@ -546,11 +586,24 @@ create policy "ordine_righe_lettura_gestore"
   on public.ordine_righe for select to authenticated
   using ( public.is_gestore() );
 
--- Storage: lettura pubblica del bucket 'prodotti', scrittura solo gestore.
+-- Storage: lettura del bucket 'prodotti', scrittura solo gestore.
+-- Lettura/enumerazione (SELECT governa anche il LIST): gestore vede tutto; gli
+-- altri solo gli oggetti di prodotti ATTIVI, cosi le foto delle bozze non sono
+-- enumerabili con la anon key (finding #3, migration 20260710130000).
 drop policy if exists "prodotti_storage_lettura_pubblica" on storage.objects;
 create policy "prodotti_storage_lettura_pubblica"
   on storage.objects for select to anon, authenticated
-  using ( bucket_id = 'prodotti' );
+  using (
+    bucket_id = 'prodotti'
+    and (
+      public.is_gestore()
+      or exists (
+        select 1 from public.prodotti p
+        where p.id::text = (storage.foldername(name))[1]
+          and p.attivo = true
+      )
+    )
+  );
 
 drop policy if exists "prodotti_storage_insert_gestore" on storage.objects;
 create policy "prodotti_storage_insert_gestore"

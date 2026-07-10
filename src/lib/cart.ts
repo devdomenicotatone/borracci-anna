@@ -263,7 +263,20 @@ export async function aggiungiAlCarrello(
     const cappata = !suRichiesta && finale < desiderata;
 
     if (finale <= giaInCarrello && esistente) {
-      // Niente da aggiungere (gia al massimo dello stock): segnala l'avviso.
+      // Non c'e nulla da aggiungere. Ma se lo stock e sceso SOTTO la quantita gia
+      // in carrello (finale < giaInCarrello, es. da 3 pezzi a stock 2 dopo il sync
+      // BLT), la riga va comunque cappata alla giacenza reale: altrimenti resta
+      // una quantita over-stock accompagnata dall'avviso incoerente "Hai gia il
+      // massimo disponibile (2)" mentre il carrello ne mostra 3. (finale >= 1 qui:
+      // lo stock 0 e gia stato intercettato sopra con "esaurito".)
+      if (finale < giaInCarrello) {
+        const { error: errCap } = await supabase
+          .from("carrello_righe")
+          .update({ quantita: finale })
+          .eq("id", esistente.id);
+        if (errCap) return esitoCorrente(false, "errore");
+        revalidatePath("/carrello");
+      }
       const esito = await esitoCorrente(true);
       if (cappata) {
         esito.avviso = `Hai gia il massimo disponibile (${variante.stock}) nel carrello.`;
@@ -347,10 +360,21 @@ export async function aggiornaQuantita(
     const suRichiesta = !!primo(variante?.prodotti ?? null)
       ?.disponibilita_su_richiesta;
 
+    // Variante passata a stock 0 (sync BLT, vendite, ritiro): la riga non e piu
+    // acquistabile. La togliamo del tutto invece di cappare a 1, che lascerebbe
+    // in carrello un articolo esaurito con l'avviso assurdo "Disponibili solo 0".
+    if (!suRichiesta && typeof stock === "number" && stock <= 0) {
+      const esito = await rimuoviDalCarrello(rigaId);
+      if (esito.ok) {
+        esito.avviso = "Articolo esaurito, rimosso dal carrello.";
+      }
+      return esito;
+    }
+
     let finale = quantita;
     let cappata = false;
     if (!suRichiesta && typeof stock === "number" && quantita > stock) {
-      finale = Math.max(1, stock);
+      finale = stock;
       cappata = true;
     }
 
@@ -432,5 +456,106 @@ export async function svuotaCarrello(): Promise<EsitoCarrello> {
     return esitoVuoto(!erroreDelete, erroreDelete ? "errore" : undefined);
   } catch {
     return esitoVuoto(false, "errore");
+  }
+}
+
+/** Forma grezza della riga per la riconciliazione (stock + flag prodotto). */
+interface RigaRiconc {
+  id: string;
+  quantita: number;
+  prodotto:
+    | { nome: string; disponibilita_su_richiesta: boolean }
+    | { nome: string; disponibilita_su_richiesta: boolean }[]
+    | null;
+  variante: { stock: number } | { stock: number }[] | null;
+}
+
+/** Esito della riconciliazione carrello ↔ giacenze reali. */
+export interface EsitoRiconciliazione {
+  /** true se almeno una riga e stata rimossa o cappata. */
+  modificato: boolean;
+  /** Nomi dei prodotti rimossi (esauriti, ritirati o non piu leggibili). */
+  rimossi: string[];
+  /** Prodotti con quantita ridotta alla giacenza disponibile. */
+  cappati: { nome: string; stock: number }[];
+}
+
+/**
+ * Riallinea il carrello alle giacenze reali PRIMA del pagamento.
+ * Il cookie carrello vive 30 giorni, ma lo stock cambia ogni giorno (sync BLT,
+ * altre vendite, ritiri dal catalogo): senza questo controllo un cliente
+ * potrebbe pagare merce non piu disponibile.
+ * - Prodotti "su richiesta": saltati (giacenza non in tempo reale).
+ * - Prodotto disattivato/illeggibile (RLS): la riga arriva orfana → rimossa.
+ * - Stock 0: riga rimossa. Quantita > stock: cappata allo stock.
+ * Best effort: qualunque errore degrada a "nessuna modifica" (non blocca).
+ */
+export async function riconciliaCarrello(): Promise<EsitoRiconciliazione> {
+  const invariato: EsitoRiconciliazione = {
+    modificato: false,
+    rimossi: [],
+    cappati: [],
+  };
+  try {
+    const supabase = await createServerSupabase();
+    if (!supabase) return invariato;
+    const cartId = await leggiCartId();
+    if (!cartId) return invariato;
+
+    const { data, error } = await supabase
+      .from("carrello_righe")
+      .select(
+        `id, quantita,
+         prodotto:prodotti (nome, disponibilita_su_richiesta),
+         variante:varianti (stock)`,
+      )
+      .eq("carrello_id", cartId);
+    if (error || !data) return invariato;
+
+    const rimossi: string[] = [];
+    const cappati: { nome: string; stock: number }[] = [];
+
+    for (const r of data as unknown as RigaRiconc[]) {
+      const prodotto = primo(r.prodotto);
+      const variante = primo(r.variante);
+
+      // Riga orfana: prodotto/variante non piu leggibili (disattivati via RLS o
+      // eliminati). Non deve mai finire in un pagamento → rimuovila.
+      if (!prodotto || !variante) {
+        await supabase
+          .from("carrello_righe")
+          .delete()
+          .eq("id", r.id)
+          .eq("carrello_id", cartId);
+        rimossi.push(prodotto?.nome ?? "Articolo non più disponibile");
+        continue;
+      }
+
+      // Su richiesta: magazzino non in tempo reale, niente controllo giacenza.
+      if (prodotto.disponibilita_su_richiesta) continue;
+
+      const stock = variante.stock ?? 0;
+      if (stock <= 0) {
+        await supabase
+          .from("carrello_righe")
+          .delete()
+          .eq("id", r.id)
+          .eq("carrello_id", cartId);
+        rimossi.push(prodotto.nome);
+      } else if (r.quantita > stock) {
+        await supabase
+          .from("carrello_righe")
+          .update({ quantita: stock })
+          .eq("id", r.id)
+          .eq("carrello_id", cartId);
+        cappati.push({ nome: prodotto.nome, stock });
+      }
+    }
+
+    const modificato = rimossi.length > 0 || cappati.length > 0;
+    if (modificato) revalidatePath("/carrello");
+    return { modificato, rimossi, cappati };
+  } catch {
+    return invariato;
   }
 }

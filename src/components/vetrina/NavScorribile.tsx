@@ -40,6 +40,13 @@ export default function NavScorribile({
     };
   }, [aggiorna]);
 
+  // Ricalcola le frecce quando cambia il contenuto (es. i chip filtro che si
+  // riducono dopo una selezione): senza questo la freccia destra resterebbe
+  // visibile "fantasma" pur essendo tutto ormai a schermo.
+  useEffect(() => {
+    aggiorna();
+  }, [children, aggiorna]);
+
   function scorri(verso: -1 | 1) {
     const el = ref.current;
     if (!el) return;

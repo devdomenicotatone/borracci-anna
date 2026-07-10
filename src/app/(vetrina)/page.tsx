@@ -9,21 +9,19 @@ import Vetrina from "@/components/vetrina/Vetrina";
 import { caricaCategoriePubbliche } from "@/lib/categorie";
 import { gruppiCategorie } from "@/lib/categorie-albero";
 import { NEGOZIO } from "@/lib/negozio";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { caricaVetrina } from "@/lib/vetrina-home";
+import { caricaVetrinaCache } from "@/lib/vetrina-home";
 
-// Le fasce arrivano dal DB e cambiano quando il gestore le modifica
-// (revalidatePath("/") nelle action): niente prerender statico.
-export const dynamic = "force-dynamic";
+// Le fasce sono cachate (unstable_cache + TAG_VETRINA_HOME) invece di girare a
+// ogni richiesta: le modifiche del gestore/sync invalidano via revalidateTag.
+// Niente piu force-dynamic (che rendeva le query non cacheabili).
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
 export default async function Home() {
-  const supabase = await createServerSupabase();
   const [fasce, categorie] = await Promise.all([
-    caricaVetrina(supabase),
+    caricaVetrinaCache(),
     caricaCategoriePubbliche(),
   ]);
   const gruppi = gruppiCategorie(categorie);

@@ -15,6 +15,7 @@ import {
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import { useToast } from "@/components/gestore/Toaster";
 import { formatPrezzo } from "@/lib/format";
+import { statoSpedizione } from "@/lib/spedizione";
 import type { StatoOrdine } from "@/lib/types";
 
 interface RigaOrdine {
@@ -107,10 +108,19 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   const [lista, setLista] = useState<OrdineGestore[]>(ordini);
   const [filtro, setFiltro] = useState<Filtro>("in_attesa");
   const [pending, startTransition] = useTransition();
-  // Costo spedizione (in euro, come digitato) per ordine in conferma. Default
-  // 5,90 = tariffa Italia continentale; il gestore lo regola caso per caso.
+  // Costo spedizione (in euro, come digitato) per ordine in conferma. Il default
+  // rispetta la soglia di spedizione gratuita promessa nel carrello: 0 se la
+  // merce la supera, altrimenti 5,90 (tariffa unica Italia, default di
+  // spedizione.ts). Il gestore lo regola comunque caso per caso.
   const [sped, setSped] = useState<Record<string, string>>({});
-  const valoreSped = (id: string) => sped[id] ?? "5,90";
+  const merceAttivaCents = (o: OrdineGestore) =>
+    (o.ordine_righe ?? []).reduce(
+      (acc, r) => (r.rimossa_il ? acc : acc + r.prezzo_cents * r.quantita),
+      0,
+    );
+  const spedDefault = (o: OrdineGestore) =>
+    statoSpedizione(merceAttivaCents(o)).raggiunta ? "0,00" : "5,90";
+  const valoreSped = (o: OrdineGestore) => sped[o.id] ?? spedDefault(o);
   // Rimozioni in bozza per la conferma parziale: solo client-side fino al
   // submit, indicizzate per ordine e poi per riga.
   const [rimozioni, setRimozioni] = useState<
@@ -118,6 +128,8 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   >({});
   // Ordine per cui è aperto il dialog di conferma parziale.
   const [dialogoId, setDialogoId] = useState<string | null>(null);
+  // Ordine per cui è aperto il dialog di conferma del rifiuto (azione distruttiva).
+  const [rifiutaId, setRifiutaId] = useState<string | null>(null);
 
   const conteggi = useMemo(() => {
     const c: Record<string, number> = {};
@@ -145,7 +157,10 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
       setLista((l) =>
         l.map((o) => (o.id === id ? { ...o, stato: nuovoStato } : o)),
       );
-      mostra(successo, "ok");
+      // Avviso collaterale (es. email al cliente non partita): stile errore
+      // perche richiede un'azione della titolare, anche se l'operazione e ok.
+      if (esito.avviso) mostra(esito.avviso, "errore");
+      else mostra(successo, "ok");
     });
   }
 
@@ -176,7 +191,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
 
   /** Valida la spedizione e, se ci sono rimozioni, chiede conferma via dialog. */
   function avviaConferma(o: OrdineGestore) {
-    const cents = euroToCents(valoreSped(o.id));
+    const cents = euroToCents(valoreSped(o));
     if (cents === null || cents > 10_000) {
       mostra("Inserisci un costo di spedizione valido (0–100 €).", "errore");
       return;
@@ -194,7 +209,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
   }
 
   function inviaConferma(o: OrdineGestore) {
-    const cents = euroToCents(valoreSped(o.id));
+    const cents = euroToCents(valoreSped(o));
     if (cents === null || cents > 10_000) {
       mostra("Inserisci un costo di spedizione valido (0–100 €).", "errore");
       return;
@@ -244,12 +259,18 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
         return copia;
       });
       setDialogoId(null);
-      mostra(
-        daRimuovere.length > 0
-          ? "Disponibilità confermata (parziale)."
-          : "Disponibilità confermata.",
-        "ok",
-      );
+      // Email al cliente non partita: avviso con stile errore (serve un'azione
+      // della titolare: mandargli il link a mano), anche se la conferma e ok.
+      if (esito.avviso) {
+        mostra(esito.avviso, "errore");
+      } else {
+        mostra(
+          daRimuovere.length > 0
+            ? "Disponibilità confermata (parziale)."
+            : "Disponibilità confermata.",
+          "ok",
+        );
+      }
     });
   }
 
@@ -342,7 +363,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                     (acc, r) =>
                       bozze[r.id] ? acc : acc + r.prezzo_cents * r.quantita,
                     0,
-                  ) + (euroToCents(valoreSped(o.id)) ?? 0)
+                  ) + (euroToCents(valoreSped(o)) ?? 0)
                 : o.totale_cents;
             return (
               <li
@@ -520,7 +541,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                           <input
                             type="text"
                             inputMode="decimal"
-                            value={valoreSped(o.id)}
+                            value={valoreSped(o)}
                             onChange={(e) =>
                               setSped((s) => ({ ...s, [o.id]: e.target.value }))
                             }
@@ -532,14 +553,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                         <button
                           type="button"
                           disabled={pending}
-                          onClick={() =>
-                            esegui(
-                              o.id,
-                              annullaOrdineAction,
-                              "annullato",
-                              "Ordine rifiutato.",
-                            )
-                          }
+                          onClick={() => setRifiutaId(o.id)}
                           className="rounded-full px-3 py-2 text-xs font-bold text-coral-ink transition-colors hover:bg-coral/10 disabled:opacity-50"
                         >
                           Rifiuta
@@ -625,6 +639,23 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
           inCorso={pending}
           onConferma={() => inviaConferma(ordineDialogo)}
           onAnnulla={() => setDialogoId(null)}
+        />
+      )}
+
+      {/* Rifiuto ordine: conferma prima di annullare (azione non reversibile) */}
+      {rifiutaId && (
+        <ConfermaDialog
+          aperto
+          titolo="Rifiutare la richiesta?"
+          messaggio="L'ordine verrà annullato: il cliente vedrà lo stato «annullato» e non potrà più pagarlo. L'azione non è reversibile."
+          etichettaConferma="Rifiuta ordine"
+          inCorso={pending}
+          onConferma={() => {
+            const id = rifiutaId;
+            setRifiutaId(null);
+            esegui(id, annullaOrdineAction, "annullato", "Ordine rifiutato.");
+          }}
+          onAnnulla={() => setRifiutaId(null)}
         />
       )}
     </div>

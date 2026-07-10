@@ -5,12 +5,20 @@
 // quando c'e piu di una foto. L'indice attivo e controllato dall'esterno
 // (ProdottoDettaglio) cosi resta sincronizzato col selettore colore.
 //
-// Le foto entrano gia ritagliate ai bordi uniformi (vedi lib/trim.ts): il capo
-// riempie il riquadro senza bianco di troppo, quindi qui basta un object-cover
-// netto — niente piu selettore Fronte/Retro/Intera, che serviva solo a rimediare
-// alle foto orizzontali "annegate nel bianco".
+// Le foto entrano gia ritagliate ai bordi uniformi (vedi lib/trim.ts). Qui le
+// mostriamo con object-contain su fondo bianco + un filo di padding: il capo si
+// vede SEMPRE per intero (niente lati tagliati, es. il logo "Made in Italy" negli
+// angoli) con un margine di respiro uniforme, invece di riempire il riquadro con
+// un object-cover che ne mangiava i bordi.
+//
+// Un click/tap sulla foto principale apre la vista INGRANDITA: overlay bianco a
+// tutto schermo con appena mezzo centimetro di margine, frecce, contatore,
+// chiusura con Esc / click ovunque.
 
 import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 
 export interface FotoGalleria {
   id: string;
@@ -54,33 +62,92 @@ export default function GalleriaProdotto({
   const blurPrincipale = principale?.blurDataUrl ?? null;
   const multipla = foto.length > 1;
 
+  // Vista ingrandita a tutto schermo, aperta col click sulla foto principale.
+  const [zoomAperto, setZoomAperto] = useState(false);
+  const zoomRef = useRef<HTMLDivElement>(null);
+
   function vai(delta: number) {
     if (!multipla) return;
     const n = foto.length;
     onSelezionaFoto((idx + delta + n) % n);
   }
 
+  // Da ingrandita: Esc chiude, frecce navigano, scroll bloccato, focus spostato
+  // dentro (pulsante Chiudi) e intrappolato (Tab), poi ripristinato in chiusura.
+  useEffect(() => {
+    if (!zoomAperto) return;
+    const precedente = document.activeElement as HTMLElement | null;
+    const contenitore = zoomRef.current;
+    contenitore?.querySelector<HTMLButtonElement>("button")?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomAperto(false);
+      else if (e.key === "ArrowLeft") vai(-1);
+      else if (e.key === "ArrowRight") vai(1);
+      else if (e.key === "Tab") {
+        const f = Array.from(
+          contenitore?.querySelectorAll<HTMLElement>("button") ?? [],
+        );
+        if (f.length === 0) return;
+        const primo = f[0];
+        const ultimo = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === primo) {
+          e.preventDefault();
+          ultimo.focus();
+        } else if (!e.shiftKey && document.activeElement === ultimo) {
+          e.preventDefault();
+          primo.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    const sbloccaScroll = bloccaScrollBody();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      sbloccaScroll();
+      precedente?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- vai dipende solo da idx/foto
+  }, [zoomAperto, idx, foto.length]);
+
   return (
     <div className="flex flex-col gap-3">
       {/* Foto principale */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-surface shadow-sea">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-white shadow-sea">
         {urlPrincipale ? (
-          <Image
-            src={urlPrincipale}
-            alt={principale ? `${nome} — ${principale.etichetta}` : nome}
-            fill
-            sizes="(max-width: 768px) 100vw, 50vw"
-            className="object-cover"
-            // Foto grande della scheda: quality alta cosi l'ottimizzazione non
-            // somma una seconda perdita visibile sopra la foto gia caricata.
-            quality={90}
-            // Foto LCP della PDP: caricala subito e con priorita alta. In Next 16
-            // `priority` e deprecato -> loading="eager" + fetchPriority="high".
-            loading="eager"
-            fetchPriority="high"
-            placeholder={blurPrincipale ? "blur" : PLACEHOLDER_GENERICO}
-            blurDataURL={blurPrincipale ?? undefined}
-          />
+          <button
+            type="button"
+            onClick={() => setZoomAperto(true)}
+            aria-label="Ingrandisci la foto"
+            title="Ingrandisci la foto"
+            className="absolute inset-0 cursor-zoom-in"
+          >
+            <Image
+              src={urlPrincipale}
+              alt={principale ? `${nome} — ${principale.etichetta}` : nome}
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-contain p-5 sm:p-6"
+              // Foto grande della scheda: quality alta cosi l'ottimizzazione non
+              // somma una seconda perdita visibile sopra la foto gia caricata.
+              quality={90}
+              // Foto LCP della PDP: caricala subito e con priorita alta. In Next 16
+              // `priority` e deprecato -> loading="eager" + fetchPriority="high".
+              loading="eager"
+              fetchPriority="high"
+              placeholder={blurPrincipale ? "blur" : PLACEHOLDER_GENERICO}
+              blurDataURL={blurPrincipale ?? undefined}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute bottom-3 left-3 grid h-10 w-10 place-items-center rounded-full bg-white/85 text-foreground shadow-soft backdrop-blur"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-4.3-4.3M8 11h6M11 8v6" />
+              </svg>
+            </span>
+          </button>
         ) : (
           <div className="tile-cyan dots-overlay flex h-full w-full items-center justify-center">
             <svg
@@ -137,7 +204,7 @@ export default function GalleriaProdotto({
                 aria-pressed={sel}
                 title={f.etichetta}
                 className={[
-                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl transition-all sm:w-[4.5rem]",
+                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl bg-white transition-all sm:w-[4.5rem]",
                   sel
                     ? "ring-2 ring-sea"
                     : "opacity-70 ring-1 ring-line hover:-translate-y-0.5 hover:opacity-100",
@@ -148,13 +215,88 @@ export default function GalleriaProdotto({
                   alt={f.etichetta}
                   fill
                   sizes="80px"
-                  className="object-cover"
+                  className="object-contain p-1"
                   placeholder={f.blurDataUrl ? "blur" : PLACEHOLDER_GENERICO}
                   blurDataURL={f.blurDataUrl ?? undefined}
                 />
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Vista ingrandita: overlay bianco a tutto schermo, la foto occupa tutto
+          lo spazio lasciando solo ~mezzo centimetro di margine. Click ovunque
+          (o Esc, o la X) per chiudere; frecce per scorrere le altre foto. */}
+      {zoomAperto && urlPrincipale && (
+        <div
+          ref={zoomRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Foto ingrandita — ${nome}`}
+          onClick={() => setZoomAperto(false)}
+          className="fixed inset-0 z-[100] bg-white"
+        >
+          <div className="absolute inset-[0.5cm] cursor-zoom-out">
+            <Image
+              src={urlPrincipale}
+              alt={principale ? `${nome} — ${principale.etichetta}` : nome}
+              fill
+              sizes="100vw"
+              className="object-contain"
+              quality={95}
+              placeholder={blurPrincipale ? "blur" : PLACEHOLDER_GENERICO}
+              blurDataURL={blurPrincipale ?? undefined}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomAperto(false);
+            }}
+            aria-label="Chiudi la foto ingrandita"
+            className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+
+          {multipla && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  vai(-1);
+                }}
+                aria-label="Foto precedente"
+                className="absolute left-3 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  vai(1);
+                }}
+                aria-label="Foto successiva"
+                className="absolute right-3 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+              <span className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-foreground/70 px-3 py-1.5 text-sm font-bold tabular-nums text-white backdrop-blur">
+                {idx + 1}/{foto.length}
+              </span>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -7,10 +7,11 @@
 //   3) ritorno della LISTA CANONICA (sezioni[]) per riallineare il client;
 //   4) revalidatePath("/") + ("/gestore/vetrina").
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { leggiSezioniAdmin, type EsitoVetrina } from "@/lib/gestore/vetrina";
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 import {
   TIPI_SEZIONE_VETRINA,
   type ConfigVetrina,
@@ -33,8 +34,9 @@ type SupabaseGestore = Awaited<ReturnType<typeof verifySession>> extends infer S
   : never;
 
 function revalida(): void {
-  revalidatePath("/"); //                  la home (vetrina pubblica)
-  revalidatePath("/gestore/vetrina"); //   il pannello
+  revalidatePath("/"); //                     la home (vetrina pubblica)
+  revalidateTag(TAG_VETRINA_HOME, "max"); //  la cache delle fasce home
+  revalidatePath("/gestore/vetrina"); //      il pannello
 }
 
 /** Stringa ripulita, oppure undefined se vuota (per non sporcare il jsonb). */
@@ -235,12 +237,25 @@ export async function salvaSezioneAction(
       return { ok: false, error: "Tipo di sezione non valido." };
     }
 
+    const config = sanificaConfig(tipo, dati.config ?? {});
+    // Regola "Una categoria" senza categoria scelta: configurazione incompleta.
+    // Senza questo blocco il salvataggio riusciva ("Sezione salvata") e in home
+    // la fascia degradava in silenzio a TUTTO il catalogo sotto un titolo
+    // sbagliato (il CategoriaSelect parte proprio da "Nessuna categoria").
+    if (
+      tipo === "prodotti_auto" &&
+      config.regola === "categoria" &&
+      !config.categoriaId
+    ) {
+      return { ok: false, error: "Scegli la categoria per questa fascia." };
+    }
+
     const { error } = await supabase
       .from("vetrina_sezioni")
       .update({
         titolo: testo(dati.titolo, 120) ?? null,
         sottotitolo: testo(dati.sottotitolo, 300) ?? null,
-        config: sanificaConfig(tipo, dati.config ?? {}),
+        config,
       })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };

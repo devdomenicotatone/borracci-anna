@@ -44,10 +44,22 @@ export interface Prodotto {
    */
   disponibilita_su_richiesta?: boolean;
   /**
+   * Somma dello stock delle varianti, denormalizzata e mantenuta da trigger
+   * (migration 20260708160000). Alimenta il badge "Esaurito" in vetrina senza
+   * dover embeddare le varianti nella query delle card.
+   */
+  stock_totale?: number;
+  /**
    * Articolo disponibile SOLO dal sito, non presente in negozio: badge
    * informativo in vetrina. Default false (vedi migration 20260705120000).
    */
   solo_online?: boolean;
+  /**
+   * URL delle foto della galleria (gia ordinate), per il mini-carosello delle
+   * card. Presente solo nelle query dei listini (vedi CAMPI_CARD/normalizzaCard);
+   * assente altrove (es. correlati via RPC): la card degrada alla sola copertina.
+   */
+  foto_urls?: string[];
 }
 
 // --- Vetrina curata (home a fasce, gestibile dal pannello) -------------------

@@ -21,6 +21,7 @@ import {
   type FranchiseConteggio,
 } from "@/lib/filtri-catalogo";
 import type { Prodotto } from "@/lib/types";
+import { scansionaBlocchi } from "@/lib/supabase/scansione";
 import { COLORI, ordinaTaglie } from "@/lib/catalogo";
 import {
   FRANCHISE_ALTRO,
@@ -35,14 +36,32 @@ type Supabase = SupabaseClient<Database>;
 /** Prodotti per "pagina" della griglia (il bottone Mostra altri ne carica altrettanti). */
 export const PRODOTTI_PER_PAGINA = 24;
 
-/** Blocco delle scansioni integrali (percorso tema, facette): PostgREST tronca
- *  ogni risposta a max-rows (default Supabase: 1000) SENZA errore, quindi le
- *  letture "tutte le righe" vanno paginate a blocchi e guidate dal count. */
-const BLOCCO_SCANSIONE = 1000;
-
-/** Campi letti per le card della vetrina (condivisi con la home a fasce). */
+/** Campi letti per le card della vetrina (condivisi con la home a fasce).
+ *  L'embed `prodotto_foto(url, ordine)` alimenta il mini-carosello delle card:
+ *  le righe grezze vanno appiattite con {@link normalizzaCard}. */
 export const CAMPI_CARD =
-  "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online, categoria_id";
+  "id, slug, nome, descrizione, prezzo_cents, valuta, immagine_url, attivo, solo_online, categoria_id, disponibilita_su_richiesta, stock_totale, prodotto_foto(url, ordine)";
+
+/** Riga card grezza: l'embed foto e ancora da appiattire in `foto_urls`. */
+export type RigaCard = Prodotto & {
+  prodotto_foto?: Array<{ url: string; ordine: number }> | null;
+};
+
+/** Cap foto per card: oltre le prime il carosello in griglia non aggiunge nulla. */
+const MAX_FOTO_CARD = 8;
+
+/** Appiattisce l'embed foto di una riga card in `Prodotto.foto_urls` (ordinate). */
+export function normalizzaCard(riga: RigaCard): Prodotto {
+  const { prodotto_foto, ...prodotto } = riga;
+  return {
+    ...prodotto,
+    foto_urls: (prodotto_foto ?? [])
+      .slice()
+      .sort((a, b) => a.ordine - b.ordine)
+      .slice(0, MAX_FOTO_CARD)
+      .map((f) => f.url),
+  };
+}
 
 /**
  * Prodotti di esempio usati SOLO quando Supabase non e configurato
@@ -203,77 +222,73 @@ export async function caricaProdottiVetrina(
     };
 
     // — Percorso DB: il filtro tema e una clausola sulla colonna `tema` —
-    let query = costruisci(CAMPI_CARD, true);
+    // Per "Altro" (complemento dei chip visibili) gli slug arrivano dalle
+    // STESSE facette mostrate all'utente (cache condivisa: di norma un hit),
+    // cosi numero sul chip e risultati del click coincidono. Gli slug sono
+    // kebab-case (validati al salvataggio): sicuri dentro `in.(...)`. Si
+    // calcolano PRIMA del costruttore: la scansione a blocchi chiede un
+    // builder NUOVO a ogni blocco e ognuno deve avere la stessa clausola.
+    let visibiliAltro: string[] | null = null;
     if (filtri.franchise === FRANCHISE_ALTRO) {
-      // "Altro" = complemento dei chip visibili: gli slug arrivano dalle
-      // STESSE facette mostrate all'utente (cache condivisa: di norma un hit),
-      // cosi numero sul chip e risultati del click coincidono. Gli slug sono
-      // kebab-case (validati al salvataggio): sicuri dentro `in.(...)`.
       const facette = await caricaFacetteVetrina(supabase, categoriaIds);
-      const visibili = facette.franchise
+      visibiliAltro = facette.franchise
         .map((f) => f.slug)
         .filter((s) => s !== FRANCHISE_ALTRO);
-      query =
-        visibili.length > 0
-          ? query.or(`tema.is.null,tema.not.in.(${visibili.join(",")})`)
-          : query.is("tema", null);
-    } else if (filtri.franchise) {
-      query = query.eq("tema", filtri.franchise);
     }
+    const costruisciConTema = (conteggio: boolean) => {
+      let q = costruisci(CAMPI_CARD, conteggio);
+      if (visibiliAltro != null) {
+        q =
+          visibiliAltro.length > 0
+            ? q.or(`tema.is.null,tema.not.in.(${visibiliAltro.join(",")})`)
+            : q.is("tema", null);
+      } else if (filtri.franchise) {
+        q = q.eq("tema", filtri.franchise);
+      }
+      return q;
+    };
 
-    const esito = await query.range(0, pagina * PRODOTTI_PER_PAGINA - 1);
-    if (!esito.error) {
-      return {
-        prodotti: (esito.data as unknown as Prodotto[] | null) ?? [],
-        totale: esito.count ?? 0,
-      };
-    }
-    // 42703 = undefined_column: la colonna `tema` non esiste ancora (migration
-    // 20260707150000 non applicata) -> fallback runtime qui sotto. Senza
-    // filtro tema il 42703 non puo succedere; ogni altro errore degrada a
-    // vuoto come sempre.
-    if (!filtri.franchise || esito.error.code !== "42703") {
-      return { prodotti: [], totale: 0 };
+    try {
+      // Griglia paginata "Mostra altri" (cumulativa): letta a blocchi cosi non
+      // si ferma a max-rows quando una categoria o un filtro supera le 1000 card
+      // (senza scansione, .range(0, pagina*24-1) verrebbe troncato a 1000). Il
+      // totale resta il count completo dei match, per sapere se c'e altro.
+      const { righe, totale } = await scansionaBlocchi<RigaCard>(
+        costruisciConTema,
+        { limite: pagina * PRODOTTI_PER_PAGINA },
+      );
+      return { prodotti: righe.map(normalizzaCard), totale };
+    } catch (err) {
+      // 42703 = undefined_column: la colonna `tema` non esiste ancora
+      // (migration 20260707150000 non applicata) -> fallback runtime qui
+      // sotto. Senza filtro tema il 42703 non puo succedere; ogni altro
+      // errore degrada a vuoto come sempre.
+      if (
+        !filtri.franchise ||
+        (err as { code?: string } | null)?.code !== "42703"
+      ) {
+        return { prodotti: [], totale: 0 };
+      }
     }
 
     // — Fallback runtime (pre-migration): dizionario sui nomi, come prima
     // della colonna. Slug ignoto al dizionario (link vecchio/manomesso): si
     // ignora il filtro, come faceva il vecchio percorso.
     if (etichettaFranchise(filtri.franchise) == null) {
-      const { data, error, count } = await costruisci(CAMPI_CARD, true).range(
-        0,
-        pagina * PRODOTTI_PER_PAGINA - 1,
+      const { righe, totale } = await scansionaBlocchi<RigaCard>(
+        (conteggio) => costruisci(CAMPI_CARD, conteggio),
+        { limite: pagina * PRODOTTI_PER_PAGINA },
       );
-      if (error) return { prodotti: [], totale: 0 };
-      return {
-        prodotti: (data as unknown as Prodotto[] | null) ?? [],
-        totale: count ?? 0,
-      };
+      return { prodotti: righe.map(normalizzaCard), totale };
     }
 
-    // Match in JS sulla scansione leggera id+nome (gia ordinata), INTEGRALE a
-    // blocchi: senza range PostgREST tronca a max-rows (default 1000) SENZA
-    // errore, e il catalogo supera gia quella soglia: righe perse in silenzio
-    // = conteggi e "Mostra altri" sbagliati. Il count exact del primo blocco
-    // fa da guida: si legge finche non si coprono tutte le righe attese
-    // (robusto anche se il server ha un max-rows piu basso).
-    const righe: Array<{ id: string; nome: string }> = [];
-    let attese: number | null = null;
-    for (;;) {
-      const { data, error, count } = await costruisci(
-        "id, nome",
-        righe.length === 0,
-      ).range(righe.length, righe.length + BLOCCO_SCANSIONE - 1);
-      if (error) return { prodotti: [], totale: 0 };
-      const blocco =
-        (data as unknown as Array<{ id: string; nome: string }> | null) ?? [];
-      righe.push(...blocco);
-      if (attese == null) attese = count ?? null;
-      if (blocco.length === 0) break; // guardia anti-loop (mai fidarsi del count)
-      if (attese != null ? righe.length >= attese : blocco.length < BLOCCO_SCANSIONE) {
-        break;
-      }
-    }
+    // — Percorso tema pre-migration: match in JS sulla scansione leggera —
+    // Scansione INTEGRALE a blocchi (vedi scansionaBlocchi): il catalogo supera
+    // le 1000 righe e senza paginazione i conteggi tema sarebbero parziali in
+    // silenzio. Un errore propaga al catch della funzione (griglia vuota).
+    const { righe } = await scansionaBlocchi<{ id: string; nome: string }>(
+      (conteggio) => costruisci("id, nome", conteggio),
+    );
 
     // "Altro" e il complemento dei chip VISIBILI: servono gli slug delle stesse
     // facette che l'utente vede (cache condivisa con la pagina: di norma un hit).
@@ -304,8 +319,8 @@ export async function caricaProdottiVetrina(
     // L'IN non conserva l'ordine: si riassembla su quello della scansione.
     const perId = new Map(
       esiti
-        .flatMap((e) => (e.data as unknown as Prodotto[] | null) ?? [])
-        .map((p) => [p.id, p]),
+        .flatMap((e) => (e.data as unknown as RigaCard[] | null) ?? [])
+        .map((p) => [p.id, normalizzaCard(p)]),
     );
     const prodotti = ids
       .map((id) => perId.get(id))
@@ -403,10 +418,12 @@ async function aggregaFacette(
 ): Promise<FacetteCatalogo> {
   const supabase = createAdminSupabase();
 
-  // Scansione integrale a blocchi (vedi BLOCCO_SCANSIONE): senza range la
+  // Scansione integrale a blocchi (vedi scansionaBlocchi): senza paginazione la
   // risposta si fermerebbe a max-rows e i conteggi sarebbero parziali in
   // silenzio — il catalogo supera gia le 1000 righe. L'ordine per id rende la
   // paginazione stabile (senza ORDER BY ogni blocco potrebbe rimescolarsi).
+  // Un errore propaga (throw): meglio degradare la singola richiesta che
+  // avvelenare la cache facette con conteggi vuoti.
   const costruisci = (conteggio: boolean) => {
     let q = supabase
       .from("prodotti")
@@ -421,22 +438,7 @@ async function aggregaFacette(
     return q.order("id", { ascending: true });
   };
 
-  const righe: RigaFacette[] = [];
-  let attese: number | null = null;
-  for (;;) {
-    const { data, error, count } = await costruisci(righe.length === 0).range(
-      righe.length,
-      righe.length + BLOCCO_SCANSIONE - 1,
-    );
-    if (error) throw error;
-    const blocco = (data as unknown as RigaFacette[] | null) ?? [];
-    righe.push(...blocco);
-    if (attese == null) attese = count ?? null;
-    if (blocco.length === 0) break; // guardia anti-loop (mai fidarsi del count)
-    if (attese != null ? righe.length >= attese : blocco.length < BLOCCO_SCANSIONE) {
-      break;
-    }
-  }
+  const { righe } = await scansionaBlocchi<RigaFacette>(costruisci);
 
   const taglie = new Set<string>();
   const colori = new Set<string>();

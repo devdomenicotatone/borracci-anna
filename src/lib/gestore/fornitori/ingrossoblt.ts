@@ -7,6 +7,15 @@
 // effort: se un pezzo di pagina cambia o manca, si degrada a null/[]/"" senza
 // mai lanciare da parseProdottoBlt.
 
+import {
+  TAGLIA_UNICA,
+  TAGLIE,
+  eTagliaCappello,
+  eTagliaPallone,
+  ordinaTaglie,
+  tagliaCanonica,
+} from "@/lib/catalogo";
+
 // --- Contratto condiviso ------------------------------------------------------
 
 export interface ProdottoBlt {
@@ -286,22 +295,6 @@ function estraiFoto(html: string): string[] {
 
 // --- Taglie -------------------------------------------------------------------------
 
-// Set canonico taglie adulto (scala del negozio: "2XL", mai "XXL"); le taglie
-// bimbo sono normalizzate come "N anni".
-const TAGLIE_CANONICHE = [
-  "XXS",
-  "XS",
-  "S",
-  "M",
-  "L",
-  "XL",
-  "2XL",
-  "3XL",
-  "4XL",
-  "5XL",
-  "6XL",
-] as const;
-
 /**
  * Normalizza una candidata taglia o null se non e una taglia. Riconosce:
  * adulto ("m", "XXL"→"2XL"), bambino per eta ("6 Anni"→"6 anni"), range del
@@ -311,18 +304,17 @@ const TAGLIE_CANONICHE = [
  */
 function normalizzaTaglia(grezza: string): string | null {
   const testo = decodificaEntita(grezza).replace(/\s+/g, " ").trim();
-  let maiuscola = testo.toUpperCase();
-  // Alias del fornitore -> scala del negozio.
-  if (maiuscola === "XXL") maiuscola = "2XL";
-  if (maiuscola === "XXXL") maiuscola = "3XL";
-  if ((TAGLIE_CANONICHE as readonly string[]).includes(maiuscola)) {
+  // Adulto: scala del negozio con l'alias del fornitore ("XXL"→"2XL") applicato
+  // da tagliaCanonica, unica sorgente in lib/catalogo.
+  const maiuscola = tagliaCanonica(testo);
+  if ((TAGLIE as readonly string[]).includes(maiuscola)) {
     return maiuscola;
   }
   // Taglia unica esposta dal fornitore ("Unica", "Taglia unica", "TU", "One
   // size"): normalizzata sull'etichetta del negozio (TAGLIA_UNICA in
   // lib/catalogo). Un solo valore, mai una scala.
   if (/^(taglia\s*)?unica$|^tu$|^one[\s-]?size$/i.test(testo)) {
-    return "Taglia unica";
+    return TAGLIA_UNICA;
   }
   const anni = maiuscola.match(/^(\d{1,2})\s*ANNI$/);
   if (anni) return `${parseInt(anni[1], 10)} anni`;
@@ -332,24 +324,12 @@ function normalizzaTaglia(grezza: string): string | null {
   // Bambino: numero singolo sportswear (fino a 16).
   const num = testo.match(/^(\d{1,2})$/);
   if (num && parseInt(num[1], 10) <= 16) return String(parseInt(num[1], 10));
+  // Cappello: misura di circonferenza (40–70 cm), tenuta come numero.
+  if (eTagliaCappello(testo)) return String(parseInt(testo, 10));
+  // Pallone: "Misura N" (1–5). Il fornitore vende ogni misura come prodotto a se
+  // (la misura e nel nome), ma se comparisse come opzione la si tiene com'e.
+  if (eTagliaPallone(testo)) return `Misura ${testo.replace(/^\D+/, "")}`;
   return null;
-}
-
-/**
- * Rango per ordinare le taglie: bimbo per eta (anni, range o numero, ×10 per
- * tenere vicini range e numero della stessa eta), poi la scala adulto XXS→6XL,
- * poi le sconosciute. Stessa logica di ordineTaglia in lib/catalogo.
- */
-function rangoTaglia(t: string): number {
-  const anni = t.match(/^(\d{1,2})\s*anni$/i);
-  if (anni) return parseInt(anni[1], 10) * 10;
-  const range = t.match(/^(\d{1,2})\s*[-/]\s*(\d{1,2})$/);
-  if (range) return parseInt(range[1], 10) * 10 + 1;
-  const num = t.match(/^(\d{1,2})$/);
-  if (num) return parseInt(num[1], 10) * 10;
-  if (t.toLowerCase() === "taglia unica") return 20_000;
-  const i = (TAGLIE_CANONICHE as readonly string[]).indexOf(t.toUpperCase());
-  return i === -1 ? 100_000 : 10_000 + i;
 }
 
 /**
@@ -397,12 +377,13 @@ function estraiTaglie(html: string): string[] {
     }
   }
 
-  const taglie = new Set<string>();
+  const taglie: string[] = [];
   for (const c of candidate) {
     const t = normalizzaTaglia(c);
-    if (t) taglie.add(t);
+    if (t) taglie.push(t);
   }
-  return [...taglie].sort((a, b) => rangoTaglia(a) - rangoTaglia(b));
+  // ordinaTaglie deduplica e ordina con la stessa scala della vetrina/gestore.
+  return ordinaTaglie(taglie);
 }
 
 // --- Target (pubblico) ----------------------------------------------------------

@@ -2,9 +2,11 @@
 
 // Toolbar del catalogo vetrina: chip franchise, ordinamento, bottone "Filtri"
 // con drawer (prezzo, taglie, colori) e chip dei filtri attivi rimovibili.
-// Lo stato vive nell'URL: ogni modifica naviga (router.replace, scroll
-// invariato) e il server ri-renderizza la griglia. Cosi i filtri sono
-// condivisibili via link, il back del browser funziona e niente stato doppio.
+// Lo stato vive nell'URL: ogni modifica naviga (router.push, scroll invariato)
+// e il server ri-renderizza la griglia. Cosi i filtri sono condivisibili via
+// link, il back del browser annulla l'ultimo cambiamento e niente stato doppio.
+// La sola ricerca testuale usa replace (via debounce) per non creare una voce
+// di cronologia a ogni tasto.
 //
 // Accessibilita drawer: stesso pattern del CartDrawer (dialog modale, ESC,
 // click sull'overlay, scroll-lock, focus trap, focus ripristinato).
@@ -24,6 +26,7 @@ import {
   type Ordinamento,
 } from "@/lib/filtri-catalogo";
 import { coloreChiaro, coloreHex } from "@/lib/catalogo";
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 
 /** Bozza dei filtri mentre si compone la selezione nel drawer. */
 interface BozzaFiltri {
@@ -73,12 +76,23 @@ export default function ToolbarCatalogo({
   // Difensivo: facette da una cache precedente potrebbero non avere i franchise.
   const franchiseDisponibili = facette.franchise ?? [];
 
-  /** Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1). */
+  /**
+   * Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1).
+   * Di default usa push: ogni filtro/ordinamento/chip crea una voce di
+   * cronologia, cosi il back del browser annulla l'ultimo cambiamento invece di
+   * uscire dal catalogo. La ricerca testuale passa `sostituisci` per NON
+   * intasare la cronologia con una voce a ogni tasto digitato.
+   */
   const naviga = useCallback(
-    (nuovi: FiltriCatalogo) => {
+    (nuovi: FiltriCatalogo, sostituisci = false) => {
       const qs = serializzaFiltri(nuovi);
+      const url = qs ? `${basePath}?${qs}` : basePath;
       startTransition(() => {
-        router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+        if (sostituisci) {
+          router.replace(url, { scroll: false });
+        } else {
+          router.push(url, { scroll: false });
+        }
       });
     },
     [basePath, router],
@@ -111,8 +125,87 @@ export default function ToolbarCatalogo({
       : [...lista, voce];
   }
 
+  // — Ricerca testuale — Il backend la supporta gia (filtri.q → ricerca per
+  // token su nome/descrizione in lib/vetrina), ma il campo mancava del tutto.
+  // Stato locale + debounce per non navigare a ogni tasto; un ref tiene i filtri
+  // correnti senza rieseguire l'effetto a ogni render.
+  const [ricerca, setRicerca] = useState(filtri.q);
+  // Riallinea il campo se `q` cambia da fuori (back del browser): pattern React
+  // "aggiusta lo stato durante il render", non un effetto con setState.
+  const [qVista, setQVista] = useState(filtri.q);
+  if (filtri.q !== qVista) {
+    setQVista(filtri.q);
+    setRicerca(filtri.q);
+  }
+  // Ref ai filtri correnti, aggiornato in un effetto (mai durante il render):
+  // serve a costruire la navigazione nel debounce senza rieseguire l'effetto a
+  // ogni tasto (i filtri come dipendenza lo farebbero ripartire di continuo).
+  const filtriRef = useRef(filtri);
+  useEffect(() => {
+    filtriRef.current = filtri;
+  });
+  // Debounce: naviga 350 ms dopo l'ultimo tasto, solo se il testo e cambiato.
+  useEffect(() => {
+    const pulita = ricerca.trim();
+    if (pulita === filtriRef.current.q) return;
+    const t = setTimeout(
+      () => naviga({ ...filtriRef.current, q: pulita }, true),
+      350,
+    );
+    return () => clearTimeout(t);
+  }, [ricerca, naviga]);
+
   return (
     <div className="mb-6">
+      {/* Ricerca testuale del catalogo (nome/descrizione, multi-parola). */}
+      <div className="mb-3">
+        <label className="relative block">
+          <span className="sr-only">Cerca nel catalogo</span>
+          <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-5 w-5"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            value={ricerca}
+            onChange={(e) => setRicerca(e.target.value)}
+            placeholder="Cerca un prodotto, una squadra, un personaggio…"
+            aria-label="Cerca nel catalogo"
+            className="h-12 w-full rounded-full bg-white pl-12 pr-11 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 hover:ring-sea focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:hidden"
+          />
+          {ricerca && (
+            <button
+              type="button"
+              onClick={() => setRicerca("")}
+              aria-label="Cancella la ricerca"
+              className="absolute inset-y-0 right-3 flex items-center text-muted transition-colors hover:text-foreground"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </label>
+      </div>
       {/* Chip dei temi: scorciatoie per saga/serie presenti nella categoria,
           dalla colonna `tema` (conteggi DB-side, vedi lib/vetrina); in coda il
           chip "Altro" col complemento (senza tema o sotto soglia): la somma
@@ -391,8 +484,7 @@ function DrawerFiltri({
   // Scroll-lock, focus iniziale, ESC e focus-trap (pattern del CartDrawer).
   useEffect(() => {
     elementoPrecedenteRef.current = document.activeElement as HTMLElement | null;
-    const overflowPrecedente = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const sbloccaScroll = bloccaScrollBody();
 
     const pannello = pannelloRef.current;
     const focusabili = () =>
@@ -428,7 +520,7 @@ function DrawerFiltri({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflowPrecedente;
+      sbloccaScroll();
       elementoPrecedenteRef.current?.focus?.();
     };
     // Solo al mount/unmount: il focus iniziale non deve ripetersi a ogni render,
@@ -608,7 +700,7 @@ function DrawerFiltri({
         </form>
 
         {/* Footer azioni */}
-        <div className="grid grid-cols-2 gap-3 border-t border-line bg-surface px-5 py-4">
+        <div className="grid grid-cols-2 gap-3 border-t border-line bg-surface px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           <button
             type="button"
             onClick={onAzzera}

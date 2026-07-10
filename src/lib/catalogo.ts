@@ -41,9 +41,53 @@ export const TAGLIE_BAMBINO_ETA = [
 ] as const;
 export const TAGLIE_BAMBINO_NUM = ["2", "4", "6", "8", "10", "12", "14", "16"] as const;
 
-// Taglia unica: accessori senza scala (berretti, cappelli, sciarpe, ...). Una
+// Taglie CAPPELLO: circonferenza in cm (scala del fornitore). Numeri "grandi"
+// (48–62) da NON confondere con i numeri BAMBINO (fino a 16): un cappello 58 e
+// una misura, non un'eta. I cappelli con misura si vendono per taglia; i
+// berretti/accessori senza misura restano a "Taglia unica".
+export const TAGLIE_CAPPELLO = [
+  "48", "50", "51", "52", "54", "55", "56", "57", "58", "59", "60", "61", "62",
+] as const;
+
+/** Vero se la taglia e una misura CAPPELLO (circonferenza 40–70 cm). */
+export function eTagliaCappello(t: string | null | undefined): boolean {
+  const s = (t ?? "").trim();
+  if (!/^\d{2,3}$/.test(s)) return false;
+  const n = parseInt(s, 10);
+  return n >= 40 && n <= 70;
+}
+
+// Taglie PALLONE: misura del pallone (calcio/volley, 1–5). Il fornitore le mette
+// nel NOME ("Pallone ... Misura 5") e vende ogni misura come prodotto a se. A
+// differenza dei cappelli NON si tengono come numero nudo: un "5" pallone si
+// confonderebbe con un "5" bambino (numeri fino a 16). Percio si etichettano
+// "Misura N", come fa il fornitore: univoche ovunque e leggibili in vetrina.
+export const TAGLIE_PALLONE = [
+  "Misura 1", "Misura 2", "Misura 3", "Misura 4", "Misura 5",
+] as const;
+
+/** Vero se la taglia e una misura PALLONE ("Misura 1".."Misura 5"). */
+export function eTagliaPallone(t: string | null | undefined): boolean {
+  return /^misura\s+[1-5]$/i.test((t ?? "").trim());
+}
+
+// Taglia unica: accessori senza scala (berretti, sciarpe, ...). Una
 // sola variante per il prodotto; nel selettore vetrina resta l'unica scelta.
 export const TAGLIA_UNICA = "Taglia unica";
+
+/**
+ * Riporta una taglia adulto alla scala del negozio: MAIUSCOLO + alias del
+ * fornitore ("XXL"→"2XL", "XXXL"→"3XL"; a DB mai la forma "XXL"). E l'unico
+ * punto in cui vive questo alias: lo usano sia il parser import (normalizzaTaglia)
+ * sia la creazione prodotto. Le forme non-adulto (bambino, "Misura N") passano
+ * inalterate a MAIUSCOLO e vengono riconosciute a valle da chi chiama.
+ */
+export function tagliaCanonica(t: string): string {
+  const maiuscola = t.trim().toUpperCase();
+  if (maiuscola === "XXL") return "2XL";
+  if (maiuscola === "XXXL") return "3XL";
+  return maiuscola;
+}
 
 /**
  * Indice di ordinamento di una taglia. Le taglie BAMBINO (range "A-B", numero
@@ -58,6 +102,12 @@ export function ordineTaglia(t: string | null | undefined): number {
   // Adulto: scala XXS→6XL (match esatto).
   const iAdulto = TAGLIE.indexOf(s.toUpperCase() as Taglia);
   if (iAdulto !== -1) return 10_000 + iAdulto;
+  // Cappello: circonferenza 40–70, subito dopo la scala adulto e ordinata per
+  // misura crescente (intercettata PRIMA del numero bambino, che vale fino a 16).
+  if (eTagliaCappello(s)) return 15_000 + parseInt(s, 10);
+  // Pallone: "Misura 1".."Misura 5" — banda propria (ne adulto ne bambino),
+  // ordinata per misura crescente (come il cappello sopra: helper + numero).
+  if (eTagliaPallone(s)) return 16_000 + parseInt(s.replace(/^\D+/, ""), 10);
   // Bambino per eta: "N anni", range "A-B"/"A/B", numero singolo.
   const anni = s.match(/^(\d{1,2})\s*anni$/i);
   if (anni) return parseInt(anni[1], 10) * 10;
@@ -88,6 +138,7 @@ export function eTagliaBambino(t: string | null | undefined): boolean {
   const s = (t ?? "").trim();
   if (!s) return false;
   if ((TAGLIE as readonly string[]).includes(s.toUpperCase())) return false;
+  if (eTagliaCappello(s)) return false; // un numero cappello (58...) non e bambino
   return (
     /^\d{1,2}\s*anni$/i.test(s) ||
     /^\d{1,2}\s*[-/]\s*\d{1,2}$/.test(s) ||

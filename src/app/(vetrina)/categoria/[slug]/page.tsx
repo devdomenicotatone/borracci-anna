@@ -128,8 +128,14 @@ export default async function CategoriaPage({
   const chipsL2 = figlieDi(categorie, macro.id);
   const chipsL3 = attivaL2 ? figlieDi(categorie, attivaL2.id) : [];
 
-  // Cambiando categoria dai chip si conservano filtri e ordinamento correnti.
-  const qsCorrente = serializzaFiltri(filtri);
+  // Cambiando categoria dai chip si conservano filtri e ordinamento correnti,
+  // MA NON il tema: i chip franchise sono calcolati per la categoria attuale
+  // (facette.franchise), quindi uno slug come "napoli" puo non esistere o non
+  // avere senso nella categoria di destinazione (es. da "Calcio" a "Coreane"
+  // restava selezionato "Napoli" e la griglia risultava vuota). Il tema si
+  // riazzera su "Tutto" cambiando categoria, cosi come le altre righe di
+  // navigazione sopra.
+  const qsCorrente = serializzaFiltri({ ...filtri, franchise: "" });
   const hrefCategoria = (c: Categoria) =>
     qsCorrente ? `/categoria/${c.slug}?${qsCorrente}` : `/categoria/${c.slug}`;
 

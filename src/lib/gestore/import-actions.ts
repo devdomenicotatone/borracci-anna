@@ -23,14 +23,21 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
-import { revalidatePath, revalidateTag } from "next/cache";
-import { TAG_CORRELATI } from "@/lib/correlati";
-import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
 
 import { verifySession } from "@/lib/gestore/auth";
+import {
+  revalidaProdotto,
+  revalidaSchedaGestore,
+} from "@/lib/gestore/revalida";
 import { slugify } from "@/lib/gestore/slug";
 import { franchiseDiNome } from "@/lib/franchise";
-import { TAGLIA_UNICA, coloreCanonico, skuVariante } from "@/lib/catalogo";
+import {
+  TAGLIA_UNICA,
+  TAGLIE,
+  coloreCanonico,
+  skuVariante,
+  tagliaCanonica,
+} from "@/lib/catalogo";
 import {
   ACCEPT_ENCODING_FORNITORE,
   ErroreFornitore,
@@ -72,29 +79,10 @@ function eAccessorioTagliaUnica(prodotto: ProdottoBlt): boolean {
   return tip !== undefined && TIPOLOGIE_TAGLIA_UNICA.test(tip.valore);
 }
 
-// Set canonico ammesso senza riserve; oltre a queste si accettano taglie
-// "libere corte" (es. "6 anni", "Unica") fino a 12 caratteri.
-const TAGLIE_CANONICHE = new Set([
-  "XXS",
-  "XS",
-  "S",
-  "M",
-  "L",
-  "XL",
-  "2XL",
-  "3XL",
-  "4XL",
-  "5XL",
-  "6XL",
-]);
-
-/** Alias fornitore → scala del negozio (a DB mai "XXL", sempre "2XL"). */
-function tagliaCanonica(t: string): string {
-  const maiuscola = t.toUpperCase();
-  if (maiuscola === "XXL") return "2XL";
-  if (maiuscola === "XXXL") return "3XL";
-  return maiuscola;
-}
+// Scala adulto ammessa senza riserve (dalla fonte unica in lib/catalogo); oltre
+// a queste si accettano taglie "libere corte" (es. "6 anni", "Unica") fino a 12
+// caratteri. tagliaCanonica (stessa lib) porta l'alias "XXL"→"2XL".
+const TAGLIE_ADULTO = new Set<string>(TAGLIE);
 
 // --- Login fornitore con cache di modulo ---------------------------------------
 
@@ -390,6 +378,9 @@ export async function verificaCodiciAction(
         .from("prodotti")
         .select("codice")
         .not("codice", "is", null)
+        // Ordine stabile: senza, .range() puo saltare o ripetere righe tra le
+        // pagine (PostgREST non garantisce un ordine implicito costante).
+        .order("id", { ascending: true })
         .range(da, da + 999);
       if (error) return { ok: false, error: error.message };
       for (const riga of data ?? []) {
@@ -562,6 +553,13 @@ export async function creaProdottoDaImportAction(input: {
   categoriaId?: string | null;
   /** Articolo non presente in negozio: badge "Solo online" in vetrina. */
   soloOnline?: boolean;
+  /**
+   * Flusso batch: passare `false` limita l'invalidazione alla sola scheda
+   * gestore, evitando di butter via home + tutte le PDP + i tag globali a ogni
+   * bozza (invisibile in vetrina finche attivo=false). Il chiamante fa UNA
+   * revalidaCatalogoAction() a fine batch. Omesso/`true` = revalidate completa.
+   */
+  revalida?: boolean;
 }): Promise<{
   ok: boolean;
   error?: string;
@@ -600,8 +598,8 @@ export async function creaProdottoDaImportAction(input: {
   for (const grezza of input.taglie ?? []) {
     const t = (grezza ?? "").replace(/\s+/g, " ").trim();
     if (!t) continue;
-    const canonica = TAGLIE_CANONICHE.has(tagliaCanonica(t)) ? tagliaCanonica(t) : t;
-    if (!TAGLIE_CANONICHE.has(canonica) && canonica.length > 12) {
+    const canonica = TAGLIE_ADULTO.has(tagliaCanonica(t)) ? tagliaCanonica(t) : t;
+    if (!TAGLIE_ADULTO.has(canonica) && canonica.length > 12) {
       return { ok: false, error: `Taglia non valida: "${grezza}".` };
     }
     if (!taglie.includes(canonica)) taglie.push(canonica);
@@ -651,7 +649,12 @@ export async function creaProdottoDaImportAction(input: {
           // Tema dal dizionario: il prodotto nasce classificato per i chip del
           // catalogo; il gestore puo correggerlo dalla scheda.
           tema: franchiseDiNome(nome)?.slug ?? null,
-        })
+          // Origine BLT: il sync giornaliero aggiorna solo questi (i prodotti
+          // propri del negozio restano fornitore null e non vengono mai toccati).
+          fornitore: "BLT",
+          // Cast: `fornitore` e una colonna nuova non ancora nei types generati
+          // (rigenerare dopo la migration 20260707180000).
+        } as never)
         .select("id")
         .single();
       if (!error && data) {
@@ -707,10 +710,8 @@ export async function creaProdottoDaImportAction(input: {
     return { ok: false, error: "Errore di rete durante la creazione." };
   }
 
-  revalidatePath("/gestore/prodotti");
-  revalidatePath("/");
-  revalidateTag(TAG_CORRELATI, "max");
-  revalidateTag(TAG_FACETTE_VETRINA, "max");
+  if (input.revalida === false) revalidaSchedaGestore(prodottoId);
+  else revalidaProdotto(prodottoId);
   return { ok: true, prodottoId };
 }
 
@@ -868,6 +869,13 @@ export async function importaFotoDaUrlAction(
   fotoUrl: string,
   /** URL della scheda di provenienza: usato come Referer (fedeltà browser). */
   refererUrl?: string,
+  /**
+   * Flusso batch: `false` limita l'invalidazione alla sola scheda gestore (una
+   * bozza attivo=false non e in vetrina, invalidare home/PDP/tag a ogni foto
+   * butterebbe la cache dei clienti per nulla). Il batch fa UNA
+   * revalidaCatalogoAction() a fine corsa. Omesso/`true` = revalidate completa.
+   */
+  revalida?: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const sessione = await verifySession();
   if (!sessione) return { ok: false, error: "Non autorizzato." };
@@ -954,12 +962,8 @@ export async function importaFotoDaUrlAction(
       .update({ immagine_url: (finali?.[0]?.url as string | undefined) ?? null })
       .eq("id", prodottoId);
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath(`/gestore/prodotti/${prodottoId}`);
-    revalidatePath("/");
-    revalidatePath("/prodotti/[slug]", "page");
-    revalidateTag(TAG_CORRELATI, "max");
-    revalidateTag(TAG_FACETTE_VETRINA, "max");
+    if (revalida === false) revalidaSchedaGestore(prodottoId);
+    else revalidaProdotto(prodottoId);
     return { ok: true };
   } catch {
     return { ok: false, error: "Errore di rete durante l'import della foto." };
@@ -1042,12 +1046,32 @@ export async function copiaFotoTraProdottiAction(
       .update({ immagine_url: (finali?.[0]?.url as string | undefined) ?? null })
       .eq("id", aProdottoId);
 
-    revalidatePath("/gestore/prodotti");
-    revalidatePath(`/gestore/prodotti/${aProdottoId}`);
-    revalidatePath("/");
-    revalidatePath("/prodotti/[slug]", "page");
+    // revalidaProdotto include anche i tag TAG_CORRELATI/TAG_FACETTE_VETRINA che
+    // prima qui mancavano (la copertina copiata cambia le card correlate/facette).
+    revalidaProdotto(aProdottoId);
     return { ok: true, copiate };
   } catch {
     return { ok: false, error: "Errore durante la copia delle foto." };
   }
+}
+
+// --- 4) Revalidate complessiva a fine batch ---------------------------------------
+
+/**
+ * Invalidazione ISR completa del catalogo, da chiamare UNA volta a fine import
+ * massivo. Durante il batch creaProdottoDaImportAction e importaFotoDaUrlAction
+ * girano con `revalida:false` e toccano solo la scheda gestore; qui si
+ * rinfrescano home, PDP pubbliche e tag globali (correlati + facette) in un
+ * colpo solo, invece che a ogni foto di ogni bozza. Se il gestore pubblica le
+ * bozze subito dopo, toggleAttivoAction/cambiaVisibilitaBulkAction gia
+ * revalidano in pieno: in quel caso questa chiamata e ridondante ma innocua.
+ */
+export async function revalidaCatalogoAction(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+  revalidaProdotto();
+  return { ok: true };
 }

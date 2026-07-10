@@ -14,11 +14,37 @@ import { revalidatePath } from "next/cache";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { getStripe } from "@/lib/stripe";
 import { inviaEmail } from "@/lib/email";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 import type { StatoOrdine } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
+
+/**
+ * Fa scadere la sessione Stripe eventualmente aperta di un ordine (best effort).
+ * Dopo un annullamento o un pagamento manuale (in negozio) il cliente non deve
+ * poter completare un pagamento Stripe di una sessione ancora aperta: sarebbe un
+ * doppio incasso, o un ordine annullato che "risuscita" pagato dal webhook.
+ * Se la sessione risulta gia pagata non c'e nulla da fare qui (va gestito a mano
+ * con un rimborso): expire e un no-op sulle sessioni gia complete.
+ */
+async function scadiSessioneOrdine(id: string): Promise<void> {
+  if (!process.env.STRIPE_SECRET_KEY) return;
+  try {
+    const admin = createAdminSupabase();
+    const { data } = await admin
+      .from("ordini")
+      .select("stripe_session_id")
+      .eq("id", id)
+      .maybeSingle();
+    const sid = data?.stripe_session_id;
+    if (!sid) return;
+    await getStripe().checkout.sessions.expire(sid);
+  } catch {
+    // Sessione gia scaduta/completata/inesistente: niente da fare.
+  }
+}
 
 /** Cap di sicurezza per il costo di spedizione inserito dal gestore (100 EUR). */
 const MAX_SPEDIZIONE_CENTS = 10_000;
@@ -35,6 +61,23 @@ export interface RimozioneRiga {
 export interface EsitoOrdine {
   ok: boolean;
   error?: string;
+  /** Operazione riuscita MA con un problema collaterale da segnalare alla
+   *  titolare (es. email al cliente non partita): il pannello lo mostra. */
+  avviso?: string;
+}
+
+/**
+ * Errore DB non previsto: il messaggio grezzo di PostgREST arriva in inglese e
+ * spesso e criptico per chi non e tecnico. Non deve finire nei toast della
+ * titolare: lo logghiamo server-side per la diagnosi e restituiamo un testo
+ * generico in italiano.
+ */
+function messaggioErroreGenerico(
+  error: { code?: string; message?: string },
+  contesto: string,
+): string {
+  console.error(`[${contesto}]`, error?.code ?? "", error?.message ?? error);
+  return "Operazione non riuscita, riprova. Se succede ancora contatta l'assistenza.";
 }
 
 type OrdiniUpdate = Database["public"]["Tables"]["ordini"]["Update"];
@@ -60,7 +103,7 @@ async function aggiornaStato(
       .in("stato", statiAmmessi)
       .select("id")
       .maybeSingle();
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: messaggioErroreGenerico(error, "aggiornaStato") };
     if (!data) {
       return { ok: false, error: "Operazione non consentita per questo ordine." };
     }
@@ -137,7 +180,9 @@ export async function confermaOrdineAction(
       .select("stato, costo_spedizione_cents, totale_cents")
       .eq("id", id)
       .maybeSingle();
-    if (errStato) return { ok: false, error: errStato.message };
+    if (errStato) {
+      return { ok: false, error: messaggioErroreGenerico(errStato, "confermaOrdineAction") };
+    }
     if (!corrente || corrente.stato !== "in_attesa") {
       return {
         ok: false,
@@ -152,7 +197,9 @@ export async function confermaOrdineAction(
       .from("ordine_righe")
       .select("id, nome_prodotto, taglia, colore, prezzo_cents, quantita")
       .eq("ordine_id", id);
-    if (errRighe) return { ok: false, error: errRighe.message };
+    if (errRighe) {
+      return { ok: false, error: messaggioErroreGenerico(errRighe, "confermaOrdineAction") };
+    }
     const tutte = righe ?? [];
 
     // Ogni rigaId deve appartenere all'ordine: id estranei = richiesta corrotta.
@@ -191,7 +238,9 @@ export async function confermaOrdineAction(
       .eq("stato", "in_attesa")
       .select("email, nome, token")
       .maybeSingle();
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      return { ok: false, error: messaggioErroreGenerico(error, "confermaOrdineAction") };
+    }
     if (!ordine) {
       return {
         ok: false,
@@ -250,7 +299,10 @@ export async function confermaOrdineAction(
           errRipristinoRighe?.message ?? errRipristinoOrdine?.message,
         );
       }
-      return { ok: false, error: erroreRighe };
+      return {
+        ok: false,
+        error: messaggioErroreGenerico({ message: erroreRighe }, "confermaOrdineAction"),
+      };
     }
 
     revalidatePath("/gestore/ordini");
@@ -280,11 +332,21 @@ export async function confermaOrdineAction(
               )
               .join("\n")}`
           : "";
-      await inviaEmail({
+      // Quell'email e l'UNICO canale con cui il cliente scopre che l'ordine e
+      // pagabile: se non parte (inviaEmail non lancia, ritorna false) la
+      // titolare deve saperlo, altrimenti aspetta un pagamento che non arrivera.
+      const inviata = await inviaEmail({
         to: ordine.email,
         subject: "La tua richiesta è disponibile — completa l'ordine · Anna Shop",
         text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\nArticoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)}\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
+      if (!inviata) {
+        return {
+          ok: true,
+          avviso:
+            "Ordine confermato, ma l'email al cliente NON è partita: contattalo direttamente con il link di pagamento (Copia link).",
+        };
+      }
     }
     return { ok: true };
   } catch {
@@ -294,7 +356,43 @@ export async function confermaOrdineAction(
 
 /** Rifiuta/annulla l'ordine. Non si annulla un ordine gia pagato. */
 export async function annullaOrdineAction(id: string): Promise<EsitoOrdine> {
-  return aggiornaStato(id, { stato: "annullato" }, ["in_attesa", "confermato"]);
+  const esito = await aggiornaStato(id, { stato: "annullato" }, [
+    "in_attesa",
+    "confermato",
+  ]);
+  if (!esito.ok) return esito;
+  // Ordine annullato: se c'era una sessione di pagamento aperta, falla scadere
+  // cosi il cliente non puo piu pagarla (e il webhook non lo resuscita a pagato).
+  await scadiSessioneOrdine(id);
+
+  // Cortesia (best effort): la conferma di ricezione promette al cliente una
+  // risposta — senza questa email resterebbe in attesa per sempre. Solo se
+  // abbiamo un'email (i checkout diretti abbandonati non ne hanno).
+  try {
+    const admin = createAdminSupabase();
+    const { data } = await admin
+      .from("ordini")
+      .select("email, nome")
+      .eq("id", id)
+      .maybeSingle();
+    if (data?.email) {
+      const inviata = await inviaEmail({
+        to: data.email,
+        subject: "La tua richiesta — Anna Shop",
+        text: `Ciao ${data.nome ?? ""},\n\ngrazie per la tua richiesta. Purtroppo questa volta non possiamo darle seguito: gli articoli richiesti non sono disponibili.\n\nSe vuoi, rispondi a questa email o passa a trovarci in negozio: troviamo un'alternativa insieme.\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+      });
+      if (!inviata) {
+        return {
+          ok: true,
+          avviso:
+            "Richiesta rifiutata, ma l'email di cortesia al cliente NON è partita: se serve, avvisalo direttamente.",
+        };
+      }
+    }
+  } catch {
+    // Best effort: il rifiuto e comunque andato a buon fine.
+  }
+  return esito;
 }
 
 /**
@@ -315,6 +413,10 @@ export async function segnaPagatoOrdineAction(id: string): Promise<EsitoOrdine> 
       // La RPC solleva un'eccezione sulle transizioni non consentite.
       return { ok: false, error: "Operazione non consentita per questo ordine." };
     }
+
+    // Pagato in negozio: fai scadere l'eventuale sessione Stripe aperta, cosi il
+    // cliente non completa anche il pagamento online (doppio incasso).
+    await scadiSessioneOrdine(id);
 
     revalidatePath("/gestore/ordini");
     return { ok: true };
