@@ -26,8 +26,9 @@ const TILE_GRADIENTS = [
   "tile-cyan-soft",
 ] as const;
 
-// Le tile chiare (sole) vogliono testo/icona scuri per contrasto AA.
-const TILE_INK = new Set<string>(["tile-sun"]);
+// Le tile chiare (sole, ciano tenue) vogliono testo/icona scuri per contrasto AA:
+// il bianco su "tile-cyan-soft" (parte da #7fe3f5) non arriva a 4.5:1.
+const TILE_INK = new Set<string>(["tile-sun", "tile-cyan-soft"]);
 
 /** Sceglie un gradiente in modo stabile a partire da una stringa. */
 function gradientPer(seed: string): (typeof TILE_GRADIENTS)[number] {
@@ -69,16 +70,78 @@ export default function ProductCard({
     prodotto.disponibilita_su_richiesta === false && !esaurito;
 
   return (
-    <Link
-      href={`/prodotti/${prodotto.slug}`}
-      className="group relative isolate block rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea"
-      aria-label={`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
-    >
-      <div
-        className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-white ${
-          esaurito ? "opacity-75" : ""
-        }`}
-      >
+    // La card NON e piu un <Link> che avvolge i bottoni (HTML non valido:
+    // contenuto interattivo dentro <a>). E un contenitore; il link e un overlay
+    // assoluto (sotto i controlli, vedi in fondo), cosi cuore/frecce/quick-add
+    // restano fratelli del link e pienamente azionabili dagli screen reader.
+    <div className="group relative isolate rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea">
+      <div className="relative aspect-[3/4] w-full">
+        {/* Layer immagine: qui vive l'overflow-hidden (angoli tondi + zoom hover).
+            I controlli e il pannello quick-add stanno FUORI da questo layer, cosi
+            il pannello taglie che si apre verso l'alto non viene ritagliato. */}
+        <div
+          className={`absolute inset-0 overflow-hidden rounded-2xl bg-white ${
+            esaurito ? "opacity-75" : ""
+          }`}
+        >
+          {fotoCarosello.length > 1 ? (
+            // Piu foto dal listino: mini-carosello con frecce/swipe/pallini.
+            <FotoCard
+              urls={fotoCarosello}
+              nome={prodotto.nome}
+              priorita={priorita}
+            />
+          ) : prodotto.immagine_url ? (
+            // Le copertine sono sempre url del bucket Supabase Storage (whitelisted
+            // in next.config.ts): next/image negozia AVIF/WebP e genera lo srcset
+            // responsive. `sizes` rispecchia la griglia 2/3/4 colonne, cosi in 2-col
+            // mobile si scarica ~50vw invece del master pieno.
+            <Image
+              src={prodotto.immagine_url}
+              alt={prodotto.nome}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              quality={75}
+              // Card above-the-fold: caricala subito con priorita alta (candidate
+              // LCP). In Next 16 `priority` e deprecato -> loading="eager" +
+              // fetchPriority="high". Le altre restano lazy (default).
+              loading={priorita ? "eager" : "lazy"}
+              fetchPriority={priorita ? "high" : "auto"}
+              className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.04]"
+            />
+          ) : (
+            // Tile gradiente pop + icona indumento + nome in basso.
+            <div
+              className={`relative flex h-full w-full items-center justify-center ${gradiente}`}
+            >
+              {/* texture a puntini sottili sopra il gradiente */}
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(rgba(255,255,255,.35)_1.5px,transparent_2px)] [background-size:18px_18px]"
+              />
+              <svg
+                viewBox="0 0 100 100"
+                fill="currentColor"
+                aria-hidden="true"
+                className={`relative z-10 w-[46%] max-w-[120px] drop-shadow-[0_6px_12px_rgba(0,40,70,.25)] ${
+                  inchiostro ? "text-foreground" : "text-white"
+                }`}
+              >
+                <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
+              </svg>
+              <span
+                className={`absolute inset-x-3 bottom-3 z-10 font-display text-sm font-bold ${
+                  inchiostro
+                    ? "text-foreground"
+                    : "text-white drop-shadow-[0_2px_8px_rgba(0,30,55,.5)]"
+                }`}
+              >
+                {prodotto.nome}
+              </span>
+            </div>
+          )}
+        </div>
+
         {esaurito && (
           // Pill centrata sulla foto (il cuoricino occupa l'angolo in alto a dx).
           <span className="absolute left-1/2 top-1/2 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full bg-foreground/85 px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">
@@ -86,7 +149,7 @@ export default function ProductCard({
           </span>
         )}
 
-        {/* Cuoricino preferiti (client): ferma l'evento, non apre la scheda. */}
+        {/* Cuoricino preferiti (client): fratello del link overlay, z sopra. */}
         <CuorePreferito
           prodottoId={prodotto.id}
           nome={prodotto.nome}
@@ -110,7 +173,7 @@ export default function ProductCard({
             Solo online
           </span>
         ) : (
-          <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-lagoon ring-1 ring-lagoon/30 backdrop-blur">
+          <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-lagoon-ink ring-1 ring-lagoon/30 backdrop-blur">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -127,64 +190,9 @@ export default function ProductCard({
             In negozio
           </span>
         )}
-        {fotoCarosello.length > 1 ? (
-          // Piu foto dal listino: mini-carosello con frecce/swipe/pallini.
-          <FotoCard
-            urls={fotoCarosello}
-            nome={prodotto.nome}
-            priorita={priorita}
-          />
-        ) : prodotto.immagine_url ? (
-          // Le copertine sono sempre url del bucket Supabase Storage (whitelisted
-          // in next.config.ts): next/image negozia AVIF/WebP e genera lo srcset
-          // responsive. `sizes` rispecchia la griglia 2/3/4 colonne, cosi in 2-col
-          // mobile si scarica ~50vw invece del master pieno.
-          <Image
-            src={prodotto.immagine_url}
-            alt={prodotto.nome}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            quality={75}
-            // Card above-the-fold: caricala subito con priorita alta (candidate
-            // LCP). In Next 16 `priority` e deprecato -> loading="eager" +
-            // fetchPriority="high". Le altre restano lazy (default).
-            loading={priorita ? "eager" : "lazy"}
-            fetchPriority={priorita ? "high" : "auto"}
-            className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.04]"
-          />
-        ) : (
-          // Tile gradiente pop + icona indumento + nome in basso.
-          <div
-            className={`relative flex h-full w-full items-center justify-center ${gradiente}`}
-          >
-            {/* texture a puntini sottili sopra il gradiente */}
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(rgba(255,255,255,.35)_1.5px,transparent_2px)] [background-size:18px_18px]"
-            />
-            <svg
-              viewBox="0 0 100 100"
-              fill="currentColor"
-              aria-hidden="true"
-              className={`relative z-10 w-[46%] max-w-[120px] drop-shadow-[0_6px_12px_rgba(0,40,70,.25)] ${
-                inchiostro ? "text-foreground" : "text-white"
-              }`}
-            >
-              <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
-            </svg>
-            <span
-              className={`absolute inset-x-3 bottom-3 z-10 font-display text-sm font-bold ${
-                inchiostro
-                  ? "text-foreground"
-                  : "text-white drop-shadow-[0_2px_8px_rgba(0,30,55,.5)]"
-              }`}
-            >
-              {prodotto.nome}
-            </span>
-          </div>
-        )}
 
-        {/* Quick add taglie (client): "+" in basso a destra, pannello sopra. */}
+        {/* Quick add taglie (client): "+" in basso a destra; il pannello, essendo
+            fuori dal layer overflow-hidden, si apre verso l'alto senza tagli. */}
         {conQuickAdd && <QuickAddTaglie prodotto={prodotto} />}
       </div>
 
@@ -196,6 +204,16 @@ export default function ProductCard({
           {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
         </span>
       </div>
-    </Link>
+
+      {/* Link overlay: copre l'intera card SOTTO i controlli (z-10 < z-20 di
+          cuore/frecce/quick-add), cosi quelli restano cliccabili e il resto della
+          card naviga. L'aspect-box non ha overflow/opacity/transform, quindi non
+          crea uno stacking context: gli z-index dei bottoni battono l'overlay. */}
+      <Link
+        href={`/prodotti/${prodotto.slug}`}
+        aria-label={`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
+        className="absolute inset-0 z-10 rounded-3xl"
+      />
+    </div>
   );
 }

@@ -29,6 +29,7 @@ import {
   aggiungiAlCarrello,
   aggiornaQuantita,
   rimuoviDalCarrello,
+  statoCarrello,
   svuotaCarrello,
 } from "@/lib/cart";
 import { useToast } from "@/components/Toaster";
@@ -97,6 +98,8 @@ interface CartContextValue {
   aggiorna: (rigaId: string, quantita: number) => Promise<void>;
   rimuovi: (rigaId: string) => Promise<void>;
   svuota: () => Promise<void>;
+  /** Rilegge il carrello dal server (es. dopo che il checkout lo ha riconciliato). */
+  ricarica: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -182,6 +185,15 @@ export function CartProvider({
     [applica, mostra, riconcilia],
   );
 
+  // Rilettura dal server: usata quando lo stato client puo essere disallineato
+  // da una mutazione avvenuta FUORI dalle action del provider — es. il checkout
+  // (/api/checkout) che riconcilia il carrello alle giacenze e risponde 409. Senza
+  // questo, la lista mostrata resterebbe quella vecchia nonostante il "controllalo".
+  const ricarica = useCallback<CartContextValue["ricarica"]>(async () => {
+    const esito = await statoCarrello();
+    if (esito.ok) setRighe(esito.righe);
+  }, []);
+
   const svuota = useCallback<CartContextValue["svuota"]>(async () => {
     applica({ tipo: "svuota" });
     const esito = await svuotaCarrello();
@@ -215,6 +227,7 @@ export function CartProvider({
       aggiorna,
       rimuovi,
       svuota,
+      ricarica,
     }),
     [
       righeOttimistiche,
@@ -228,6 +241,7 @@ export function CartProvider({
       aggiorna,
       rimuovi,
       svuota,
+      ricarica,
     ],
   );
 

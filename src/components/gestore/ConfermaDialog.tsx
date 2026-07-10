@@ -2,6 +2,12 @@
 
 // Dialog di conferma per azioni distruttive (elimina prodotto, rimuovi foto).
 // Componente controllato: la visibilita e gestita dal chiamante via `aperto`.
+// Accessibilita: focus spostato dentro, intrappolato (Tab), Esc annulla, focus
+// ripristinato in chiusura — via useDialogModale, come CartDrawer.
+
+import { useRef } from "react";
+
+import { useDialogModale } from "@/components/useDialogModale";
 
 export default function ConfermaDialog({
   aperto,
@@ -20,6 +26,11 @@ export default function ConfermaDialog({
   onConferma: () => void;
   onAnnulla: () => void;
 }) {
+  const pannelloRef = useRef<HTMLDivElement>(null);
+  // Hook chiamato PRIMA dell'early-return (le regole degli hook lo impongono);
+  // internamente non fa nulla se `aperto` e false.
+  useDialogModale(aperto, pannelloRef, onAnnulla);
+
   if (!aperto) return null;
 
   return (
@@ -28,10 +39,12 @@ export default function ConfermaDialog({
       onClick={onAnnulla}
     >
       <div
+        ref={pannelloRef}
         role="dialog"
         aria-modal="true"
         aria-label={titolo}
-        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft ring-1 ring-line"
+        tabIndex={-1}
+        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft outline-none ring-1 ring-line"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-lg font-extrabold text-foreground">

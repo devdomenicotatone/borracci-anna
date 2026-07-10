@@ -7,10 +7,11 @@
 //   3) ritorno della LISTA CANONICA (sezioni[]) per riallineare il client;
 //   4) revalidatePath("/") + ("/gestore/vetrina").
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { leggiSezioniAdmin, type EsitoVetrina } from "@/lib/gestore/vetrina";
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 import {
   TIPI_SEZIONE_VETRINA,
   type ConfigVetrina,
@@ -33,8 +34,9 @@ type SupabaseGestore = Awaited<ReturnType<typeof verifySession>> extends infer S
   : never;
 
 function revalida(): void {
-  revalidatePath("/"); //                  la home (vetrina pubblica)
-  revalidatePath("/gestore/vetrina"); //   il pannello
+  revalidatePath("/"); //                     la home (vetrina pubblica)
+  revalidateTag(TAG_VETRINA_HOME, "max"); //  la cache delle fasce home
+  revalidatePath("/gestore/vetrina"); //      il pannello
 }
 
 /** Stringa ripulita, oppure undefined se vuota (per non sporcare il jsonb). */

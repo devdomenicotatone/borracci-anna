@@ -16,7 +16,9 @@
 // chiusura con Esc / click ovunque.
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 
 export interface FotoGalleria {
   id: string;
@@ -62,6 +64,7 @@ export default function GalleriaProdotto({
 
   // Vista ingrandita a tutto schermo, aperta col click sulla foto principale.
   const [zoomAperto, setZoomAperto] = useState(false);
+  const zoomRef = useRef<HTMLDivElement>(null);
 
   function vai(delta: number) {
     if (!multipla) return;
@@ -69,20 +72,40 @@ export default function GalleriaProdotto({
     onSelezionaFoto((idx + delta + n) % n);
   }
 
-  // Da ingrandita: Esc chiude, frecce navigano, scroll della pagina bloccato.
+  // Da ingrandita: Esc chiude, frecce navigano, scroll bloccato, focus spostato
+  // dentro (pulsante Chiudi) e intrappolato (Tab), poi ripristinato in chiusura.
   useEffect(() => {
     if (!zoomAperto) return;
+    const precedente = document.activeElement as HTMLElement | null;
+    const contenitore = zoomRef.current;
+    contenitore?.querySelector<HTMLButtonElement>("button")?.focus();
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setZoomAperto(false);
       else if (e.key === "ArrowLeft") vai(-1);
       else if (e.key === "ArrowRight") vai(1);
+      else if (e.key === "Tab") {
+        const f = Array.from(
+          contenitore?.querySelectorAll<HTMLElement>("button") ?? [],
+        );
+        if (f.length === 0) return;
+        const primo = f[0];
+        const ultimo = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === primo) {
+          e.preventDefault();
+          ultimo.focus();
+        } else if (!e.shiftKey && document.activeElement === ultimo) {
+          e.preventDefault();
+          primo.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
-    const overflowPrima = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const sbloccaScroll = bloccaScrollBody();
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = overflowPrima;
+      sbloccaScroll();
+      precedente?.focus?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- vai dipende solo da idx/foto
   }, [zoomAperto, idx, foto.length]);
@@ -207,6 +230,7 @@ export default function GalleriaProdotto({
           (o Esc, o la X) per chiudere; frecce per scorrere le altre foto. */}
       {zoomAperto && urlPrincipale && (
         <div
+          ref={zoomRef}
           role="dialog"
           aria-modal="true"
           aria-label={`Foto ingrandita — ${nome}`}

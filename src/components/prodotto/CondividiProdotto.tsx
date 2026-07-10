@@ -20,6 +20,8 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { bloccaScrollBody } from "@/lib/scroll-lock";
+
 // Classe condivisa delle righe-azione (icona + etichetta).
 const RIGA_AZIONE =
   "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left font-display text-sm font-semibold text-foreground transition-colors hover:bg-surface";
@@ -142,9 +144,9 @@ export default function CondividiProdotto({
       cont.addEventListener("focusout", onFocusOut);
     }
 
-    // La modale copre la pagina: blocca lo scroll dietro finche e aperta.
-    const overflowPrec = document.body.style.overflow;
-    if (variante === "icona") document.body.style.overflow = "hidden";
+    // Solo la modale (variante "icona") copre la pagina e blocca lo scroll
+    // dietro (iOS-safe); il popover "pill" e ancorato, non modale.
+    const sbloccaScroll = variante === "icona" ? bloccaScrollBody() : null;
 
     // Sposta il focus dentro il pannello, gia montato a questo punto: l'effect
     // gira dopo il commit (portale della modale incluso). Sincrono, senza rAF,
@@ -157,7 +159,7 @@ export default function CondividiProdotto({
       document.removeEventListener("keydown", onKey);
       if (onClick) document.removeEventListener("mousedown", onClick);
       if (onFocusOut) cont?.removeEventListener("focusout", onFocusOut);
-      if (variante === "icona") document.body.style.overflow = overflowPrec;
+      sbloccaScroll?.();
       // Riporta il focus al trigger: chi naviga da tastiera non lo perde.
       trigger?.focus();
     };
@@ -167,6 +169,9 @@ export default function CondividiProdotto({
   // (import dinamico di `qrcode`): in vetrina il QR non c'e piu.
   async function apri() {
     setAperto(true);
+    // Azzera l'esito "copia" della sessione precedente: senza questo, riaprendo
+    // il pannello dopo un "Link copiato!" il pulsante resterebbe su quel testo.
+    setCopia("idle");
     if (variante !== "icona" || qr || qrErrore) return;
     try {
       const QRCode = (await import("qrcode")).default;
@@ -223,8 +228,13 @@ export default function CondividiProdotto({
       }
       await navigator.share(base);
       setAperto(false);
-    } catch {
-      // condivisione annullata dall'utente: nessuna azione
+    } catch (e) {
+      // AbortError = l'utente ha annullato lo sheet di sistema: nessuna azione.
+      // Altri errori (tipicamente NotAllowedError su iOS, quando il fetch della
+      // foto ha consumato la "transient activation" del tap): ripiega copiando il
+      // link, cosi il pulsante non sembra "morto" e qualcosa succede comunque.
+      if (e instanceof Error && e.name === "AbortError") return;
+      await copiaLink();
     }
   }
 

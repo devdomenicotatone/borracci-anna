@@ -27,8 +27,8 @@ export default async function Image() {
         {/* Sigillo "Onda Sole": sole + onda, nei colori del brand. */}
         <div style={{ display: "flex", marginBottom: 26 }}>
           <svg width="136" height="136" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="9.5" r="4" fill="#ffd166" />
-            <g stroke="#ffd166" strokeWidth="1.5" strokeLinecap="round">
+            <circle cx="12" cy="9.5" r="4" fill="#ffd23f" />
+            <g stroke="#ffd23f" strokeWidth="1.5" strokeLinecap="round">
               <path d="M12 2.5v1.7" />
               <path d="M4.5 9.5h1.7" />
               <path d="M17.8 9.5h1.7" />

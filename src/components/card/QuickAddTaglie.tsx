@@ -87,7 +87,9 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
         aria-expanded={aperto}
         aria-label={`Aggiungi ${prodotto.nome} al carrello — scegli la taglia`}
         title="Aggiungi rapido"
-        className="absolute bottom-2 right-2 z-20 grid h-9 w-9 place-items-center rounded-full bg-sea text-white shadow-sea transition-transform hover:scale-110"
+        // Visivamente 36px, ma con area di tocco ~48px (before invisibile) per
+        // arrivare al minimo tattile di 44px senza appesantire la card.
+        className="absolute bottom-2 right-2 z-20 grid h-9 w-9 place-items-center rounded-full bg-sea text-white shadow-sea transition-transform before:absolute before:-inset-1.5 before:content-[''] hover:scale-110"
       >
         <svg
           viewBox="0 0 24 24"
@@ -120,7 +122,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
               {Array.from({ length: 4 }).map((_, i) => (
                 <span
                   key={i}
-                  className="h-9 w-11 animate-pulse rounded-lg bg-surface-2"
+                  className="h-11 w-11 animate-pulse rounded-lg bg-surface-2"
                 />
               ))}
             </div>
@@ -152,7 +154,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
                     onClick={(e) => scegli(e, t)}
                     title={disponibile ? `Taglia ${t}` : `Taglia ${t} esaurita`}
                     className={[
-                      "h-9 min-w-11 rounded-lg px-2 font-display text-sm font-bold transition-all",
+                      "h-11 min-w-11 rounded-lg px-2 font-display text-sm font-bold transition-all",
                       disponibile
                         ? "bg-white text-foreground ring-2 ring-surface-2 hover:-translate-y-0.5 hover:ring-sea"
                         : "cursor-not-allowed text-muted line-through ring-2 ring-surface-2 opacity-60",

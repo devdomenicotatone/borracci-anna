@@ -214,19 +214,19 @@ export default function AdminNav({
           </Link>
         </div>
         <nav className="mt-6 flex flex-1 flex-col gap-1 px-4">
-          <Link href="/gestore/prodotti" className={voceSidebar(suProdotti)}>
+          <Link href="/gestore/prodotti" aria-current={suProdotti ? "page" : undefined} className={voceSidebar(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             Prodotti
           </Link>
-          <Link href="/gestore/vetrina" className={voceSidebar(suVetrina)}>
+          <Link href="/gestore/vetrina" aria-current={suVetrina ? "page" : undefined} className={voceSidebar(suVetrina)}>
             <IconaVetrina className="h-5 w-5" />
             Vetrina
           </Link>
-          <Link href="/gestore/categorie" className={voceSidebar(suCategorie)}>
+          <Link href="/gestore/categorie" aria-current={suCategorie ? "page" : undefined} className={voceSidebar(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />
             Categorie
           </Link>
-          <Link href="/gestore/ordini" className={voceSidebar(suOrdini)}>
+          <Link href="/gestore/ordini" aria-current={suOrdini ? "page" : undefined} className={voceSidebar(suOrdini)}>
             <IconaOrdini className="h-5 w-5" />
             Ordini
             {ordiniDaConfermare > 0 && (
@@ -235,11 +235,11 @@ export default function AdminNav({
               </span>
             )}
           </Link>
-          <Link href="/gestore/media" className={voceSidebar(suMedia)}>
+          <Link href="/gestore/media" aria-current={suMedia ? "page" : undefined} className={voceSidebar(suMedia)}>
             <IconaMedia className="h-5 w-5" />
             Media
           </Link>
-          <Link href="/gestore/prodotti/nuovo" className={voceSidebar(suNuovo)}>
+          <Link href="/gestore/prodotti/nuovo" aria-current={suNuovo ? "page" : undefined} className={voceSidebar(suNuovo)}>
             <IconaPiu className="h-5 w-5" />
             Nuovo prodotto
           </Link>
@@ -283,19 +283,19 @@ export default function AdminNav({
       {/* BOTTOM-NAV mobile (nascosta sulle pagine di form) */}
       {!suFormProdotto && (
         <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-          <Link href="/gestore/prodotti" className={voceBottom(suProdotti)}>
+          <Link href="/gestore/prodotti" aria-current={suProdotti ? "page" : undefined} className={voceBottom(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             <span>Prodotti</span>
           </Link>
-          <Link href="/gestore/vetrina" className={voceBottom(suVetrina)}>
+          <Link href="/gestore/vetrina" aria-current={suVetrina ? "page" : undefined} className={voceBottom(suVetrina)}>
             <IconaVetrina className="h-5 w-5" />
             <span>Vetrina</span>
           </Link>
-          <Link href="/gestore/categorie" className={voceBottom(suCategorie)}>
+          <Link href="/gestore/categorie" aria-current={suCategorie ? "page" : undefined} className={voceBottom(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />
             <span>Categorie</span>
           </Link>
-          <Link href="/gestore/ordini" className={voceBottom(suOrdini)}>
+          <Link href="/gestore/ordini" aria-current={suOrdini ? "page" : undefined} className={voceBottom(suOrdini)}>
             <span className="relative">
               <IconaOrdini className="h-5 w-5" />
               {ordiniDaConfermare > 0 && (
@@ -306,7 +306,7 @@ export default function AdminNav({
             </span>
             <span>Ordini</span>
           </Link>
-          <Link href="/gestore/media" className={voceBottom(suMedia)}>
+          <Link href="/gestore/media" aria-current={suMedia ? "page" : undefined} className={voceBottom(suMedia)}>
             <IconaMedia className="h-5 w-5" />
             <span>Media</span>
           </Link>
@@ -327,7 +327,10 @@ function voceSidebar(attivo: boolean): string {
 
 function voceBottom(attivo: boolean): string {
   return [
-    "flex h-16 flex-col items-center justify-center gap-1 text-xs font-display font-bold transition-colors",
-    attivo ? "text-sea" : "text-muted",
+    "relative flex h-16 flex-col items-center justify-center gap-1 text-xs font-display font-bold transition-colors",
+    // Attivo distinto non solo dal colore (WCAG 1.4.1): anche una barretta in alto.
+    attivo
+      ? "text-sea before:absolute before:inset-x-5 before:top-0 before:h-[3px] before:rounded-full before:bg-sea before:content-['']"
+      : "text-muted",
   ].join(" ");
 }

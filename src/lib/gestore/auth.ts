@@ -33,13 +33,28 @@ export const verifySession = cache(
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    // MFA: se l'utente ha un authenticator verificato (nextLevel aal2) la
-    // sessione DEVE essere aal2 (codice TOTP inserito in questo login) —
+    // MFA fail-CLOSED e AUTORITATIVA. Se l'utente ha un authenticator verificato,
+    // la sessione DEVE essere aal2 (codice TOTP inserito in questo login);
     // altrimenti e' un login a meta' e si respinge come non autorizzato.
-    // Il muro definitivo e' comunque la RLS: is_gestore() applica lo stesso
-    // criterio sul DB (migration 20260709120000_mfa_gestore).
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") return null;
+    //
+    // NON usiamo getAuthenticatorAssuranceLevel() senza jwt: quello deriva il
+    // livello dai fattori nella sessione salvata nei cookie, che su una sessione
+    // appena creata da password puo' essere vuota -> nextLevel resta aal1 e il
+    // check non scatterebbe (fail-open). Qui invece:
+    //   - i fattori arrivano da getUser() (sopra), letti dal server di Auth;
+    //   - il livello REALE della sessione dal claim `aal` del JWT via getClaims()
+    //     (firma verificata con la JWKS, o fallback getUser()).
+    // Se il livello non e' determinabile si NEGA. Il muro definitivo resta la RLS
+    // is_gestore() (migration 20260709120000_mfa_gestore), ma le tabelle lette col
+    // service role (ordini) la bypassano: qui e' l'unica barriera per quelle.
+    const haFattoreVerificato = (user.factors ?? []).some(
+      (f) => f.status === "verified",
+    );
+    if (haFattoreVerificato) {
+      const { data: datiClaims } = await supabase.auth.getClaims();
+      const aal = (datiClaims?.claims as { aal?: string } | undefined)?.aal;
+      if (aal !== "aal2") return null;
+    }
 
     const { data: profilo } = await supabase
       .from("profili")

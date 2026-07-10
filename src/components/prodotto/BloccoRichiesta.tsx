@@ -45,7 +45,13 @@ export default function BloccoRichiesta({
 
   function handleAggiungi() {
     if (!variante) {
-      setErrore("Seleziona colore e taglia.");
+      // Colore E taglia scelti ma nessuna variante: e una combinazione che non
+      // esiste (matrice colore/taglia sparsa), non una selezione incompleta.
+      setErrore(
+        colore && taglia
+          ? "Questa combinazione di colore e taglia non è disponibile: scegline un'altra."
+          : "Seleziona colore e taglia.",
+      );
       return;
     }
     setErrore(null);
@@ -93,11 +99,15 @@ export default function BloccoRichiesta({
         </div>
       </div>
 
+      {/* Il pulsante NON e disabilitato quando manca la variante: cliccandolo
+          mostra il motivo (selezione incompleta o combinazione inesistente),
+          invece di restare inerte e muto. Disabilitato solo durante l'invio. */}
       <button
         type="button"
         onClick={handleAggiungi}
-        disabled={!variante || inCorso}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 sm:w-auto"
+        disabled={inCorso}
+        aria-disabled={!variante}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
       >
         <svg
           className="h-5 w-5"

@@ -13,11 +13,19 @@ import { ToasterProvider } from "@/components/Toaster";
 import { CartProvider } from "@/components/cart/CartProvider";
 import CartDrawer from "@/components/cart/CartDrawer";
 import { statoCarrello } from "@/lib/cart";
+import { caricaCategoriePubbliche } from "@/lib/categorie";
+import { gruppiCategorie } from "@/lib/categorie-albero";
 
 export default async function VetrinaLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const statoIniziale = await statoCarrello();
+  // Carrello e categorie sono indipendenti: falli partire insieme (Promise.all)
+  // invece di serializzarli (~2x latenza DB sul TTFB di ogni pagina).
+  const [statoIniziale, categorie] = await Promise.all([
+    statoCarrello(),
+    caricaCategoriePubbliche(),
+  ]);
+  const gruppi = gruppiCategorie(categorie);
 
   return (
     <ToasterProvider>
@@ -30,7 +38,7 @@ export default async function VetrinaLayout({
           Vai al contenuto
         </a>
         <div className="flex min-h-screen flex-col">
-          <Header />
+          <Header gruppi={gruppi} />
           <main id="contenuto" className="flex-1">
             {children}
           </main>

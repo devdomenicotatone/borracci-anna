@@ -11,13 +11,12 @@ import CartBadge from "@/components/cart/CartBadge";
 import MenuMobile from "@/components/MenuMobile";
 import PreferitiBadge from "@/components/preferiti/PreferitiBadge";
 import Wordmark from "@/components/Wordmark";
-import { caricaCategoriePubbliche } from "@/lib/categorie";
-import { gruppiCategorie } from "@/lib/categorie-albero";
+import type { GruppoCategorie } from "@/lib/categorie-albero";
 
-export default async function Header() {
-  const categorie = await caricaCategoriePubbliche();
-  const gruppi = gruppiCategorie(categorie);
-
+// I gruppi categorie arrivano come prop dal layout: cosi il fetch categorie e
+// quello del carrello partono in parallelo (Promise.all nel layout) invece di
+// serializzarsi (statoCarrello -> render Header -> fetch categorie).
+export default function Header({ gruppi }: { gruppi: GruppoCategorie[] }) {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-5 sm:gap-4">
@@ -43,9 +42,11 @@ export default async function Header() {
             Vetrina
           </Link>
 
-          {/* Menu categorie (desktop): macro cliccabile + dropdown figlie. */}
+          {/* Menu categorie: inline solo da lg in su. Sotto lg le categorie
+              vivono nell'hamburger (MenuMobile), cosi con molte radici la riga
+              header non sfonda ne spinge fuori le icone carrello/preferiti. */}
           {gruppi.map(({ radice, figlie }) => (
-            <div key={radice.id} className="group relative hidden sm:block">
+            <div key={radice.id} className="group relative hidden lg:block">
               <Link
                 href={`/categoria/${radice.slug}`}
                 className="inline-flex items-center gap-1 rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea"

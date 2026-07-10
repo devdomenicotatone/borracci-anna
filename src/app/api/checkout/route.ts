@@ -38,7 +38,13 @@ function erroreJson(messaggio: string, status: number): Response {
   });
 }
 
-export async function POST(): Promise<Response> {
+// Tetto anti-flood GLOBALE di ordini "in_attesa" nella finestra di 60s, condiviso
+// con il flusso richiesta (inviaRichiestaAction) che scrive nella stessa tabella
+// `ordini`. Senza questo, /api/checkout permette di creare in loop sessioni Stripe
+// + ordini "in_attesa" aggirando il cap del flusso richiesta.
+const MAX_ORDINI_IN_ATTESA_60S = 25;
+
+export async function POST(req: Request): Promise<Response> {
   // 1) Verifica che Stripe sia configurato (senza lanciare).
   if (!process.env.STRIPE_SECRET_KEY) {
     return erroreJson(
@@ -90,6 +96,34 @@ export async function POST(): Promise<Response> {
       `Le disponibilità sono cambiate (${parti.join("; ")}). Abbiamo aggiornato il carrello: controllalo e riprova.`,
       409,
     );
+  }
+
+  // Rate limit anti-flood (DB-backed, condiviso tra istanze serverless): frena
+  // chi martella l'endpoint per generare sessioni Stripe + ordini fantasma.
+  // Applicato solo col service role configurato (come il pre-save piu sotto):
+  // serve a contare gli ordini bypassando la RLS. Best effort: un problema di
+  // rete nel conteggio non deve bloccare un checkout legittimo (il webhook resta
+  // autoritativo). L'IP viene loggato per tracciabilita, come nel flusso richiesta.
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const admin = createAdminSupabase();
+      const daPocoIso = new Date(Date.now() - 60_000).toISOString();
+      const { count } = await admin
+        .from("ordini")
+        .select("id", { count: "exact", head: true })
+        .eq("stato", "in_attesa")
+        .gte("creato_il", daPocoIso);
+      if ((count ?? 0) >= MAX_ORDINI_IN_ATTESA_60S) {
+        const ip = req.headers.get("x-forwarded-for");
+        if (ip) console.warn(`[checkout] rate limit superato, IP ${ip}`);
+        return erroreJson(
+          "Servizio momentaneamente occupato. Riprova tra qualche minuto.",
+          429,
+        );
+      }
+    } catch (err) {
+      console.error("[checkout] verifica rate-limit fallita:", err);
+    }
   }
 
   // 3) Prepara i line items dai prezzi in centesimi (currency eur).

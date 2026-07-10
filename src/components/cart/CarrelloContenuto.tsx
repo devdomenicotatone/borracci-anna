@@ -24,6 +24,11 @@ export default function CarrelloContenuto() {
   // richiesta (nessun pagamento ora, il gestore conferma la disponibilita);
   // altrimenti pagamento diretto con Stripe.
   const suRichiesta = righe.some((r) => r.prodotto.disponibilita_su_richiesta);
+  // Carrello MISTO: c'e almeno un articolo su richiesta E almeno uno a magazzino.
+  // In quel caso l'intero ordine passa dal flusso richiesta: va spiegato, altrimenti
+  // l'articolo a magazzino "perde" il pagamento immediato senza motivo apparente.
+  const misto =
+    suRichiesta && righe.some((r) => !r.prodotto.disponibilita_su_richiesta);
 
   return (
     <div className="mt-8">
@@ -82,6 +87,15 @@ export default function CarrelloContenuto() {
                 <span className="font-bold text-foreground">
                   Nessun pagamento ora.
                 </span>{" "}
+                {misto && (
+                  <>
+                    Il carrello contiene articoli su richiesta, quindi{" "}
+                    <span className="font-semibold">
+                      l’intero ordine passa dalla richiesta
+                    </span>
+                    .{" "}
+                  </>
+                )}
                 Invii la richiesta, confermiamo la disponibilità di tutti gli
                 articoli e <span className="font-semibold">solo dopo</span> paghi
                 in sicurezza con Stripe.

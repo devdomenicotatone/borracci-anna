@@ -16,6 +16,7 @@ import { COLORI, coloreCanonico } from "@/lib/catalogo";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { TAG_CORRELATI } from "@/lib/correlati";
 import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 
 const MODELLO = "claude-sonnet-5";
 
@@ -374,6 +375,7 @@ export async function creaSchedaDaFotoAction(
     revalidatePath("/");
     revalidateTag(TAG_CORRELATI, "max");
     revalidateTag(TAG_FACETTE_VETRINA, "max");
+    revalidateTag(TAG_VETRINA_HOME, "max");
     return { ok: true, id: prodottoId };
   } catch {
     // Se la bozza era gia stata creata, falla aprire comunque (niente fantasma).

@@ -178,6 +178,7 @@ export function CheckoutButton({
   disabilitato?: boolean;
 }) {
   const { mostra } = useToast();
+  const { ricarica } = useCarrello();
   const [inAttesa, startTransition] = useTransition();
 
   function vaiAlPagamento() {
@@ -206,6 +207,10 @@ export function CheckoutButton({
             }
           }
           mostra(messaggio, "errore");
+          // 409 = il server ha riconciliato il carrello alle giacenze (rimosso o
+          // cappato righe). Rileggilo cosi la lista mostrata riflette subito le
+          // modifiche di cui parla il messaggio, invece di restare stale.
+          if (res.status === 409) await ricarica();
           return;
         }
 

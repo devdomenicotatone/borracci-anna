@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Factor } from "@supabase/supabase-js";
 
 import { useToast } from "@/components/gestore/Toaster";
+import { useDialogModale } from "@/components/useDialogModale";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 
 interface VistaFattore {
@@ -56,6 +57,7 @@ export default function GestioneAuthenticator() {
   // Conferma di rimozione in-page (niente window.confirm, alieno nella PWA).
   const [daRimuovere, setDaRimuovere] = useState<VistaFattore | null>(null);
   const codiceRef = useRef<HTMLInputElement>(null);
+  const dialogRimuoviRef = useRef<HTMLDivElement>(null);
 
   const caricaFattori = useCallback(async () => {
     const { data, error } = await supabase.auth.mfa.listFactors();
@@ -83,6 +85,12 @@ export default function GestioneAuthenticator() {
   }, [caricaFattori]);
 
   const attiva = fattori.length > 0;
+
+  // Focus-trap + Esc + scroll-lock + ripristino focus sul dialog di rimozione
+  // (azione di sicurezza): il chiudi e bloccato mentre l'operazione e in corso.
+  useDialogModale(!!daRimuovere, dialogRimuoviRef, () => {
+    if (!occupato) setDaRimuovere(null);
+  });
 
   // Supabase impone friendly_name univoco per utente.
   const nomeUnivoco = () => {
@@ -368,10 +376,14 @@ export default function GestioneAuthenticator() {
             if (e.target === e.currentTarget && !occupato) setDaRimuovere(null);
           }}
         >
-          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft">
-            <p className="font-display text-base font-bold text-foreground">
+          <div
+            ref={dialogRimuoviRef}
+            tabIndex={-1}
+            className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-soft outline-none"
+          >
+            <h2 className="font-display text-base font-bold text-foreground">
               Rimuovere «{daRimuovere.nome}»?
-            </p>
+            </h2>
             <p className="mt-1 text-sm text-muted">
               {fattori.length <= 1
                 ? "È l'ultimo authenticator: senza, l'accesso tornerà a chiedere solo la password."

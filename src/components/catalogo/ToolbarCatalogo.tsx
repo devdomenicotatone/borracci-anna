@@ -26,6 +26,7 @@ import {
   type Ordinamento,
 } from "@/lib/filtri-catalogo";
 import { coloreChiaro, coloreHex } from "@/lib/catalogo";
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 
 /** Bozza dei filtri mentre si compone la selezione nel drawer. */
 interface BozzaFiltri {
@@ -481,8 +482,7 @@ function DrawerFiltri({
   // Scroll-lock, focus iniziale, ESC e focus-trap (pattern del CartDrawer).
   useEffect(() => {
     elementoPrecedenteRef.current = document.activeElement as HTMLElement | null;
-    const overflowPrecedente = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const sbloccaScroll = bloccaScrollBody();
 
     const pannello = pannelloRef.current;
     const focusabili = () =>
@@ -518,7 +518,7 @@ function DrawerFiltri({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflowPrecedente;
+      sbloccaScroll();
       elementoPrecedenteRef.current?.focus?.();
     };
     // Solo al mount/unmount: il focus iniziale non deve ripetersi a ogni render,
@@ -698,7 +698,7 @@ function DrawerFiltri({
         </form>
 
         {/* Footer azioni */}
-        <div className="grid grid-cols-2 gap-3 border-t border-line bg-surface px-5 py-4">
+        <div className="grid grid-cols-2 gap-3 border-t border-line bg-surface px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           <button
             type="button"
             onClick={onAzzera}

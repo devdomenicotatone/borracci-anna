@@ -13,7 +13,9 @@
 //   3) ogni mutazione ritorna la LISTA CANONICA (categorie[]) per riallineare il
 //      client (come le action galleria ritornano foto[]).
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 
 import { percorsoCategoria } from "@/lib/categorie-albero";
 import { verifySession } from "@/lib/gestore/auth";
@@ -107,6 +109,7 @@ async function prossimoOrdine(
 function revalida(): void {
   revalidatePath("/gestore/categorie");
   revalidatePath("/");
+  revalidateTag(TAG_VETRINA_HOME, "max"); // le fasce home usano gli href categoria
   // Pattern dinamico -> serve il type 'page' (non la URL letterale).
   revalidatePath("/prodotti/[slug]", "page");
 }

@@ -21,7 +21,7 @@ export default function VieniATrovarciPage() {
       <section className="bg-sea-gradient relative isolate overflow-hidden text-white">
         <span
           aria-hidden="true"
-          className="dots-overlay absolute inset-0 -z-10 opacity-50 [mask-image:linear-gradient(180deg,#000_0%,transparent_70%)]"
+          className="dots-overlay absolute inset-0 -z-10 opacity-50 [-webkit-mask-image:linear-gradient(180deg,#000_0%,transparent_70%)] [mask-image:linear-gradient(180deg,#000_0%,transparent_70%)]"
         />
         <div className="mx-auto max-w-6xl px-5 pb-20 pt-12 sm:pb-24 sm:pt-16">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-medium ring-1 ring-white/35 backdrop-blur">

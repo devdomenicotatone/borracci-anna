@@ -21,36 +21,42 @@ export default async function ModificaProdottoPage({
   const { id } = await params;
   const { supabase } = await requireGestore();
 
-  const { data } = await supabase
-    .from("prodotti")
-    .select(
-      "id, nome, slug, codice, descrizione, categoria_id, prezzo_cents, valuta, attivo, disponibilita_su_richiesta, solo_online, immagine_url",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  // Le 4 letture sono indipendenti: eseguile in parallelo (~max invece di somma
+  // delle latenze). Le query extra su un id inesistente sono trascurabili e il
+  // notFound() sul solo prodotto resta corretto.
+  const [prodottoRes, categorie, varRes, fotoRes] = await Promise.all([
+    supabase
+      .from("prodotti")
+      .select(
+        "id, nome, slug, codice, descrizione, categoria_id, prezzo_cents, valuta, attivo, disponibilita_su_richiesta, solo_online, immagine_url",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    caricaCategorie(supabase),
+    supabase
+      .from("varianti")
+      .select("id, taglia, colore, sku, stock")
+      .eq("prodotto_id", id)
+      .order("creato_il", { ascending: true }),
+    supabase
+      .from("prodotto_foto")
+      .select("id, prodotto_id, variante_id, colore, url, ordine")
+      .eq("prodotto_id", id)
+      .order("ordine", { ascending: true }),
+  ]);
 
-  if (!data) notFound();
-  const prodotto = data as ProdottoForm & { immagine_url: string | null };
+  if (!prodottoRes.data) notFound();
+  const prodotto = prodottoRes.data as ProdottoForm & {
+    immagine_url: string | null;
+  };
 
-  const categorie = await caricaCategorie(supabase);
-
-  const { data: varData } = await supabase
-    .from("varianti")
-    .select("id, taglia, colore, sku, stock")
-    .eq("prodotto_id", id)
-    .order("creato_il", { ascending: true });
-  const varianti = (varData as VarianteSalvata[] | null) ?? [];
+  const varianti = (varRes.data as VarianteSalvata[] | null) ?? [];
   // Colori distinti del prodotto, per associare le foto della galleria.
   const coloriProdotto = [
     ...new Set(varianti.map((v) => v.colore).filter((c): c is string => !!c)),
   ];
 
-  const { data: fotoData } = await supabase
-    .from("prodotto_foto")
-    .select("id, prodotto_id, variante_id, colore, url, ordine")
-    .eq("prodotto_id", id)
-    .order("ordine", { ascending: true });
-  const fotoGalleria = (fotoData as FotoGalleriaRow[] | null) ?? [];
+  const fotoGalleria = (fotoRes.data as FotoGalleriaRow[] | null) ?? [];
 
   return (
     <div className="pb-28">

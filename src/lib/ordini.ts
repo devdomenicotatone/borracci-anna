@@ -274,8 +274,17 @@ export async function creaCheckoutOrdineAction(
     // non facciamo mai pagare merce non piu disponibile; i "su richiesta" sono
     // esclusi (giacenza non in tempo reale, gia validata dal gestore).
     const perVariante = new Map<string, { nome: string; qta: number }>();
+    const nonDisponibili: string[] = [];
     for (const r of attive) {
-      if (!r.variante_id) continue;
+      // Riga attiva SENZA variante collegata: la variante e stata eliminata dal
+      // gestore dopo la conferma (il FK ordine_righe.variante_id e ON DELETE SET
+      // NULL, non CASCADE). Non e piu verificabile ne evadibile e non deve MAI
+      // essere fatta pagare: la marchiamo non disponibile invece di saltarla in
+      // silenzio (altrimenti finirebbe nei line item Stripe senza controllo).
+      if (!r.variante_id) {
+        nonDisponibili.push(r.nome_prodotto);
+        continue;
+      }
       const cur = perVariante.get(r.variante_id);
       perVariante.set(r.variante_id, {
         nome: r.nome_prodotto,
@@ -287,7 +296,6 @@ export async function creaCheckoutOrdineAction(
         .from("varianti")
         .select("id, stock, prodotti (attivo, disponibilita_su_richiesta)")
         .in("id", [...perVariante.keys()]);
-      const nonDisponibili: string[] = [];
       for (const v of varStock ?? []) {
         const rel = (
           v as unknown as {
@@ -311,14 +319,14 @@ export async function creaCheckoutOrdineAction(
           nonDisponibili.push(serve.nome);
         }
       }
-      if (nonDisponibili.length > 0) {
-        return {
-          ok: false,
-          error: `Alcuni articoli non sono più disponibili (o non nella quantità richiesta): ${[
-            ...new Set(nonDisponibili),
-          ].join(", ")}. Contatta il negozio prima di pagare.`,
-        };
-      }
+    }
+    if (nonDisponibili.length > 0) {
+      return {
+        ok: false,
+        error: `Alcuni articoli non sono più disponibili (o non nella quantità richiesta): ${[
+          ...new Set(nonDisponibili),
+        ].join(", ")}. Contatta il negozio prima di pagare.`,
+      };
     }
 
     const lineItems = attive.map((r) => ({

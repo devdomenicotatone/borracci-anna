@@ -217,7 +217,9 @@ export default function ProdottoDettaglio({
           {prodotto.nome}
         </h1>
 
-        <p className="mt-3 font-display text-3xl font-extrabold text-coral">
+        {/* Prezzo in blu mare come nelle card della griglia (coerenza) e con
+            contrasto pieno AA: il corallo su bianco era appena sufficiente. */}
+        <p className="mt-3 font-display text-3xl font-extrabold text-sea">
           {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
         </p>
 

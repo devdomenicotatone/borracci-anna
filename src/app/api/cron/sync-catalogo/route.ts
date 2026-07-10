@@ -3,12 +3,15 @@
 // `Authorization: Bearer <CRON_SECRET>`. Per un primo giro sicuro in produzione:
 //   GET /api/cron/sync-catalogo?dryRun=1   → calcola e riporta SENZA scrivere.
 
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { eseguiSyncCatalogo, salvaEsitoSync } from "@/lib/gestore/sync-catalogo";
 import { TAG_CORRELATI } from "@/lib/correlati";
 import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 
 // Runtime Node (serve fetch con cookie, crypto, supabase service role): NON edge.
 export const runtime = "nodejs";
@@ -22,7 +25,13 @@ export const maxDuration = 60;
 function autorizzato(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false; // secret non configurato: nega, non aprire.
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  // Confronto a TEMPO COSTANTE: `===` su stringhe esce al primo carattere diverso
+  // (timing side-channel sul segreto). timingSafeEqual richiede buffer di ugual
+  // lunghezza, quindi confrontiamo prima la lunghezza (la sola lunghezza attesa
+  // non e un'informazione utile a un attaccante).
+  const atteso = Buffer.from(`Bearer ${secret}`);
+  const ricevuto = Buffer.from(req.headers.get("authorization") ?? "");
+  return atteso.length === ricevuto.length && timingSafeEqual(atteso, ricevuto);
 }
 
 export async function GET(req: NextRequest) {
@@ -45,6 +54,7 @@ export async function GET(req: NextRequest) {
     revalidatePath("/gestore/prodotti");
     revalidateTag(TAG_FACETTE_VETRINA, "max");
     revalidateTag(TAG_CORRELATI, "max");
+    revalidateTag(TAG_VETRINA_HOME, "max");
   }
 
   return NextResponse.json(report, { status: report.ok ? 200 : 500 });

@@ -79,7 +79,7 @@ const STATO_UI: Record<
     testo:
       "Stiamo verificando la disponibilità di tutti gli articoli. Ti ricontattiamo a breve: appena confermiamo potrai pagare da questa pagina.",
     chip: "In attesa di conferma",
-    chipCls: "bg-sun/30 text-[#8a6500]",
+    chipCls: "bg-sun/30 text-sun-ink",
   },
   confermato: {
     titolo: "Disponibile!",
@@ -153,7 +153,7 @@ export default async function PaginaOrdine({
       </div>
 
       {inElaborazione ? (
-        <p className="mt-4 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-[#8a6500] ring-1 ring-sun/40">
+        <p className="mt-4 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-sun-ink ring-1 ring-sun/40">
           Stiamo registrando il pagamento… aggiorna la pagina tra qualche
           secondo.
         </p>

@@ -263,7 +263,20 @@ export async function aggiungiAlCarrello(
     const cappata = !suRichiesta && finale < desiderata;
 
     if (finale <= giaInCarrello && esistente) {
-      // Niente da aggiungere (gia al massimo dello stock): segnala l'avviso.
+      // Non c'e nulla da aggiungere. Ma se lo stock e sceso SOTTO la quantita gia
+      // in carrello (finale < giaInCarrello, es. da 3 pezzi a stock 2 dopo il sync
+      // BLT), la riga va comunque cappata alla giacenza reale: altrimenti resta
+      // una quantita over-stock accompagnata dall'avviso incoerente "Hai gia il
+      // massimo disponibile (2)" mentre il carrello ne mostra 3. (finale >= 1 qui:
+      // lo stock 0 e gia stato intercettato sopra con "esaurito".)
+      if (finale < giaInCarrello) {
+        const { error: errCap } = await supabase
+          .from("carrello_righe")
+          .update({ quantita: finale })
+          .eq("id", esistente.id);
+        if (errCap) return esitoCorrente(false, "errore");
+        revalidatePath("/carrello");
+      }
       const esito = await esitoCorrente(true);
       if (cappata) {
         esito.avviso = `Hai gia il massimo disponibile (${variante.stock}) nel carrello.`;

@@ -12,6 +12,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 
 import { TAG_CORRELATI } from "@/lib/correlati";
 import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
+import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 
 /**
  * Invalida tutto cio che una mutazione di prodotto puo cambiare: la lista
@@ -27,6 +28,7 @@ export function revalidaProdotto(prodottoId?: string): void {
   revalidatePath("/prodotti/[slug]", "page");
   revalidateTag(TAG_CORRELATI, "max");
   revalidateTag(TAG_FACETTE_VETRINA, "max");
+  revalidateTag(TAG_VETRINA_HOME, "max");
 }
 
 /**
