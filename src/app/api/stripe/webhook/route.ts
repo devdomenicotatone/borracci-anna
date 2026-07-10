@@ -270,12 +270,14 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
   } else if (EVENTI_SCADUTI.has(event.type)) {
-    // Sessione scaduta senza pagamento: nessuno stock scalato. Se la sessione
-    // apparteneva a un checkout diretto abbandonato, l'ordine pre-creato
-    // "in_attesa" non verra mai pagato: lo marchiamo annullato, cosi non resta
-    // un fantasma anonimo nel pannello "Da confermare". Gli ordini del flusso
-    // richiesta hanno una sessione solo DOPO la conferma (stato 'confermato'),
-    // quindi il filtro sullo stato li lascia intatti. Idempotente sui retry.
+    // Sessione scaduta senza pagamento: nessuno stock scalato. I checkout diretti
+    // non pre-creano piu l'ordine (si registra solo a pagamento riuscito), ma
+    // teniamo questa pulizia come rete di sicurezza per eventuali ordini
+    // "in_attesa" legacy con una sessione, creati prima di quel cambiamento: li
+    // marchiamo annullato cosi non restano fantasmi nel pannello "Da confermare".
+    // Gli ordini del flusso richiesta hanno una sessione solo DOPO la conferma
+    // (stato 'confermato'), quindi il filtro sullo stato li lascia intatti.
+    // Idempotente sui retry.
     const session = event.data.object as Stripe.Checkout.Session;
     try {
       const supabase = createAdminSupabase();
