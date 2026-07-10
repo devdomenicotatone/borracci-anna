@@ -1043,13 +1043,15 @@ grant execute on function public.conteggi_categorie_gestore() to authenticated;
 -- ============================================================================
 -- PRODOTTI CORRELATI ("Ti potrebbe piacere anche" nella scheda prodotto)
 -- ----------------------------------------------------------------------------
--- Stesso contenuto della migration 20260707120000_prodotti_correlati.sql.
+-- Stesso contenuto delle migration 20260707120000_prodotti_correlati.sql e
+-- 20260711120000_correlati_tema.sql (che aggiunge il segnale tema).
 -- Recommender content-based nativo Postgres: la "licenza/entita" (Harry Potter,
--- Napoli...) non e una colonna ne una categoria (i temi di 3o livello sono
--- macro: "Film & Serie TV", "Calcio"), vive nel `nome` e nel prefisso `codice`.
+-- Napoli...) vive nel `nome`, nel prefisso `codice` e — dalla migration
+-- 20260707150000 — nella colonna `tema` curabile dal gestore.
 -- Si combina: similarita trigram sul nome normalizzato (segnale forte) + bonus
--- prefisso codice + bonus categoria (foglia>tipo>genere) + vicinanza prezzo,
--- con anti-monotonia (max 2 per nome normalizzato) e soglia minima.
+-- prefisso codice + bonus categoria (foglia>tipo>genere) + vicinanza prezzo +
+-- bonus stesso `tema`, con anti-monotonia (max 2 per nome normalizzato) e
+-- soglia minima.
 -- SECURITY INVOKER: la RLS mostra solo il catalogo attivo (dati pubblici).
 -- ============================================================================
 
@@ -1113,6 +1115,7 @@ as $$
       p.id,
       p.categoria_id,
       p.prezzo_cents,
+      p.tema,
       public.norm_nome_prodotto(p.nome)                          as nom,
       lower(coalesce(substring(p.codice from '^[A-Za-z]+'), ''))  as pfx,
       ci.parent_id                                               as t_parent,
@@ -1125,7 +1128,7 @@ as $$
   candidates as (
     select
       c.id, c.slug, c.nome, c.descrizione, c.prezzo_cents, c.valuta,
-      c.immagine_url, c.attivo, c.solo_online, c.categoria_id,
+      c.immagine_url, c.attivo, c.solo_online, c.categoria_id, c.tema,
       public.norm_nome_prodotto(c.nome)                          as cand_nom,
       lower(coalesce(substring(c.codice from '^[A-Za-z]+'), ''))  as cpfx,
       ci.parent_id                                               as c_parent,
@@ -1160,6 +1163,12 @@ as $$
                 end
         + 0.5 * (1 - least(1.0, abs(c.prezzo_cents - t.prezzo_cents)::numeric
                                    / greatest(t.prezzo_cents, 1)))
+          -- (5) TEMA: stessa colonna `tema` = stessa entita anche quando i
+          --     nomi non si somigliano (vedi migration 20260711120000).
+        + 2.0 * case
+                  when t.tema is not null and c.tema = t.tema then 1.0
+                  else 0
+                end
       ) as score
     from candidates c
     cross join target t
