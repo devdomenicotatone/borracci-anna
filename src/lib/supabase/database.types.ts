@@ -455,6 +455,38 @@ export interface Database {
           },
         ];
       };
+      prodotto_embedding: {
+        Row: {
+          prodotto_id: string;
+          /** pgvector serializzato ("[0.1,0.2,...]"): PostgREST lo espone come stringa. */
+          embedding: string;
+          testo: string;
+          modello: string;
+          aggiornato_il: string;
+        };
+        Insert: {
+          prodotto_id: string;
+          embedding: string;
+          testo: string;
+          modello: string;
+          aggiornato_il?: string;
+        };
+        Update: {
+          prodotto_id?: string;
+          embedding?: string;
+          testo?: string;
+          modello?: string;
+          aggiornato_il?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "prodotto_embedding_prodotto_id_fkey";
+            columns: ["prodotto_id"];
+            referencedRelation: "prodotti";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -537,6 +569,15 @@ export interface Database {
           solo_online: boolean;
           categoria_id: string | null;
         }[];
+      };
+      ricerca_semantica_catalogo: {
+        Args: {
+          /** pgvector serializzato ("[0.1,0.2,...]"), 1536 dimensioni. */
+          p_embedding: string;
+          p_limite?: number;
+          p_max_distanza?: number;
+        };
+        Returns: { id: string; distanza: number }[];
       };
     };
     Enums: Record<string, never>;

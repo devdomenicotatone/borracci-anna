@@ -1224,3 +1224,62 @@ as $$
 $$;
 
 grant execute on function public.conta_temi_catalogo(uuid[]) to anon, authenticated;
+
+-- ============================================================================
+-- RICERCA SEMANTICA DEL CATALOGO (pgvector + embedding OpenAI)
+-- ----------------------------------------------------------------------------
+-- Stesso contenuto della migration 20260711130000_ricerca_semantica.sql.
+-- Un embedding per prodotto (testo "nome. Tema: <etichetta>. descrizione",
+-- vedi src/lib/embedding-testo.ts) in tabella separata, indice HNSW coseno e
+-- RPC che ritorna gli id attivi piu vicini alla query embeddata. L'app la usa
+-- come fallback integrativo quando la ricerca letterale trova <8 risultati.
+-- SECURITY INVOKER: vale la RLS del chiamante (solo catalogo attivo).
+-- ============================================================================
+
+create extension if not exists vector with schema extensions;
+
+create table if not exists public.prodotto_embedding (
+  prodotto_id   uuid primary key references public.prodotti(id) on delete cascade,
+  embedding     extensions.vector(1536) not null,
+  testo         text not null,
+  modello       text not null,
+  aggiornato_il timestamptz not null default now()
+);
+
+create index if not exists idx_prodotto_embedding_hnsw
+  on public.prodotto_embedding
+  using hnsw (embedding extensions.vector_cosine_ops);
+
+alter table public.prodotto_embedding enable row level security;
+
+drop policy if exists "prodotto_embedding_lettura_pubblica" on public.prodotto_embedding;
+create policy "prodotto_embedding_lettura_pubblica"
+  on public.prodotto_embedding for select
+  using (
+    exists (
+      select 1 from public.prodotti p
+      where p.id = prodotto_id and p.attivo = true
+    )
+  );
+
+create or replace function public.ricerca_semantica_catalogo(
+  p_embedding    extensions.vector(1536),
+  p_limite       integer default 200,
+  p_max_distanza real    default 0.9
+)
+returns table (id uuid, distanza real)
+language sql
+stable
+set search_path = public, extensions, pg_catalog
+as $$
+  select p.id,
+         (e.embedding <=> p_embedding)::real as distanza
+  from public.prodotto_embedding e
+  join public.prodotti p on p.id = e.prodotto_id
+  where p.attivo = true
+    and (e.embedding <=> p_embedding) <= p_max_distanza
+  order by e.embedding <=> p_embedding, p.id
+  limit least(greatest(coalesce(p_limite, 200), 1), 500);
+$$;
+
+grant execute on function public.ricerca_semantica_catalogo(extensions.vector, integer, real) to anon, authenticated;
