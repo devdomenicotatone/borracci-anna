@@ -24,7 +24,7 @@ export default async function ModificaProdottoPage({
   const { data } = await supabase
     .from("prodotti")
     .select(
-      "id, nome, slug, codice, descrizione, categoria_id, prezzo_cents, valuta, attivo, disponibilita_su_richiesta, solo_online, immagine_url",
+      "id, nome, slug, codice, descrizione, categoria_id, prezzo_cents, valuta, attivo, disponibilita_su_richiesta, solo_online, tema, immagine_url",
     )
     .eq("id", id)
     .maybeSingle();

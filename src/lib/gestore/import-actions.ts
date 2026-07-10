@@ -29,6 +29,7 @@ import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
+import { franchiseDiNome } from "@/lib/franchise";
 import { TAGLIA_UNICA, coloreCanonico, skuVariante } from "@/lib/catalogo";
 import {
   ACCEPT_ENCODING_FORNITORE,
@@ -647,6 +648,9 @@ export async function creaProdottoDaImportAction(input: {
           attivo: false, //                       SEMPRE bozza: pubblica il gestore
           disponibilita_su_richiesta: true,
           solo_online: input.soloOnline === true,
+          // Tema dal dizionario: il prodotto nasce classificato per i chip del
+          // catalogo; il gestore puo correggerlo dalla scheda.
+          tema: franchiseDiNome(nome)?.slug ?? null,
         })
         .select("id")
         .single();

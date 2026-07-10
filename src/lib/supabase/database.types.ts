@@ -30,6 +30,7 @@ export interface Database {
           solo_online: boolean;
           categoria_id: string | null;
           codice: string | null;
+          tema: string | null;
           creato_il: string;
         };
         Insert: {
@@ -45,6 +46,7 @@ export interface Database {
           solo_online?: boolean;
           categoria_id?: string | null;
           codice?: string | null;
+          tema?: string | null;
           creato_il?: string;
         };
         Update: {
@@ -60,6 +62,7 @@ export interface Database {
           solo_online?: boolean;
           categoria_id?: string | null;
           codice?: string | null;
+          tema?: string | null;
           creato_il?: string;
         };
         Relationships: [
@@ -515,6 +518,10 @@ export interface Database {
       norm_nome_prodotto: {
         Args: { p: string };
         Returns: string;
+      };
+      conta_temi_catalogo: {
+        Args: { p_categoria_ids?: string[] | null };
+        Returns: { tema: string | null; n: number }[];
       };
       prodotti_correlati: {
         Args: { p_slug: string; p_limit?: number };

@@ -34,6 +34,10 @@ create table if not exists public.prodotti (
   -- Articolo disponibile SOLO dal sito, non presente in negozio (badge
   -- informativo in vetrina). Vedi migration 20260705120000.
   solo_online   boolean not null default false,
+  -- Tema (saga/serie/brand) come slug del dizionario src/lib/franchise.ts
+  -- (es. 'harry-potter'). NULL = nessun tema -> finisce nel chip "Altro" in
+  -- vetrina. Vedi migration 20260707150000.
+  tema          text,
   creato_il     timestamptz not null default now()
 );
 -- Idempotente per i DB gia creati (la create-table sopra non aggiunge colonne).
@@ -43,9 +47,12 @@ alter table public.prodotti
   add column if not exists codice text;
 alter table public.prodotti
   add column if not exists solo_online boolean not null default false;
+alter table public.prodotti
+  add column if not exists tema text;
 create unique index if not exists prodotti_codice_key on public.prodotti (codice);
 
 create index if not exists idx_prodotti_attivo on public.prodotti (attivo);
+create index if not exists idx_prodotti_tema on public.prodotti (tema);
 
 -- Varianti (taglia/colore + stock) -------------------------------------------
 create table if not exists public.varianti (
@@ -1125,3 +1132,33 @@ $$;
 
 grant execute on function public.norm_nome_prodotto(text)          to anon, authenticated;
 grant execute on function public.prodotti_correlati(text, integer) to anon, authenticated;
+
+-- ============================================================================
+-- CONTEGGIO TEMI DEL CATALOGO (chip "temi" della vetrina)
+-- ----------------------------------------------------------------------------
+-- Stesso contenuto della migration 20260707150000_prodotto_tema.sql (che
+-- contiene anche il backfill una-tantum di `tema` dal dizionario TS).
+-- Quanti prodotti ATTIVI per ogni tema (la riga con tema NULL e i temi sotto
+-- soglia confluiscono nel chip "Altro", lato app), opzionalmente ristretti a
+-- una lista di categorie gia espansa ai discendenti. Group-by lato DB:
+-- conteggi esatti qualunque sia la taglia del catalogo. SECURITY INVOKER:
+-- vale la RLS del chiamante (catalogo attivo).
+-- ============================================================================
+
+create or replace function public.conta_temi_catalogo(
+  p_categoria_ids uuid[] default null
+)
+returns table (tema text, n bigint)
+language sql
+stable
+as $$
+  select p.tema, count(*)::bigint as n
+  from public.prodotti p
+  where p.attivo = true
+    and (p_categoria_ids is null
+         or cardinality(p_categoria_ids) = 0
+         or p.categoria_id = any (p_categoria_ids))
+  group by p.tema;
+$$;
+
+grant execute on function public.conta_temi_catalogo(uuid[]) to anon, authenticated;

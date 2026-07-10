@@ -105,6 +105,15 @@ function mappaErroreProdotto(error: {
       },
     };
   }
+  // 42703 = undefined_column: quasi certamente `tema` prima della migration.
+  if (error.code === "42703") {
+    return {
+      errors: {
+        generale:
+          "Il database non ha ancora la colonna «tema»: esegui la migration 20260707150000_prodotto_tema.sql e riprova.",
+      },
+    };
+  }
   return { errors: { generale: error.message } };
 }
 
@@ -135,6 +144,14 @@ export async function salvaProdottoAction(
   const disponibilitaSuRichiesta =
     formData.get("disponibilita_su_richiesta") === "true";
   const soloOnline = formData.get("solo_online") === "true";
+  // Tema (slug del dizionario franchise, es. "harry-potter"): "" -> NULL, cioe
+  // il prodotto finisce nel chip "Altro". Si accetta qualunque slug ben
+  // formato, non solo il dizionario corrente: un tema gia salvato non deve
+  // invalidarsi se il dizionario evolve.
+  const tema =
+    String(formData.get("tema") ?? "")
+      .trim()
+      .toLowerCase() || null;
 
   // Varianti serializzate dal form (JSON). Presenti solo in modifica: in
   // creazione il prodotto non ha ancora un id a cui agganciarle.
@@ -159,6 +176,9 @@ export async function salvaProdottoAction(
   if (!Number.isInteger(prezzoCents) || prezzoCents <= 0) {
     errors.prezzo = "Inserisci un prezzo valido maggiore di zero.";
   }
+  if (tema && !/^[a-z0-9-]{1,40}$/.test(tema)) {
+    errors.generale = "Tema non valido.";
+  }
   if (Object.keys(errors).length > 0) return { errors };
 
   const valori = {
@@ -171,6 +191,7 @@ export async function salvaProdottoAction(
     attivo,
     disponibilita_su_richiesta: disponibilitaSuRichiesta,
     solo_online: soloOnline,
+    tema,
   };
 
   let nuovoId = id;

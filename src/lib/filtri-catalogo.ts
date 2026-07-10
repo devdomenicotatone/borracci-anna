@@ -38,8 +38,8 @@ export interface FiltriCatalogo {
   prezzoMax: number | null;
   /** Testo di ricerca (nome/descrizione). */
   q: string;
-  /** Slug del franchise selezionato (derivato dai nomi), oppure "altro" per
-   *  i prodotti senza chip proprio. "" = nessuno. */
+  /** Slug del tema/franchise selezionato (colonna `prodotti.tema`), oppure
+   *  "altro" per i prodotti senza chip proprio. "" = nessuno. */
   franchise: string;
   ordina: Ordinamento;
 }

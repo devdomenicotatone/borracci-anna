@@ -113,9 +113,11 @@ export default function ToolbarCatalogo({
 
   return (
     <div className="mb-6">
-      {/* Chip franchise: scorciatoie per saga/serie presenti nella categoria,
-          derivate dai nomi (vedi lib/franchise). Servono alla scoperta: mostrano
-          cosa c'e senza doverlo cercare. Stessa riga scorribile con frecce delle
+      {/* Chip dei temi: scorciatoie per saga/serie presenti nella categoria,
+          dalla colonna `tema` (conteggi DB-side, vedi lib/vetrina); in coda il
+          chip "Altro" col complemento (senza tema o sotto soglia): la somma
+          dei numeri e il totale. Servono alla scoperta: mostrano cosa c'e
+          senza doverlo cercare. Stessa riga scorribile con frecce delle
           categorie (NavScorribile): quando sono tanti si raggiungono tutti. */}
       {franchiseDisponibili.length > 0 && (
         <div className="mb-3">

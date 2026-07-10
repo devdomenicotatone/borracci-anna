@@ -1,13 +1,14 @@
-// Riconoscimento del FRANCHISE (saga/serie/brand) dal NOME del prodotto.
+// Dizionario dei FRANCHISE/TEMI (saga/serie/brand) e riconoscimento dal NOME.
 //
-// I prodotti non hanno un campo "franchise" in DB: l'unico segnale e il nome
-// (es. "T-Shirt Squid Game Logo"). Qui un dizionario curato mappa parole-chiave
-// univoche -> franchise, cosi possiamo:
-//   - CONTARE quanti prodotti di ogni franchise ci sono in una categoria
-//     (per mostrare i chip solo dove servono, con il numero);
-//   - FILTRARE il catalogo per franchise con la STESSA funzione del conteggio
-//     (appartieneAlChip): il numero sul chip e esattamente quanti prodotti
-//     appaiono cliccandolo.
+// Dalla migration 20260707150000 il tema vive nella colonna `prodotti.tema`
+// (lo slug di questo dizionario): filtro e conteggi dei chip passano da li,
+// esatti e lato DB (vedi lib/vetrina). Questo dizionario resta:
+//   - il CLASSIFICATORE in scrittura: suggerisce il tema dal nome nel form
+//     prodotto del gestore e classifica i prodotti creati da import/AI
+//     (franchiseDiNome), oltre al backfill una-tantum della migration;
+//   - il catalogo di slug/etichette dei temi (select nel form, chip);
+//   - il FALLBACK in lettura (contaFranchise/appartieneAlChip sui nomi, come
+//     prima della colonna) finche la migration non e applicata.
 // I conteggi sono per-categoria: lo stesso dizionario vale ovunque, ma in "Film"
 // emergono Harry Potter/Marvel, in "Anime" One Piece/Naruto, in "Gaming" Call of
 // Duty... — quelli con zero match semplicemente non compaiono.
@@ -24,10 +25,10 @@
 import type { FranchiseConteggio } from "@/lib/filtri-catalogo";
 
 /**
- * Slug riservato del chip "Altro": prodotti senza franchise riconosciuto nel
- * nome PIU quelli di franchise sotto soglia (senza chip proprio). Non e nel
- * dizionario: e il complemento dei chip visibili, cosi i numeri sommano al
- * totale della categoria.
+ * Slug riservato del chip "Altro": prodotti senza tema (colonna `tema` NULL)
+ * PIU quelli di temi sotto soglia (senza chip proprio). Non e nel dizionario:
+ * e il complemento dei chip visibili, cosi i numeri sommano al totale della
+ * categoria.
  */
 export const FRANCHISE_ALTRO = "altro";
 const ETICHETTA_ALTRO = "Altro";
@@ -138,11 +139,11 @@ export const FRANCHISE: Franchise[] = [
 ];
 
 /** "Versione" del dizionario+logica, per bustare la cache delle facette quando
- *  cambiano: il prefisso `vN` copre i cambi di LOGICA di conteggio (es. v2 =
- *  introduzione del chip "Altro"), la parte numerica i cambi di DIZIONARIO
- *  (franchise + parole). Cosi ogni modifica aggiorna subito i conteggi invece
- *  di aspettare la revalidate. */
-export const VERSIONE_FRANCHISE = `v2:${
+ *  cambiano: il prefisso `vN` copre i cambi di LOGICA di conteggio (v2 =
+ *  introduzione del chip "Altro", v3 = conteggi dalla colonna `tema`), la
+ *  parte numerica i cambi di DIZIONARIO (franchise + parole). Cosi ogni
+ *  modifica aggiorna subito i conteggi invece di aspettare la revalidate. */
+export const VERSIONE_FRANCHISE = `v3:${
   FRANCHISE.length + FRANCHISE.reduce((n, f) => n + f.parole.length, 0)
 }`;
 

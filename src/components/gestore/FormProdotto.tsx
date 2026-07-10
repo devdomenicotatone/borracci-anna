@@ -28,6 +28,7 @@ import {
 } from "@/lib/gestore/actions";
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import { slugify } from "@/lib/gestore/slug";
+import { FRANCHISE, franchiseDiNome } from "@/lib/franchise";
 import { ordinaTaglie, skuVariante } from "@/lib/catalogo";
 import { gruppiCategorie, type GruppoCategorie } from "@/lib/categorie-albero";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
@@ -47,7 +48,14 @@ export interface ProdottoForm {
   categoria_id: string | null;
   disponibilita_su_richiesta: boolean;
   solo_online: boolean;
+  tema: string | null;
 }
+
+// Opzioni del select Tema in ordine alfabetico (nel dizionario sono
+// raggruppate per mondo: comodo da mantenere, scomodo da scorrere).
+const TEMI_ORDINATI = [...FRANCHISE].sort((a, b) =>
+  a.etichetta.localeCompare(b.etichetta, "it"),
+);
 
 /** Chiave stabile di una combinazione colore|taglia (vuoto = null). */
 function comboKey(colore: string | null, taglia: string | null): string {
@@ -91,6 +99,11 @@ export default function FormProdotto({
     prodotto?.disponibilita_su_richiesta ?? true,
   );
   const [soloOnline, setSoloOnline] = useState(prodotto?.solo_online ?? false);
+  // Tema (chip del catalogo): in creazione si auto-riconosce dal nome finche
+  // l'utente non tocca il select (stesso pattern dello slug); in modifica
+  // comanda cio che e salvato a DB.
+  const [tema, setTema] = useState(prodotto?.tema ?? "");
+  const [temaDirty, setTemaDirty] = useState(modifica);
 
   // ----- Varianti (colori × taglie): selezione tenuta qui, applicata al save.
   const [colori, setColori] = useState<string[]>(() => [
@@ -132,6 +145,12 @@ export default function FormProdotto({
     setNome(v);
     setErroriVisibili(false);
     if (!slugDirty) setSlug(slugify(v));
+    if (!temaDirty) setTema(franchiseDiNome(v)?.slug ?? "");
+  }
+
+  function onTema(v: string) {
+    setTema(v);
+    setTemaDirty(true);
   }
 
   function toggleColore(nome: string) {
@@ -232,6 +251,7 @@ export default function FormProdotto({
       attivo !== prodotto.attivo ||
       suRichiesta !== prodotto.disponibilita_su_richiesta ||
       soloOnline !== prodotto.solo_online ||
+      tema !== (prodotto.tema ?? "") ||
       variantiCambiate
     : true;
 
@@ -277,6 +297,9 @@ export default function FormProdotto({
         name="solo_online"
         value={soloOnline ? "true" : "false"}
       />
+      {/* Il tema viaggia in un hidden (come i toggle): il select e reso due
+          volte (mobile + rail) e il FormData non deve avere campi doppi. */}
+      <input type="hidden" name="tema" value={tema} />
       {modifica && (
         <input
           type="hidden"
@@ -368,6 +391,14 @@ export default function FormProdotto({
             value={categoriaId}
             onChange={setCategoriaId}
             gruppi={categorieRaggruppate}
+          />
+
+          <CampoTema
+            id="tema"
+            className="lg:hidden"
+            value={tema}
+            auto={!temaDirty}
+            onChange={onTema}
           />
 
           <Campo
@@ -463,6 +494,12 @@ export default function FormProdotto({
             value={categoriaId}
             onChange={setCategoriaId}
             gruppi={categorieRaggruppate}
+          />
+          <CampoTema
+            id="tema_desktop"
+            value={tema}
+            auto={!temaDirty}
+            onChange={onTema}
           />
           <CardToggle
             titolo="In vendita"
@@ -582,6 +619,75 @@ function CampoCategoria({
           >
             <option value="">Nessuna categoria</option>
             <OpzioniCategorie gruppi={gruppi} />
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
+        </div>
+      </Campo>
+    </div>
+  );
+}
+
+/**
+ * Campo Tema (select dal dizionario dei franchise, lib/franchise). Alimenta i
+ * chip "temi" del catalogo: «Nessuno» = colonna `tema` NULL = chip "Altro".
+ * Reso due volte, mobile e rail; il valore viaggia nell'hidden `tema`.
+ */
+function CampoTema({
+  id,
+  className,
+  value,
+  auto,
+  onChange,
+}: {
+  id: string;
+  className?: string;
+  value: string;
+  /** true finche il valore e auto-riconosciuto dal nome (solo in creazione). */
+  auto: boolean;
+  onChange: (v: string) => void;
+}) {
+  // Un tema salvato che non e (piu) nel dizionario resta tra le opzioni: il
+  // select non deve cancellarlo in silenzio al prossimo salvataggio.
+  const fuoriDizionario =
+    value !== "" && !TEMI_ORDINATI.some((f) => f.slug === value);
+  return (
+    <div className={className}>
+      <Campo
+        label="Tema"
+        htmlFor={id}
+        hint={
+          auto && value
+            ? "Riconosciuto dal nome: puoi cambiarlo."
+            : "Raggruppa il prodotto nei chip del catalogo. «Nessuno» = chip Altro."
+        }
+      >
+        <div className="relative">
+          <select
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className={`${inputCls} appearance-none pr-9`}
+          >
+            <option value="">Nessuno (Altro)</option>
+            {fuoriDizionario && <option value={value}>{value}</option>}
+            {TEMI_ORDINATI.map((f) => (
+              <option key={f.slug} value={f.slug}>
+                {f.etichetta}
+              </option>
+            ))}
           </select>
           <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-muted">
             <svg

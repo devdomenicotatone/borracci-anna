@@ -12,6 +12,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { verifySession } from "@/lib/gestore/auth";
 import { slugify } from "@/lib/gestore/slug";
+import { franchiseDiNome } from "@/lib/franchise";
 import { COLORI, coloreCanonico } from "@/lib/catalogo";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { TAG_CORRELATI } from "@/lib/correlati";
@@ -325,6 +326,9 @@ export async function creaSchedaDaFotoAction(
           categoria_id: dati.categoria_id ?? null,
           prezzo_cents: dati.prezzo_cents,
           attivo: false,
+          // Tema dal dizionario: il prodotto nasce classificato per i chip del
+          // catalogo; il gestore puo correggerlo dalla scheda.
+          tema: franchiseDiNome(nome)?.slug ?? null,
         })
         .select("id")
         .single();

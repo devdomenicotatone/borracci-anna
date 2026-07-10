@@ -1,9 +1,13 @@
 import "server-only";
 
 // Query del catalogo pubblico (vetrina): prodotti filtrati/ordinati e facette
-// (taglie/colori/range prezzo disponibili) per la toolbar filtri.
-// Condiviso da home e pagine categoria. Filtri e ordinamento si applicano
-// lato DB cosi la vetrina regge anche con molti prodotti.
+// (taglie/colori/range prezzo/temi disponibili) per la toolbar filtri.
+// Condiviso da home e pagine categoria. Filtri, ordinamento e conteggi dei
+// temi si applicano lato DB cosi la vetrina regge anche con molti prodotti.
+// Il tema e la colonna `prodotti.tema` (slug del dizionario lib/franchise,
+// NULL = senza tema): filtro eq/complemento e conteggi group-by, esatti e
+// indicizzati. Il dizionario resta il classificatore in scrittura e il
+// fallback in lettura finche la migration 20260707150000 non e applicata.
 
 import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -14,10 +18,12 @@ import {
   FACETTE_VUOTE,
   type FacetteCatalogo,
   type FiltriCatalogo,
+  type FranchiseConteggio,
 } from "@/lib/filtri-catalogo";
 import type { Prodotto } from "@/lib/types";
 import { COLORI, ordinaTaglie } from "@/lib/catalogo";
 import {
+  FRANCHISE_ALTRO,
   VERSIONE_FRANCHISE,
   appartieneAlChip,
   contaFranchise,
@@ -108,12 +114,15 @@ function patternRicerca(q: string): string {
  * idConDiscendenti). Con Supabase non configurato ritorna i dati di esempio;
  * su errore degrada a vuoto (mai prodotti finti con DB connesso).
  *
- * Filtro per TEMA (franchise): NON si applica lato DB. Il conteggio dei chip
- * assegna ogni prodotto a UN solo tema (primo match del dizionario), quindi il
- * filtro usa la stessa funzione (appartieneAlChip) su una scansione leggera
- * `id, nome` gia filtrata/ordinata dal DB; le card della pagina si caricano
- * poi per id. Cosi il numero sul chip e ESATTAMENTE quanti prodotti appaiono
- * cliccandolo — incluso il chip "Altro", complemento dei chip visibili.
+ * Filtro per TEMA (franchise): sulla colonna `tema`, lato DB. Un chip normale
+ * e un eq(tema); "Altro" e il complemento dei chip visibili (tema NULL + temi
+ * sotto soglia), con gli slug dalle stesse facette che l'utente vede: il
+ * numero sul chip resta ESATTAMENTE quanti prodotti appaiono cliccandolo,
+ * perche conteggio (conta_temi_catalogo) e filtro guardano la stessa colonna.
+ * Se la colonna non esiste ancora (migration 20260707150000 non applicata: il
+ * DB risponde 42703) si ripiega sul percorso runtime pre-colonna: match col
+ * dizionario (appartieneAlChip) su una scansione leggera `id, nome` gia
+ * filtrata/ordinata dal DB, card della pagina caricate poi per id.
  */
 export async function caricaProdottiVetrina(
   supabase: Supabase | null,
@@ -130,22 +139,11 @@ export async function caricaProdottiVetrina(
   const { filtri, categoriaIds, pagina = 1 } = opzioni;
 
   try {
-    // Percorso tema attivo solo per slug noti ("altro" incluso): uno slug
-    // ignoto (link vecchio/manomesso) si ignora, come faceva il vecchio filtro.
-    const perTema =
-      filtri.franchise !== "" && etichettaFranchise(filtri.franchise) != null;
-
     // Il join sulle varianti serve solo quando si filtra per taglia/colore:
     // `!inner` esclude i prodotti senza una variante che soddisfi ENTRAMBI i
     // vincoli (es. "esiste una variante Blu in M"). PostgREST embedda le
     // varianti come array: nessuna duplicazione delle righe prodotto.
     const filtraVarianti = filtri.taglie.length > 0 || filtri.colori.length > 0;
-    // Col tema attivo la prima query e una scansione leggera (id + nome, per il
-    // match in JS); altrimenti carica direttamente i campi delle card.
-    const campiBase = perTema ? "id, nome" : CAMPI_CARD;
-    const campi = filtraVarianti
-      ? `${campiBase}, varianti!inner(taglia, colore)`
-      : campiBase;
 
     // Multi-parola: ogni token deve comparire (AND tra i token, chiamate .or()
     // consecutive = AND) nel nome OPPURE nella descrizione. Cosi "squid game
@@ -155,10 +153,14 @@ export async function caricaProdottiVetrina(
       ? patternRicerca(filtri.q).split(/\s+/).filter(Boolean).slice(0, 6)
       : [];
 
-    // Costruttore della query: ogni chiamata da un builder NUOVO con filtri e
-    // ordinamento applicati. Serve alla scansione a blocchi del percorso tema:
-    // .range() muta il builder, quindi non si puo riusarne uno solo.
-    const costruisci = (conteggio: boolean) => {
+    // Costruttore della query: ogni chiamata da un builder NUOVO con filtri
+    // comuni e ordinamento applicati. Serve alla scansione a blocchi del
+    // fallback runtime (.range() muta il builder) e ai campi diversi dei due
+    // percorsi: card complete (percorso DB) o scansione leggera id+nome.
+    const costruisci = (campiBase: string, conteggio: boolean) => {
+      const campi = filtraVarianti
+        ? `${campiBase}, varianti!inner(taglia, colore)`
+        : campiBase;
       let q = supabase
         .from("prodotti")
         .select(campi, conteggio ? { count: "exact" } : undefined)
@@ -200,12 +202,48 @@ export async function caricaProdottiVetrina(
       return q.order("id", { ascending: true });
     };
 
-    if (!perTema) {
-      const { data, error, count } = await costruisci(true).range(
+    // — Percorso DB: il filtro tema e una clausola sulla colonna `tema` —
+    let query = costruisci(CAMPI_CARD, true);
+    if (filtri.franchise === FRANCHISE_ALTRO) {
+      // "Altro" = complemento dei chip visibili: gli slug arrivano dalle
+      // STESSE facette mostrate all'utente (cache condivisa: di norma un hit),
+      // cosi numero sul chip e risultati del click coincidono. Gli slug sono
+      // kebab-case (validati al salvataggio): sicuri dentro `in.(...)`.
+      const facette = await caricaFacetteVetrina(supabase, categoriaIds);
+      const visibili = facette.franchise
+        .map((f) => f.slug)
+        .filter((s) => s !== FRANCHISE_ALTRO);
+      query =
+        visibili.length > 0
+          ? query.or(`tema.is.null,tema.not.in.(${visibili.join(",")})`)
+          : query.is("tema", null);
+    } else if (filtri.franchise) {
+      query = query.eq("tema", filtri.franchise);
+    }
+
+    const esito = await query.range(0, pagina * PRODOTTI_PER_PAGINA - 1);
+    if (!esito.error) {
+      return {
+        prodotti: (esito.data as unknown as Prodotto[] | null) ?? [],
+        totale: esito.count ?? 0,
+      };
+    }
+    // 42703 = undefined_column: la colonna `tema` non esiste ancora (migration
+    // 20260707150000 non applicata) -> fallback runtime qui sotto. Senza
+    // filtro tema il 42703 non puo succedere; ogni altro errore degrada a
+    // vuoto come sempre.
+    if (!filtri.franchise || esito.error.code !== "42703") {
+      return { prodotti: [], totale: 0 };
+    }
+
+    // — Fallback runtime (pre-migration): dizionario sui nomi, come prima
+    // della colonna. Slug ignoto al dizionario (link vecchio/manomesso): si
+    // ignora il filtro, come faceva il vecchio percorso.
+    if (etichettaFranchise(filtri.franchise) == null) {
+      const { data, error, count } = await costruisci(CAMPI_CARD, true).range(
         0,
         pagina * PRODOTTI_PER_PAGINA - 1,
       );
-
       if (error) return { prodotti: [], totale: 0 };
       return {
         prodotti: (data as unknown as Prodotto[] | null) ?? [],
@@ -213,19 +251,19 @@ export async function caricaProdottiVetrina(
       };
     }
 
-    // — Percorso tema: match in JS sulla scansione leggera (gia ordinata) —
-    // Scansione INTEGRALE a blocchi: senza range PostgREST tronca a max-rows
-    // (default 1000) SENZA errore, e il catalogo supera gia quella soglia:
-    // righe perse in silenzio = conteggi e "Mostra altri" sbagliati. Il count
-    // exact del primo blocco fa da guida: si legge finche non si coprono tutte
-    // le righe attese (robusto anche se il server ha un max-rows piu basso).
+    // Match in JS sulla scansione leggera id+nome (gia ordinata), INTEGRALE a
+    // blocchi: senza range PostgREST tronca a max-rows (default 1000) SENZA
+    // errore, e il catalogo supera gia quella soglia: righe perse in silenzio
+    // = conteggi e "Mostra altri" sbagliati. Il count exact del primo blocco
+    // fa da guida: si legge finche non si coprono tutte le righe attese
+    // (robusto anche se il server ha un max-rows piu basso).
     const righe: Array<{ id: string; nome: string }> = [];
     let attese: number | null = null;
     for (;;) {
-      const { data, error, count } = await costruisci(righe.length === 0).range(
-        righe.length,
-        righe.length + BLOCCO_SCANSIONE - 1,
-      );
+      const { data, error, count } = await costruisci(
+        "id, nome",
+        righe.length === 0,
+      ).range(righe.length, righe.length + BLOCCO_SCANSIONE - 1);
       if (error) return { prodotti: [], totale: 0 };
       const blocco =
         (data as unknown as Array<{ id: string; nome: string }> | null) ?? [];
@@ -302,6 +340,52 @@ interface RigaFacette {
   varianti: Array<{ taglia: string | null; colore: string | null }> | null;
 }
 
+/** Etichetta leggibile per un tema fuori dizionario ("death-note" -> "Death Note"):
+ *  il gestore sceglie dal dizionario, ma un tema salvato sopravvive alla
+ *  rimozione della voce e il suo chip non deve rompersi. */
+function etichettaDaSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((p) => p[0].toUpperCase() + p.slice(1))
+    .join(" ");
+}
+
+/**
+ * Chip dei temi dai conteggi DB-side (le righe di conta_temi_catalogo, una per
+ * tema). Stesse regole di contaFranchise: chip proprio da `min` prodotti in su
+ * (sotto soglia e rumore), ordinati per numerosita; se emerge almeno un chip,
+ * in coda "Altro" col resto (tema NULL + temi sotto soglia): la somma dei
+ * count e SEMPRE il totale della categoria.
+ */
+function chipTemi(
+  righe: Array<{ tema: string | null; n: number }>,
+  min = 3,
+): FranchiseConteggio[] {
+  const totale = righe.reduce((somma, r) => somma + r.n, 0);
+  const chips = righe
+    .filter((r): r is { tema: string; n: number } => r.tema != null && r.n >= min)
+    .map((r) => ({
+      slug: r.tema,
+      etichetta: etichettaFranchise(r.tema) ?? etichettaDaSlug(r.tema),
+      count: r.n,
+    }))
+    .sort(
+      (a, b) => b.count - a.count || a.etichetta.localeCompare(b.etichetta, "it"),
+    );
+  if (chips.length === 0) return []; // nessun tema: niente riga chip
+
+  const altro = totale - chips.reduce((somma, c) => somma + c.count, 0);
+  if (altro > 0) {
+    chips.push({
+      slug: FRANCHISE_ALTRO,
+      etichetta: etichettaFranchise(FRANCHISE_ALTRO)!,
+      count: altro,
+    });
+  }
+  return chips;
+}
+
 /**
  * Aggregazione facette vera e propria. Isolata perche gira DENTRO unstable_cache:
  * non puo ricevere il client Supabase (non serializzabile) ne leggere i cookie,
@@ -370,12 +454,36 @@ async function aggregaFacette(
     }
   }
 
+  // Conteggi dei temi: esatti e lato DB (group by sulla colonna `tema`, una
+  // riga per tema: mai vicini al tetto max-rows). Coerenti col filtro del
+  // click, che guarda la stessa colonna.
+  const { data: temi, error: erroreTemi } = await supabase.rpc(
+    "conta_temi_catalogo",
+    { p_categoria_ids: categoriaIds.length > 0 ? categoriaIds : null },
+  );
+
+  let franchise: FranchiseConteggio[];
+  if (!erroreTemi && temi != null) {
+    franchise = chipTemi(temi);
+  } else if (
+    erroreTemi != null &&
+    (erroreTemi.code === "PGRST202" || erroreTemi.code === "42883")
+  ) {
+    // RPC non ancora migrata (migration 20260707150000): si conta col
+    // dizionario sui nomi della scansione, come prima della colonna.
+    franchise = contaFranchise(nomi);
+  } else {
+    // Errore transitorio: si lancia (vedi commento della funzione), cosi la
+    // cache non memorizza conteggi dal dizionario incoerenti col filtro DB.
+    throw erroreTemi ?? new Error("conta_temi_catalogo: risposta vuota");
+  }
+
   return {
     taglie: ordinaTaglie(taglie),
     colori: ordinaColori(colori),
     prezzoMinCents: min,
     prezzoMaxCents: max,
-    franchise: contaFranchise(nomi),
+    franchise,
   };
 }
 
