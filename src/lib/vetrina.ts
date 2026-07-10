@@ -4,6 +4,8 @@ import "server-only";
 // (taglie/colori/range prezzo/temi disponibili) per la toolbar filtri.
 // Condiviso da home e pagine categoria. Filtri, ordinamento e conteggi dei
 // temi si applicano lato DB cosi la vetrina regge anche con molti prodotti.
+// La ricerca testuale e letterale (token ilike) con FALLBACK SEMANTICO
+// integrativo quando trova poco (pgvector + embedding, lib/ricerca-semantica).
 // Il tema e la colonna `prodotti.tema` (slug del dizionario lib/franchise,
 // NULL = senza tema): filtro eq/complemento e conteggi group-by, esatti e
 // indicizzati. Il dizionario resta il classificatore in scrittura e il
@@ -19,9 +21,14 @@ import {
   type FacetteCatalogo,
   type FiltriCatalogo,
   type FranchiseConteggio,
+  type Ordinamento,
 } from "@/lib/filtri-catalogo";
 import type { Prodotto } from "@/lib/types";
 import { scansionaBlocchi } from "@/lib/supabase/scansione";
+import {
+  SOGLIA_FALLBACK_SEMANTICO,
+  cercaIdSemantici,
+} from "@/lib/ricerca-semantica";
 import { COLORI, ordinaTaglie } from "@/lib/catalogo";
 import {
   FRANCHISE_ALTRO,
@@ -133,6 +140,12 @@ function patternRicerca(q: string): string {
  * idConDiscendenti). Con Supabase non configurato ritorna i dati di esempio;
  * su errore degrada a vuoto (mai prodotti finti con DB connesso).
  *
+ * Ricerca testuale: letterale (token ilike in AND su nome/descrizione); se
+ * trova meno di SOGLIA_FALLBACK_SEMANTICO risultati si accodano i vicini per
+ * SIGNIFICATO (embedding + pgvector, vedi estendiConSemantica): "felpa uomo
+ * ragno" torna gli Spider-Man anche senza match di parole. Qualsiasi guasto
+ * del percorso semantico lascia il solo letterale (mai pagina rotta).
+ *
  * Filtro per TEMA (franchise): sulla colonna `tema`, lato DB. Un chip normale
  * e un eq(tema); "Altro" e il complemento dei chip visibili (tema NULL + temi
  * sotto soglia), con gli slug dalle stesse facette che l'utente vede: il
@@ -176,7 +189,15 @@ export async function caricaProdottiVetrina(
     // comuni e ordinamento applicati. Serve alla scansione a blocchi del
     // fallback runtime (.range() muta il builder) e ai campi diversi dei due
     // percorsi: card complete (percorso DB) o scansione leggera id+nome.
-    const costruisci = (campiBase: string, conteggio: boolean) => {
+    // `conRicerca=false` omette il vincolo letterale sui token: e il builder
+    // del fallback semantico, che carica per id prodotti trovati per
+    // SIGNIFICATO (il vincolo sulle parole li escluderebbe tutti) ma deve
+    // rispettare ogni altro filtro corrente.
+    const costruisci = (
+      campiBase: string,
+      conteggio: boolean,
+      conRicerca = true,
+    ) => {
       const campi = filtraVarianti
         ? `${campiBase}, varianti!inner(taglia, colore)`
         : campiBase;
@@ -200,8 +221,10 @@ export async function caricaProdottiVetrina(
       if (filtri.prezzoMax != null) {
         q = q.lte("prezzo_cents", filtri.prezzoMax * 100);
       }
-      for (const t of token) {
-        q = q.or(`nome.ilike.%${t}%,descrizione.ilike.%${t}%`);
+      if (conRicerca) {
+        for (const t of token) {
+          q = q.or(`nome.ilike.%${t}%,descrizione.ilike.%${t}%`);
+        }
       }
 
       switch (filtri.ordina) {
@@ -235,8 +258,8 @@ export async function caricaProdottiVetrina(
         .map((f) => f.slug)
         .filter((s) => s !== FRANCHISE_ALTRO);
     }
-    const costruisciConTema = (conteggio: boolean) => {
-      let q = costruisci(CAMPI_CARD, conteggio);
+    const costruisciConTema = (conteggio: boolean, conRicerca = true) => {
+      let q = costruisci(CAMPI_CARD, conteggio, conRicerca);
       if (visibiliAltro != null) {
         q =
           visibiliAltro.length > 0
@@ -257,7 +280,28 @@ export async function caricaProdottiVetrina(
         costruisciConTema,
         { limite: pagina * PRODOTTI_PER_PAGINA },
       );
-      return { prodotti: righe.map(normalizzaCard), totale };
+      const letterali = righe.map(normalizzaCard);
+
+      // — Fallback semantico integrativo (Fase 3 dei temi) — Quando il
+      // letterale trova POCO (sotto soglia: ricerca rotta o povera, es. "uomo
+      // ragno"), si accodano i prodotti vicini per significato (pgvector, vedi
+      // lib/ricerca-semantica), filtrati dagli stessi filtri correnti. I
+      // letterali restano primi: precisione alta davanti. `.catch(null)`:
+      // qualunque intoppo del percorso semantico NON deve finire nel catch
+      // esterno (che svuoterebbe una griglia letterale gia buona).
+      if (token.length > 0 && totale < SOGLIA_FALLBACK_SEMANTICO) {
+        const esteso = await estendiConSemantica(supabase, {
+          q: filtri.q,
+          ordina: filtri.ordina,
+          letterali,
+          totaleLetterale: totale,
+          limite: pagina * PRODOTTI_PER_PAGINA,
+          costruisciCard: (ids) =>
+            costruisciConTema(false, false).in("id", ids),
+        }).catch(() => null);
+        if (esteso) return esteso;
+      }
+      return { prodotti: letterali, totale };
     } catch (err) {
       // 42703 = undefined_column: la colonna `tema` non esiste ancora
       // (migration 20260707150000 non applicata) -> fallback runtime qui
@@ -329,6 +373,94 @@ export async function caricaProdottiVetrina(
   } catch {
     return { prodotti: [], totale: 0 };
   }
+}
+
+/**
+ * Accoda ai risultati letterali i prodotti semanticamente vicini alla query
+ * (vedi lib/ricerca-semantica), rispettando i filtri correnti. La RPC ritorna
+ * SOLO id+distanza: le card si caricano con `costruisciCard` — lo stesso
+ * costruttore della griglia SENZA il vincolo letterale — a blocchi da 100 id
+ * (un IN con centinaia di id gonfia l'URL PostgREST). Cosi taglie/colori/
+ * prezzo/categoria/tema valgono identici sui semantici, in un posto solo.
+ *
+ * Chi chiama gate-a gia su "letterale sotto soglia" (< 8 < PRODOTTI_PER_PAGINA):
+ * i `letterali` ricevuti sono quindi TUTTI i match letterali, e il dedup per id
+ * e completo. Ritorna null quando non c'e nulla da aggiungere o il percorso
+ * semantico non e disponibile: si resta al solo letterale. Non lancia mai.
+ */
+async function estendiConSemantica(
+  supabase: Supabase,
+  opzioni: {
+    q: string;
+    ordina: Ordinamento;
+    letterali: Prodotto[];
+    totaleLetterale: number;
+    /** Cap cumulativo della griglia (pagina * PRODOTTI_PER_PAGINA). */
+    limite: number;
+    costruisciCard: (
+      ids: string[],
+    ) => PromiseLike<{ data: unknown; error: unknown }>;
+  },
+): Promise<EsitoCatalogo | null> {
+  try {
+    const candidati = await cercaIdSemantici(supabase, opzioni.q);
+    if (!candidati || candidati.length === 0) return null;
+
+    const visti = new Set(opzioni.letterali.map((p) => p.id));
+    const nuovi = candidati.filter((c) => !visti.has(c.id));
+    if (nuovi.length === 0) return null;
+
+    const ids = nuovi.map((c) => c.id);
+    const blocchi: string[][] = [];
+    for (let i = 0; i < ids.length; i += 100) blocchi.push(ids.slice(i, i + 100));
+    const esiti = await Promise.all(
+      blocchi.map(async (b) => {
+        const { data, error } = await opzioni.costruisciCard(b);
+        if (error) throw error; // -> catch: si resta al solo letterale
+        return (data as RigaCard[] | null) ?? [];
+      }),
+    );
+
+    const semantici = esiti.flat().map(normalizzaCard);
+    if (semantici.length === 0) return null;
+
+    // I blocchi spezzano l'ordine del DB: si riordina qui. Con "novita"
+    // (default) vince la PERTINENZA (distanza coseno crescente): per una
+    // ricerca e l'ordine atteso; un ordinamento esplicito dell'utente invece
+    // si rispetta anche sul blocco semantico.
+    const distanze = new Map(nuovi.map((c) => [c.id, c.distanza]));
+    semantici.sort(confrontoSemantico(opzioni.ordina, distanze));
+
+    return {
+      prodotti: [...opzioni.letterali, ...semantici].slice(0, opzioni.limite),
+      totale: opzioni.totaleLetterale + semantici.length,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Comparatore del blocco semantico: pertinenza col default "novita",
+ *  altrimenti il criterio esplicito; distanza (poi id) come tie-break. */
+function confrontoSemantico(
+  ordina: Ordinamento,
+  distanze: Map<string, number>,
+): (a: Prodotto, b: Prodotto) => number {
+  const perDistanza = (a: Prodotto, b: Prodotto) =>
+    (distanze.get(a.id) ?? 1) - (distanze.get(b.id) ?? 1) ||
+    a.id.localeCompare(b.id);
+  return (a, b) => {
+    switch (ordina) {
+      case "prezzo-asc":
+        return a.prezzo_cents - b.prezzo_cents || perDistanza(a, b);
+      case "prezzo-desc":
+        return b.prezzo_cents - a.prezzo_cents || perDistanza(a, b);
+      case "nome":
+        return a.nome.localeCompare(b.nome, "it") || perDistanza(a, b);
+      default:
+        return perDistanza(a, b);
+    }
+  };
 }
 
 /** Posizione di un colore nella palette (gli ignoti in coda, alfabetici). */
