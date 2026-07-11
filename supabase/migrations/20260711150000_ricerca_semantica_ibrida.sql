@@ -14,8 +14,12 @@
 -- pg_trgm e norm_nome_prodotto (Fase 1 dei correlati). La RPC riceve anche il
 -- TESTO della query; query e nome vengono spogliati delle parole-tappo
 -- ("t-shirt mardanona" -> "mardanona"; "felpa uomo ragno" -> "ragno") e
--- confrontati per trigrammi (word_similarity: "mardanona"~"maradona" ~0.36,
--- "mardanona"~"dandadan" ~0.06). Il filtro e' ADATTIVO:
+-- confrontati per trigrammi. STRICT_word_similarity, non word_similarity:
+-- quella non-strict puo' agganciarsi a un PEZZO di parola e il prefisso
+-- condiviso "mar-" bastava a far rientrare Super Mario/Marilyn Manson
+-- esattamente a 0.30 (misurato); la strict confronta parole intere:
+-- "mardanona"~"maradona" 0.36 (dentro), ~"mario" 0.23 (fuori),
+-- ~"dandadan" ~0.06 (fuori). Il filtro e' ADATTIVO:
 --   * se NESSUN candidato ha aggancio lessicale (query-sinonimo pura, es.
 --     "ragno" vs "Spider-Man": trigrammi zero) -> comportamento invariato,
 --     puro semantico;
@@ -57,9 +61,10 @@ as $$
     select p.id,
            (e.embedding <=> p_embedding)::real as distanza,
            -- Aggancio lessicale fuzzy della query al NOME (0 = nessuno).
+           -- strict: parole intere, mai pezzi di parola (vedi testata).
            case
              when par.q_norm is null then 0
-             else word_similarity(par.q_norm, public.norm_nome_prodotto(p.nome))
+             else strict_word_similarity(par.q_norm, public.norm_nome_prodotto(p.nome))
            end as aggancio
     from public.prodotto_embedding e
     join public.prodotti p on p.id = e.prodotto_id
@@ -71,8 +76,8 @@ as $$
   ),
   soglie as (
     -- Il miglior candidato e se ESISTE un aggancio lessicale nel set:
-    -- decide la modalita' (0.3 = soglia trigram di pg_trgm; misurato:
-    -- refusi veri 0.35-0.6, parole scorrelate <0.25).
+    -- decide la modalita' (0.3 = soglia; misurato con strict: refusi veri
+    -- 0.35-0.65, parole scorrelate o solo-prefisso <0.25).
     select min(distanza)          as migliore,
            bool_or(aggancio >= 0.3) as ha_aggancio
     from candidati

@@ -1267,6 +1267,8 @@ create policy "prodotto_embedding_lettura_pubblica"
 -- Se nel set ESISTE un aggancio (query-refuso, es. "mardanona"~"maradona")
 -- restano solo agganciati o nucleo semantico stretto (+0.06 dal migliore);
 -- se non esiste (query-sinonimo, es. "ragno" vs Spider-Man) puro semantico.
+-- STRICT_word_similarity (parole intere): la non-strict aggancia i pezzi di
+-- parola e il prefisso "mar-" faceva rientrare Super Mario a 0.30 esatto.
 drop function if exists public.ricerca_semantica_catalogo(extensions.vector, integer, real);
 
 create or replace function public.ricerca_semantica_catalogo(
@@ -1288,7 +1290,7 @@ as $$
            (e.embedding <=> p_embedding)::real as distanza,
            case
              when par.q_norm is null then 0
-             else word_similarity(par.q_norm, public.norm_nome_prodotto(p.nome))
+             else strict_word_similarity(par.q_norm, public.norm_nome_prodotto(p.nome))
            end as aggancio
     from public.prodotto_embedding e
     join public.prodotti p on p.id = e.prodotto_id
