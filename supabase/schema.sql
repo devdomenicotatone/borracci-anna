@@ -1262,8 +1262,16 @@ create policy "prodotto_embedding_lettura_pubblica"
     )
   );
 
+-- Ibrida adattiva (migration 20260711150000): oltre alla distanza coseno, un
+-- aggancio lessicale trigram (pg_trgm + norm_nome_prodotto) su query e nome.
+-- Se nel set ESISTE un aggancio (query-refuso, es. "mardanona"~"maradona")
+-- restano solo agganciati o nucleo semantico stretto (+0.06 dal migliore);
+-- se non esiste (query-sinonimo, es. "ragno" vs Spider-Man) puro semantico.
+drop function if exists public.ricerca_semantica_catalogo(extensions.vector, integer, real);
+
 create or replace function public.ricerca_semantica_catalogo(
   p_embedding    extensions.vector(1536),
+  p_query        text    default null,
   p_limite       integer default 200,
   p_max_distanza real    default 0.9
 )
@@ -1272,14 +1280,36 @@ language sql
 stable
 set search_path = public, extensions, pg_catalog
 as $$
-  select p.id,
-         (e.embedding <=> p_embedding)::real as distanza
-  from public.prodotto_embedding e
-  join public.prodotti p on p.id = e.prodotto_id
-  where p.attivo = true
-    and (e.embedding <=> p_embedding) <= p_max_distanza
-  order by e.embedding <=> p_embedding, p.id
-  limit least(greatest(coalesce(p_limite, 200), 1), 500);
+  with parametri as (
+    select nullif(public.norm_nome_prodotto(p_query), '') as q_norm
+  ),
+  candidati as (
+    select p.id,
+           (e.embedding <=> p_embedding)::real as distanza,
+           case
+             when par.q_norm is null then 0
+             else word_similarity(par.q_norm, public.norm_nome_prodotto(p.nome))
+           end as aggancio
+    from public.prodotto_embedding e
+    join public.prodotti p on p.id = e.prodotto_id
+    cross join parametri par
+    where p.attivo = true
+      and (e.embedding <=> p_embedding) <= p_max_distanza
+    order by e.embedding <=> p_embedding, p.id
+    limit least(greatest(coalesce(p_limite, 200), 1), 500)
+  ),
+  soglie as (
+    select min(distanza)            as migliore,
+           bool_or(aggancio >= 0.3) as ha_aggancio
+    from candidati
+  )
+  select c.id, c.distanza
+  from candidati c
+  cross join soglie s
+  where (not s.ha_aggancio)
+     or c.aggancio >= 0.3
+     or c.distanza < s.migliore + 0.06
+  order by c.distanza, c.id;
 $$;
 
-grant execute on function public.ricerca_semantica_catalogo(extensions.vector, integer, real) to anon, authenticated;
+grant execute on function public.ricerca_semantica_catalogo(extensions.vector, text, integer, real) to anon, authenticated;

@@ -574,6 +574,8 @@ export interface Database {
         Args: {
           /** pgvector serializzato ("[0.1,0.2,...]"), 1536 dimensioni. */
           p_embedding: string;
+          /** Testo della query per l'aggancio lessicale trigram (ibrida). */
+          p_query?: string | null;
           p_limite?: number;
           p_max_distanza?: number;
         };

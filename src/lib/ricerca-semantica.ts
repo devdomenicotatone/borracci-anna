@@ -93,6 +93,11 @@ export async function cercaIdSemantici(
     const embedding = await embeddingQueryCached(testo);
     const { data, error } = await supabase.rpc("ricerca_semantica_catalogo", {
       p_embedding: JSON.stringify(embedding),
+      // Testo per l'aggancio lessicale trigram della RPC ibrida (migration
+      // 20260711150000): sulle query-refuso ("mardanona") taglia la coda di
+      // prodotti fuori tema che la sola distanza non separa; sulle
+      // query-sinonimo ("uomo ragno") non cambia nulla.
+      p_query: testo,
       p_limite: LIMITE_CANDIDATI,
       p_max_distanza: MAX_DISTANZA,
     });
