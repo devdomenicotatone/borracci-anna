@@ -130,12 +130,20 @@ export default function ToolbarCatalogo({
   // Stato locale + debounce per non navigare a ogni tasto; un ref tiene i filtri
   // correnti senza rieseguire l'effetto a ogni render.
   const [ricerca, setRicerca] = useState(filtri.q);
+  // Campo in uso (focus): finche' si digita, il testo locale e' la verita'.
+  const [ricercaInUso, setRicercaInUso] = useState(false);
   // Riallinea il campo se `q` cambia da fuori (back del browser): pattern React
   // "aggiusta lo stato durante il render", non un effetto con setState.
+  // MAI mentre si digita, pero': la navigazione debounced e' asincrona e il
+  // render server puo' metterci centinaia di ms (percorso semantico) — il suo
+  // "eco" arriverebbe DOPO i tasti successivi e li cancellerebbe (visto in
+  // produzione: parole che spariscono digitando). Col campo in uso vince il
+  // testo locale; qVista si aggiorna comunque, cosi' al blur non scatta
+  // nessuna sincronizzazione retroattiva col testo vecchio.
   const [qVista, setQVista] = useState(filtri.q);
   if (filtri.q !== qVista) {
     setQVista(filtri.q);
-    setRicerca(filtri.q);
+    if (!ricercaInUso) setRicerca(filtri.q);
   }
   // Ref ai filtri correnti, aggiornato in un effetto (mai durante il render):
   // serve a costruire la navigazione nel debounce senza rieseguire l'effetto a
@@ -180,6 +188,8 @@ export default function ToolbarCatalogo({
             type="search"
             value={ricerca}
             onChange={(e) => setRicerca(e.target.value)}
+            onFocus={() => setRicercaInUso(true)}
+            onBlur={() => setRicercaInUso(false)}
             placeholder="Cerca un prodotto, una squadra, un personaggio…"
             aria-label="Cerca nel catalogo"
             className="h-12 w-full rounded-full bg-white pl-12 pr-11 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 hover:ring-sea focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:hidden"
