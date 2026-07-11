@@ -129,6 +129,26 @@ export default function Footer() {
                 {NEGOZIO.email}
               </a>
             </p>
+            <p>
+              <Link
+                href="/account"
+                className="inline-flex items-center gap-1.5 font-semibold text-lagoon transition-colors hover:text-white"
+              >
+                Il mio account
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </Link>
+            </p>
           </div>
         </div>
 

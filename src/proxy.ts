@@ -4,17 +4,20 @@ import { createServerClient } from "@supabase/ssr";
 // Proxy di Next 16 (ex `middleware.ts`, deprecato e rinominato in v16).
 // Responsabilita:
 //   1) rinfrescare la sessione Supabase salvata nei cookie;
-//   2) redirect "ottimistico" alla login per l'area /gestore;
-//   3) header `X-Robots-Tag: noindex` su tutte le risposte /gestore.
-// NON e la barriera di autorizzazione: quella e la RLS (is_gestore) piu
-// verifySession() dentro ogni Server Action. Runtime Node.js di default:
+//   2) redirect "ottimistico" alla login per le aree /gestore e /account;
+//   3) header `X-Robots-Tag: noindex` su tutte le risposte /gestore e /account.
+// NON e la barriera di autorizzazione: quella e la RLS piu verifySession()/
+// requireCliente() dentro ogni Server Action. Runtime Node.js di default:
 // NON impostare `export const runtime` (vietato nel proxy).
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const path = request.nextUrl.pathname;
   const isArea = path.startsWith("/gestore");
-  if (isArea) response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  const isAccount = path.startsWith("/account");
+  if (isArea || isAccount) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -31,7 +34,9 @@ export async function proxy(request: NextRequest) {
           request.cookies.set(name, value),
         );
         response = NextResponse.next({ request });
-        if (isArea) response.headers.set("X-Robots-Tag", "noindex, nofollow");
+        if (isArea || isAccount) {
+          response.headers.set("X-Robots-Tag", "noindex, nofollow");
+        }
         cookiesToSet.forEach(({ name, value, options }) =>
           response.cookies.set(name, value, options),
         );
@@ -53,8 +58,22 @@ export async function proxy(request: NextRequest) {
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
     return redirect;
   }
+
+  // Area clienti: redirect ottimistico alla login con ritorno (?da=), stessa
+  // filosofia del gate /gestore. La barriera reale e requireCliente() + RLS.
+  if (isAccount && !user) {
+    // Conserva anche la query della destinazione (es. ?pagina=2) nel ritorno.
+    const destinazione = path + request.nextUrl.search;
+    const redirect = NextResponse.redirect(
+      new URL(`/accedi?da=${encodeURIComponent(destinazione)}`, request.nextUrl),
+    );
+    redirect.headers.set("X-Robots-Tag", "noindex, nofollow");
+    response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+    return redirect;
+  }
   // NB: NON si redirige /gestore/login -> /gestore/prodotti per l'utente loggato:
   // un authenticated NON-gestore creerebbe un loop con requireGestore().
+  // Idem /accedi -> /account: lo fa la pagina server-side (distingue i gestori).
   return response;
 }
 

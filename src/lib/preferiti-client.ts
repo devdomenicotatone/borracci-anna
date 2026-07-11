@@ -1,10 +1,15 @@
 "use client";
 
-// Preferiti ("cuoricino") — store client su localStorage, SENZA account.
+// Preferiti ("cuoricino") — store client su localStorage.
 // I preferiti vivono sul dispositivo: un array di id prodotto, piu recente per
 // primo. Nessun round-trip: cuori, badge e pagina /preferiti leggono da qui via
 // useSyncExternalStore; le modifiche notificano tutti i componenti montati con
 // un evento custom, e l'evento "storage" allinea le altre schede del browser.
+//
+// Con un CLIENTE LOGGATO localStorage resta l'unico store della UI, ma ogni
+// scrittura viene replicata sul server (tabella `preferiti`) tramite la
+// callback registrata da SincronizzaPreferiti — che al login fa anche il merge
+// e al logout azzera il dispositivo. Per gli ospiti nulla cambia.
 
 import { useSyncExternalStore } from "react";
 
@@ -47,7 +52,23 @@ function leggi(): string[] {
   return cache;
 }
 
-function scrivi(ids: string[]) {
+// Replica verso il server per i clienti loggati (registrata da
+// SincronizzaPreferiti). Viene invocata SOLO dalle scritture locali della
+// scheda corrente: gli allineamenti dal server (sostituisciPreferiti) e le
+// altre schede (evento "storage") non la innescano — niente eco.
+let replicaServer: ((ids: string[]) => void) | null = null;
+
+/** Registra la replica server; ritorna la funzione di sgancio. */
+export function registraReplicaServer(
+  fn: (ids: string[]) => void,
+): () => void {
+  replicaServer = fn;
+  return () => {
+    if (replicaServer === fn) replicaServer = null;
+  };
+}
+
+function scrivi(ids: string[], replica = true) {
   cache = ids;
   cacheRaw = JSON.stringify(ids);
   try {
@@ -56,6 +77,22 @@ function scrivi(ids: string[]) {
     // Quota piena / storage negato: lo stato resta almeno in memoria di pagina.
   }
   window.dispatchEvent(new Event(EVENTO_LOCALE));
+  if (replica) replicaServer?.(ids);
+}
+
+/** Snapshot corrente (per il merge al login). */
+export function leggiPreferiti(): string[] {
+  return leggi();
+}
+
+/** Riscrive la lista SENZA innescare la replica (allineamenti dal server). */
+export function sostituisciPreferiti(ids: string[]): void {
+  scrivi(ids, false);
+}
+
+/** Azzera i preferiti del dispositivo (logout), senza replica. */
+export function svuotaPreferiti(): void {
+  scrivi([], false);
 }
 
 /** Aggiunge o toglie un prodotto dai preferiti. Ritorna il nuovo stato (true = salvato). */

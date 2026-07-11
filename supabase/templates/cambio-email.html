@@ -1,0 +1,24 @@
+<!-- Supabase Auth → Emails → Templates → "Change Email Address"
+     Oggetto suggerito: Conferma la nuova email — Anna Shop
+     Con "Secure email change" ON, Supabase invia questa email a ENTRAMBE le
+     caselle (vecchia e nuova): il cambio si completa dopo entrambe le conferme. -->
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#0a1f33;line-height:1.6">
+  <h2 style="color:#0077c8;margin:0 0 12px">Conferma il cambio email</h2>
+  <p style="margin:0 0 16px">
+    Hai chiesto di cambiare l'email del tuo account Anna Shop. Conferma per
+    completare l'operazione:
+  </p>
+  <p style="margin:0 0 24px">
+    <a href="{{ .SiteURL }}/api/auth/conferma?token_hash={{ .TokenHash }}&type=email_change"
+       style="display:inline-block;background:#0077c8;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:9999px">
+      Conferma la nuova email
+    </a>
+  </p>
+  <p style="margin:0 0 8px;font-size:13px;color:#41566b">
+    Se il pulsante non funziona, copia e incolla questo indirizzo nel browser:<br>
+    {{ .SiteURL }}/api/auth/conferma?token_hash={{ .TokenHash }}&type=email_change
+  </p>
+  <p style="margin:16px 0 0;font-size:13px;color:#41566b">
+    Se non hai richiesto tu questa modifica, ignora questa email.
+  </p>
+</div>

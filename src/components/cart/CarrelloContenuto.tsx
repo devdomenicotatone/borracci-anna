@@ -9,11 +9,18 @@ import Link from "next/link";
 
 import CartItem, { CheckoutButton } from "@/components/CartItem";
 import FreeShippingBar from "@/components/cart/FreeShippingBar";
-import ModuloRichiesta from "@/components/cart/ModuloRichiesta";
+import ModuloRichiesta, {
+  type PrefillRichiesta,
+} from "@/components/cart/ModuloRichiesta";
 import { useCarrello } from "@/components/cart/CartProvider";
 import { formatPrezzo } from "@/lib/format";
 
-export default function CarrelloContenuto() {
+export default function CarrelloContenuto({
+  prefill = null,
+}: {
+  /** Dati del cliente loggato (null = ospite: comportamento identico a prima). */
+  prefill?: PrefillRichiesta | null;
+}) {
   const { righe, count, subtotaleCents, valuta } = useCarrello();
 
   if (count === 0) {
@@ -102,8 +109,20 @@ export default function CarrelloContenuto() {
               </p>
             </div>
 
+            {prefill && (
+              <p className="mt-4 text-xs text-muted">
+                Richiesta collegata al tuo account: la ritroverai in{" "}
+                <Link
+                  href="/account/ordini"
+                  className="font-bold text-sea underline-offset-2 hover:underline"
+                >
+                  I miei ordini
+                </Link>
+                .
+              </p>
+            )}
             <div className="mt-5">
-              <ModuloRichiesta />
+              <ModuloRichiesta prefill={prefill} />
             </div>
           </>
         ) : (
@@ -116,6 +135,20 @@ export default function CarrelloContenuto() {
               pagamento
             </p>
           </>
+        )}
+
+        {/* Invito discreto per gli ospiti: mai un ostacolo al guest checkout. */}
+        {!prefill && (
+          <p className="mt-3 text-center text-xs text-muted">
+            Hai un account?{" "}
+            <Link
+              href="/accedi?da=/carrello"
+              className="font-bold text-sea underline-offset-2 hover:underline"
+            >
+              Accedi
+            </Link>{" "}
+            per un checkout più veloce.
+          </p>
         )}
 
         <div className="mt-4 text-center">

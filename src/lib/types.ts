@@ -238,6 +238,13 @@ export interface Ordine {
   /** Timestamp ISO 8601 della conferma disponibilita (null se non confermato). */
   confermato_il: string | null;
   stripe_session_id: string | null;
+  /**
+   * Account cliente proprietario (null = ordine ospite). Popolato dai trigger
+   * di aggancio per email verificata (migration 20260711180000).
+   */
+  user_id?: string | null;
+  /** Numero ordine leggibile ("Ordine #1042"); null solo su righe pre-backfill. */
+  numero?: number | null;
   /** Timestamp ISO 8601 di creazione. */
   creato_il: string;
 }
@@ -261,6 +268,37 @@ export interface Profilo {
   id: string;
   ruolo: "gestore" | "staff";
   nome: string | null;
+}
+
+/**
+ * Un cliente dell'area utente (riga in public.clienti). NON conferisce alcun
+ * permesso gestore: quella e la tabella `profili` (vedi is_gestore()).
+ */
+export interface Cliente {
+  id: string;
+  email: string | null;
+  nome: string | null;
+  /** Customer Stripe collegato (creato lazy al primo checkout). */
+  stripe_customer_id: string | null;
+  /** Ambiente delle chiavi che hanno creato il customer ("test" | "live"). */
+  stripe_customer_ambiente: string | null;
+}
+
+/** Un indirizzo della rubrica cliente (spediamo solo in Italia). */
+export interface Indirizzo {
+  id: string;
+  /** Etichetta personale ("Casa", "Ufficio"...). */
+  etichetta: string | null;
+  /** Nome e cognome del destinatario. */
+  nome: string;
+  telefono: string | null;
+  line1: string;
+  line2: string | null;
+  cap: string;
+  citta: string;
+  provincia: string;
+  paese: string;
+  predefinito: boolean;
 }
 
 /**

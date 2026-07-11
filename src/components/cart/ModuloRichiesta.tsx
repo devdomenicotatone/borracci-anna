@@ -13,7 +13,17 @@ import { inviaRichiestaAction, type StatoRichiesta } from "@/lib/ordini";
 const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
-export default function ModuloRichiesta() {
+/** Dati del cliente loggato per il prefill (campi comunque modificabili). */
+export interface PrefillRichiesta {
+  nome: string;
+  email: string;
+}
+
+export default function ModuloRichiesta({
+  prefill,
+}: {
+  prefill?: PrefillRichiesta | null;
+}) {
   const router = useRouter();
   const { svuota } = useCarrello();
   const [stato, setStato] = useState<StatoRichiesta>({});
@@ -48,6 +58,7 @@ export default function ModuloRichiesta() {
           name="nome"
           required
           autoComplete="name"
+          defaultValue={prefill?.nome ?? ""}
           className={inputCls}
         />
         {stato.errors?.nome && (
@@ -69,6 +80,7 @@ export default function ModuloRichiesta() {
           inputMode="email"
           required
           autoComplete="email"
+          defaultValue={prefill?.email ?? ""}
           className={inputCls}
         />
         {stato.errors?.email && (

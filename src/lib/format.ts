@@ -16,6 +16,21 @@ export function formatPrezzo(cents: number, valuta: string = "EUR"): string {
 }
 
 /**
+ * Formatta un timestamp ISO in data lunga italiana.
+ * Es. formatDataLunga("2026-07-12T09:30:00Z") => "12 luglio 2026".
+ */
+export function formatDataLunga(iso: string): string {
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    // Il runtime server e in UTC: senza timeZone una data serale italiana
+    // scivolerebbe al giorno prima. Ancoriamo al fuso del negozio.
+    timeZone: "Europe/Rome",
+  }).format(new Date(iso));
+}
+
+/**
  * Converte un prezzo inserito in euro (stringa) nei centesimi interi.
  * Tollerante agli input reali da tastiera/telefono: "29,99", "29.99",
  * "€ 1.299,00", ",99", ".5". Evita gli errori di virgola mobile di `* 100`.

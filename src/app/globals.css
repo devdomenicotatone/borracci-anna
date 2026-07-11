@@ -20,6 +20,7 @@
   --line: #dceef6; /* bordi/divisori sottili */
 
   --sea: #0077c8; /* blu mare — primario "istituzionale" */
+  --sea-ink: #005c9c; /* blu mare "inchiostro" — testo/chip su fondo sea chiaro (sea/10-15): AA */
   --lagoon: #00b4d8; /* ciano laguna — accento fresco */
   --coral: #ff5c5c; /* corallo — call-to-action / energia (fill: pulsanti, icone) */
   --coral-ink: #d62828; /* corallo "inchiostro" — testo errori/alert su sfondo chiaro (contrasto AA ~5:1) */
@@ -39,6 +40,7 @@
   --color-line: var(--line);
 
   --color-sea: var(--sea);
+  --color-sea-ink: var(--sea-ink);
   --color-lagoon: var(--lagoon);
   --color-coral: var(--coral);
   --color-coral-ink: var(--coral-ink);

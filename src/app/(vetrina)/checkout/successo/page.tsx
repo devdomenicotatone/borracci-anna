@@ -7,6 +7,7 @@
 import Link from "next/link";
 
 import SvuotaCarrelloAlSuccesso from "@/components/cart/SvuotaCarrelloAlSuccesso";
+import { verificaSessioneCliente } from "@/lib/account/auth";
 import { CONSEGNA_MAX_GG, CONSEGNA_MIN_GG } from "@/lib/spedizione";
 import { getStripe } from "@/lib/stripe";
 
@@ -49,7 +50,10 @@ export default async function CheckoutSuccessoPage({
   searchParams: Promise<{ session_id?: string }>;
 }) {
   const { session_id } = await searchParams;
-  const esito = await statoPagamento(session_id);
+  const [esito, sessioneCliente] = await Promise.all([
+    statoPagamento(session_id),
+    verificaSessioneCliente(),
+  ]);
 
   // Sessione non verificabile: nessun falso successo, nessuno svuotamento del
   // carrello. Si invita a tornare al carrello per riprovare.
@@ -136,12 +140,23 @@ export default async function CheckoutSuccessoPage({
           </li>
         </ul>
 
-        <Link
-          href="/"
-          className="mt-8 inline-flex h-12 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
-        >
-          Continua lo shopping
-        </Link>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex h-12 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+          >
+            Continua lo shopping
+          </Link>
+          {/* Cliente loggato: l'ordine appena pagato e gia nel suo storico. */}
+          {sessioneCliente && (
+            <Link
+              href="/account/ordini"
+              className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 font-display font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface"
+            >
+              Vai ai tuoi ordini
+            </Link>
+          )}
+        </div>
       </div>
     </main>
   );

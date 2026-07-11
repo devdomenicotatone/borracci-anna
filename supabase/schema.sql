@@ -1315,3 +1315,324 @@ as $$
 $$;
 
 grant execute on function public.ricerca_semantica_catalogo(extensions.vector, text, integer, real) to anon, authenticated;
+
+-- ============================================================================
+-- AREA CLIENTI (migration 20260711170000_area_clienti +
+--               20260711180000_ordini_clienti)
+-- ----------------------------------------------------------------------------
+-- Anagrafica clienti, rubrica indirizzi, preferiti server-side, rate limit
+-- auth, aggancio ordini <-> clienti e numero ordine leggibile.
+-- I clienti NON stanno in `profili` (quella e' la whitelist gestori).
+-- ============================================================================
+
+-- Anagrafica clienti ----------------------------------------------------------
+create table if not exists public.clienti (
+  id                       uuid primary key references auth.users (id) on delete cascade,
+  email                    text,          -- denormalizzata da auth.users, sync via trigger
+  nome                     text,
+  stripe_customer_id       text,          -- scrivibile SOLO dal service role
+  stripe_customer_ambiente text check (stripe_customer_ambiente in ('test', 'live')),
+  creato_il                timestamptz not null default now(),
+  aggiornato_il            timestamptz not null default now()
+);
+comment on table public.clienti is
+  'Anagrafica clienti dell''area utente. NON conferisce alcun permesso gestore (quello e'' public.profili + is_gestore()).';
+alter table public.clienti enable row level security;
+
+create index if not exists idx_clienti_email on public.clienti (lower(email));
+create unique index if not exists idx_clienti_stripe_customer
+  on public.clienti (stripe_customer_id) where stripe_customer_id is not null;
+
+create trigger trg_clienti_aggiornato
+  before update on public.clienti
+  for each row execute function public.tocca_aggiornato_il();
+
+create policy "clienti_select_proprio"
+  on public.clienti for select to authenticated
+  using ( id = (select auth.uid()) );
+create policy "clienti_update_proprio"
+  on public.clienti for update to authenticated
+  using ( id = (select auth.uid()) ) with check ( id = (select auth.uid()) );
+
+-- Grant di COLONNA: dal client il cliente puo modificare SOLO `nome`.
+revoke insert, update, delete on public.clienti from anon, authenticated;
+grant update (nome) on public.clienti to authenticated;
+
+-- Auto-provisioning cliente (trigger separato da handle_new_user)
+create or replace function public.handle_new_cliente()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if coalesce(new.raw_app_meta_data ->> 'ruolo', '') not in ('gestore', 'staff') then
+    insert into public.clienti (id, email, nome)
+    values (
+      new.id,
+      new.email,
+      nullif(trim(coalesce(new.raw_user_meta_data ->> 'nome', '')), '')
+    )
+    on conflict (id) do nothing;
+  end if;
+  return new;
+exception when others then
+  raise warning 'handle_new_cliente fallita per %: %', new.id, sqlerrm;
+  return new;
+end;
+$$;
+create trigger on_auth_user_created_cliente
+  after insert on auth.users
+  for each row execute function public.handle_new_cliente();
+
+-- Rubrica indirizzi -------------------------------------------------------------
+create table if not exists public.indirizzi (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references public.clienti (id) on delete cascade,
+  etichetta     text,
+  nome          text not null,
+  telefono      text,
+  line1         text not null,
+  line2         text,
+  cap           text not null,
+  citta         text not null,
+  provincia     text not null,
+  paese         text not null default 'IT',
+  predefinito   boolean not null default false,
+  creato_il     timestamptz not null default now(),
+  aggiornato_il timestamptz not null default now(),
+  constraint indirizzi_lunghezze check (
+    char_length(coalesce(etichetta, ''))  <= 40  and
+    char_length(nome)                     between 1 and 200 and
+    char_length(coalesce(telefono, ''))   <= 40  and
+    char_length(line1)                    between 1 and 200 and
+    char_length(coalesce(line2, ''))      <= 200 and
+    char_length(cap)                      between 3 and 12 and
+    char_length(citta)                    between 1 and 120 and
+    char_length(provincia)                between 1 and 60 and
+    paese = 'IT'
+  )
+);
+alter table public.indirizzi enable row level security;
+create index if not exists idx_indirizzi_user on public.indirizzi (user_id);
+create unique index if not exists idx_indirizzi_predefinito_unico
+  on public.indirizzi (user_id) where predefinito;
+
+create trigger trg_indirizzi_aggiornato
+  before update on public.indirizzi
+  for each row execute function public.tocca_aggiornato_il();
+
+create or replace function public.limita_indirizzi()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  if (select count(*) from public.indirizzi where user_id = new.user_id) >= 10 then
+    raise exception 'Hai raggiunto il numero massimo di indirizzi (10).';
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_limite_indirizzi
+  before insert on public.indirizzi
+  for each row execute function public.limita_indirizzi();
+
+create policy "indirizzi_select_proprio"
+  on public.indirizzi for select to authenticated
+  using ( user_id = (select auth.uid()) );
+create policy "indirizzi_insert_proprio"
+  on public.indirizzi for insert to authenticated
+  with check ( user_id = (select auth.uid()) );
+create policy "indirizzi_update_proprio"
+  on public.indirizzi for update to authenticated
+  using ( user_id = (select auth.uid()) ) with check ( user_id = (select auth.uid()) );
+create policy "indirizzi_delete_proprio"
+  on public.indirizzi for delete to authenticated
+  using ( user_id = (select auth.uid()) );
+
+-- Predefinito atomico (SECURITY INVOKER: la RLS continua a valere)
+create or replace function public.imposta_indirizzo_predefinito(p_id uuid)
+  returns void
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  update public.indirizzi
+     set predefinito = false
+   where user_id = (select auth.uid()) and predefinito and id <> p_id;
+
+  update public.indirizzi
+     set predefinito = true
+   where id = p_id and user_id = (select auth.uid());
+  if not found then
+    raise exception 'Indirizzo non trovato.';
+  end if;
+end;
+$$;
+revoke all on function public.imposta_indirizzo_predefinito(uuid) from public, anon;
+grant execute on function public.imposta_indirizzo_predefinito(uuid) to authenticated;
+
+-- Preferiti server-side ---------------------------------------------------------
+create table if not exists public.preferiti (
+  user_id     uuid not null references public.clienti (id) on delete cascade,
+  prodotto_id uuid not null references public.prodotti (id) on delete cascade,
+  creato_il   timestamptz not null default now(),
+  primary key (user_id, prodotto_id)
+);
+alter table public.preferiti enable row level security;
+create index if not exists idx_preferiti_prodotto on public.preferiti (prodotto_id);
+
+create or replace function public.limita_preferiti()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  if (select count(*) from public.preferiti where user_id = new.user_id) >= 500 then
+    raise exception 'Hai raggiunto il numero massimo di preferiti (500).';
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_limite_preferiti
+  before insert on public.preferiti
+  for each row execute function public.limita_preferiti();
+
+create policy "preferiti_select_proprio"
+  on public.preferiti for select to authenticated
+  using ( user_id = (select auth.uid()) );
+create policy "preferiti_insert_proprio"
+  on public.preferiti for insert to authenticated
+  with check ( user_id = (select auth.uid()) );
+create policy "preferiti_delete_proprio"
+  on public.preferiti for delete to authenticated
+  using ( user_id = (select auth.uid()) );
+revoke update on public.preferiti from anon, authenticated;
+
+-- Rate limit auth (solo service role) -------------------------------------------
+create table if not exists public.auth_richieste (
+  id        uuid primary key default gen_random_uuid(),
+  email     text not null,
+  ip        text,
+  tipo      text not null check (tipo in ('registrazione', 'recupero', 'reinvio_conferma')),
+  creato_il timestamptz not null default now()
+);
+comment on table public.auth_richieste is
+  'Log finestrato delle richieste auth (signup/reset/reinvio) per il rate limit DB-backed. Solo service role.';
+alter table public.auth_richieste enable row level security;
+create index if not exists idx_auth_richieste_email on public.auth_richieste (email, creato_il desc);
+create index if not exists idx_auth_richieste_ip    on public.auth_richieste (ip, creato_il desc);
+
+-- Aggancio ordini <-> clienti + numero ordine ------------------------------------
+alter table public.ordini
+  add column if not exists user_id uuid references auth.users (id) on delete set null;
+create index if not exists idx_ordini_user on public.ordini (user_id)
+  where user_id is not null;
+create index if not exists idx_ordini_email_lower_senza_utente
+  on public.ordini (lower(email)) where user_id is null;
+
+-- Numero ordine leggibile ("Ordine #1042"): backfill cronologico dal 1001
+-- nella migration; qui solo la struttura.
+create sequence if not exists public.ordini_numero_seq;
+alter table public.ordini add column if not exists numero bigint
+  default nextval('public.ordini_numero_seq');
+alter sequence public.ordini_numero_seq owned by public.ordini.numero;
+grant usage, select on sequence public.ordini_numero_seq to service_role;
+create unique index if not exists idx_ordini_numero on public.ordini (numero);
+
+-- Aggancio storico per email VERIFICATA (idempotente; grant SOLO service_role)
+create or replace function public.aggancia_ordini_cliente(p_user_id uuid)
+  returns integer
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_email      text;
+  v_agganciati integer;
+begin
+  select lower(u.email) into v_email
+    from auth.users u
+    join public.clienti c on c.id = u.id
+   where u.id = p_user_id
+     and u.email_confirmed_at is not null;
+  if v_email is null then
+    return 0;
+  end if;
+
+  update public.ordini o
+     set user_id = p_user_id
+   where o.user_id is null
+     and o.email is not null
+     and lower(o.email) = v_email;
+  get diagnostics v_agganciati = row_count;
+  return v_agganciati;
+end;
+$$;
+revoke all on function public.aggancia_ordini_cliente(uuid) from public, anon, authenticated;
+grant execute on function public.aggancia_ordini_cliente(uuid) to service_role;
+
+-- Alla verifica/cambio email: sync clienti.email + aggancio storico
+create or replace function public.gestisci_email_cliente_verificata()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if new.email_confirmed_at is not null
+     and (tg_op = 'INSERT'
+          or old.email_confirmed_at is null
+          or new.email is distinct from old.email) then
+    update public.clienti
+       set email = new.email
+     where id = new.id and email is distinct from new.email;
+    perform public.aggancia_ordini_cliente(new.id);
+  end if;
+  return new;
+exception when others then
+  raise warning 'gestisci_email_cliente_verificata fallita per %: %', new.id, sqlerrm;
+  return new;
+end;
+$$;
+create trigger on_auth_user_email_verificata
+  after insert or update of email, email_confirmed_at on auth.users
+  for each row execute function public.gestisci_email_cliente_verificata();
+
+-- I futuri ordini ospite con email verificata di un cliente nascono collegati
+-- (scatta anche sugli insert del service role: webhook e flusso richiesta
+-- non vanno toccati).
+create or replace function public.assegna_cliente_a_ordine()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if new.user_id is null and new.email is not null then
+    select u.id into new.user_id
+      from auth.users u
+      join public.clienti c on c.id = u.id
+     where lower(u.email) = lower(new.email)
+       and u.email_confirmed_at is not null
+     limit 1;
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_ordini_assegna_cliente
+  before insert or update of email on public.ordini
+  for each row execute function public.assegna_cliente_a_ordine();
+
+-- Lettura "i miei ordini" (sola lettura: le scritture restano al service role)
+create policy "ordini_select_proprio"
+  on public.ordini for select to authenticated
+  using ( user_id is not null and user_id = (select auth.uid()) );
+create policy "ordine_righe_select_proprio"
+  on public.ordine_righe for select to authenticated
+  using ( exists (
+    select 1 from public.ordini o
+    where o.id = ordine_id
+      and o.user_id = (select auth.uid())
+  ) );

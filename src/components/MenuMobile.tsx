@@ -12,8 +12,16 @@ import { createPortal } from "react-dom";
 import type { GruppoCategorie } from "@/lib/categorie-albero";
 import { bloccaScrollBody } from "@/lib/scroll-lock";
 import Wordmark from "@/components/Wordmark";
+import AvatarCliente from "@/components/account/AvatarCliente";
+import type { ClienteHeader } from "@/components/Header";
 
-export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
+export default function MenuMobile({
+  gruppi,
+  cliente,
+}: {
+  gruppi: GruppoCategorie[];
+  cliente: ClienteHeader | null;
+}) {
   const [aperto, setAperto] = useState(false);
   const pannelloRef = useRef<HTMLDivElement>(null);
   const elementoPrecedenteRef = useRef<HTMLElement | null>(null);
@@ -138,6 +146,77 @@ export default function MenuMobile({ gruppi }: { gruppi: GruppoCategorie[] }) {
                 aria-label="Navigazione principale"
                 className="flex-1 overflow-y-auto px-3 py-4"
               >
+                {/* Account in testa: card del cliente loggato, o CTA di
+                    accesso/registrazione per l'ospite. */}
+                {cliente ? (
+                  <div className="mb-3">
+                    <Link
+                      href="/account"
+                      onClick={chiudi}
+                      className="flex items-center gap-3 rounded-2xl bg-surface p-4 transition-colors hover:bg-surface-2"
+                    >
+                      <AvatarCliente
+                        nome={cliente.nome}
+                        email={cliente.email}
+                        dimensione="sm"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-display text-sm font-bold text-foreground">
+                          Ciao, {cliente.nome ?? cliente.email}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          Il mio account
+                        </span>
+                      </span>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-4 w-4 shrink-0 text-muted"
+                        aria-hidden="true"
+                      >
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
+                    </Link>
+                    <div className="mt-1 flex gap-1">
+                      <Link
+                        href="/account/ordini"
+                        onClick={chiudi}
+                        className="flex-1 rounded-xl px-4 py-2.5 text-center text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
+                      >
+                        I miei ordini
+                      </Link>
+                      <Link
+                        href="/account/indirizzi"
+                        onClick={chiudi}
+                        className="flex-1 rounded-xl px-4 py-2.5 text-center text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
+                      >
+                        I miei indirizzi
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-3 grid grid-cols-2 gap-2 px-1">
+                    <Link
+                      href="/accedi"
+                      onClick={chiudi}
+                      className="flex h-11 items-center justify-center rounded-full bg-sea font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
+                    >
+                      Accedi
+                    </Link>
+                    <Link
+                      href="/registrati"
+                      onClick={chiudi}
+                      className="flex h-11 items-center justify-center rounded-full font-display text-sm font-bold text-sea ring-2 ring-sea transition-colors hover:bg-sea/5"
+                    >
+                      Registrati
+                    </Link>
+                  </div>
+                )}
+
                 <Link
                   href="/"
                   onClick={chiudi}

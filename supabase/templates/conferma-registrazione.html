@@ -1,0 +1,22 @@
+<!-- Supabase Auth → Emails → Templates → "Confirm signup"
+     Oggetto suggerito: Conferma il tuo account — Anna Shop -->
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#0a1f33;line-height:1.6">
+  <h2 style="color:#0077c8;margin:0 0 12px">Benvenuta/o su Anna Shop!</h2>
+  <p style="margin:0 0 16px">
+    Conferma il tuo indirizzo email per attivare l'account. Alla conferma
+    collegheremo anche gli ordini che hai già fatto in passato con questa email.
+  </p>
+  <p style="margin:0 0 24px">
+    <a href="{{ .SiteURL }}/api/auth/conferma?token_hash={{ .TokenHash }}&type=email"
+       style="display:inline-block;background:#0077c8;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:9999px">
+      Conferma il mio account
+    </a>
+  </p>
+  <p style="margin:0 0 8px;font-size:13px;color:#41566b">
+    Se il pulsante non funziona, copia e incolla questo indirizzo nel browser:<br>
+    {{ .SiteURL }}/api/auth/conferma?token_hash={{ .TokenHash }}&type=email
+  </p>
+  <p style="margin:16px 0 0;font-size:13px;color:#41566b">
+    Se non hai creato tu questo account, ignora pure questa email.
+  </p>
+</div>

@@ -14,6 +14,11 @@ import { headers } from "next/headers";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { leggiCarrello } from "@/lib/cart";
+import { verificaSessioneCliente } from "@/lib/account/auth";
+import {
+  ambienteStripe,
+  assicuraStripeCustomer,
+} from "@/lib/account/stripe-cliente";
 import { inviaEmail } from "@/lib/email";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
@@ -63,6 +68,11 @@ export async function inviaRichiestaAction(
 
   const righe = await leggiCarrello();
   if (righe.length === 0) return { error: "Il carrello è vuoto." };
+
+  // Cliente loggato: l'ordine nasce gia collegato al suo account, anche se
+  // l'email di contatto e diversa (e lui a inviare la richiesta). Per gli
+  // OSPITI ci pensa il trigger DB sull'email verificata: qui nulla cambia.
+  const sessioneCliente = await verificaSessioneCliente();
 
   const totaleCents = righe.reduce(
     (acc, r) => acc + r.prodotto.prezzo_cents * r.quantita,
@@ -125,6 +135,7 @@ export async function inviaRichiestaAction(
         telefono: telefono || null,
         note: note || null,
         token,
+        user_id: sessioneCliente?.userId ?? null,
       })
       .select("id")
       .single();
@@ -241,7 +252,7 @@ export async function creaCheckoutOrdineAction(
     const admin = createAdminSupabase();
     const { data: ordine } = await admin
       .from("ordini")
-      .select("id, stato, costo_spedizione_cents, stripe_session_id")
+      .select("id, stato, costo_spedizione_cents, stripe_session_id, user_id")
       .eq("token", token)
       .maybeSingle();
     if (!ordine) return { ok: false, error: "Ordine non trovato." };
@@ -388,6 +399,23 @@ export async function creaCheckoutOrdineAction(
       }
     }
 
+    // Ordine di un account? Il pagamento confluisce nel suo Customer Stripe.
+    // Se a pagare e il proprietario loggato, il customer viene creato al volo
+    // (lazy); se il link col token e aperto senza sessione si riusa il customer
+    // gia esistente, senza mai crearne per conto terzi. Ospiti: invariato.
+    // Il Customer Stripe si aggancia SOLO quando a pagare e il proprietario
+    // loggato: mai per un portatore qualunque del token (il pagamento "per
+    // conto terzi" e supportato, e il pagatore non deve vedere email/indirizzo
+    // del titolare ne sovrascriverne lo shipping salvato su Stripe). Per i non
+    // proprietari la sessione resta identica al flusso ospite originale.
+    let customerId: string | null = null;
+    if (ordine.user_id && ambienteStripe()) {
+      const sessioneCliente = await verificaSessioneCliente();
+      if (sessioneCliente?.userId === ordine.user_id) {
+        customerId = await assicuraStripeCustomer(sessioneCliente);
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
@@ -398,6 +426,16 @@ export async function creaCheckoutOrdineAction(
       billing_address_collection: "auto",
       shipping_address_collection: { allowed_countries: ["IT"] },
       locale: "it",
+      ...(customerId
+        ? {
+            customer: customerId,
+            // Obbligatorio con customer + shipping_address_collection.
+            customer_update: {
+              shipping: "auto" as const,
+              address: "auto" as const,
+            },
+          }
+        : {}),
     });
 
     // Il legame ordine<->sessione e cio che permette al webhook di ritrovare

@@ -178,6 +178,8 @@ export interface Database {
           stock_scalato: boolean;
           costo_spedizione_cents: number | null;
           spedizione_indirizzo: Json | null;
+          user_id: string | null;
+          numero: number | null;
           creato_il: string;
         };
         Insert: {
@@ -194,6 +196,8 @@ export interface Database {
           stock_scalato?: boolean;
           costo_spedizione_cents?: number | null;
           spedizione_indirizzo?: Json | null;
+          user_id?: string | null;
+          numero?: number | null;
           creato_il?: string;
         };
         Update: {
@@ -210,6 +214,8 @@ export interface Database {
           stock_scalato?: boolean;
           costo_spedizione_cents?: number | null;
           spedizione_indirizzo?: Json | null;
+          user_id?: string | null;
+          numero?: number | null;
           creato_il?: string;
         };
         Relationships: [];
@@ -487,6 +493,149 @@ export interface Database {
           },
         ];
       };
+      clienti: {
+        Row: {
+          id: string;
+          email: string | null;
+          nome: string | null;
+          stripe_customer_id: string | null;
+          stripe_customer_ambiente: string | null;
+          creato_il: string;
+          aggiornato_il: string;
+        };
+        Insert: {
+          id: string;
+          email?: string | null;
+          nome?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_customer_ambiente?: string | null;
+          creato_il?: string;
+          aggiornato_il?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string | null;
+          nome?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_customer_ambiente?: string | null;
+          creato_il?: string;
+          aggiornato_il?: string;
+        };
+        Relationships: [];
+      };
+      indirizzi: {
+        Row: {
+          id: string;
+          user_id: string;
+          etichetta: string | null;
+          nome: string;
+          telefono: string | null;
+          line1: string;
+          line2: string | null;
+          cap: string;
+          citta: string;
+          provincia: string;
+          paese: string;
+          predefinito: boolean;
+          creato_il: string;
+          aggiornato_il: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          etichetta?: string | null;
+          nome: string;
+          telefono?: string | null;
+          line1: string;
+          line2?: string | null;
+          cap: string;
+          citta: string;
+          provincia: string;
+          paese?: string;
+          predefinito?: boolean;
+          creato_il?: string;
+          aggiornato_il?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          etichetta?: string | null;
+          nome?: string;
+          telefono?: string | null;
+          line1?: string;
+          line2?: string | null;
+          cap?: string;
+          citta?: string;
+          provincia?: string;
+          paese?: string;
+          predefinito?: boolean;
+          creato_il?: string;
+          aggiornato_il?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "indirizzi_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "clienti";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      preferiti: {
+        Row: {
+          user_id: string;
+          prodotto_id: string;
+          creato_il: string;
+        };
+        Insert: {
+          user_id: string;
+          prodotto_id: string;
+          creato_il?: string;
+        };
+        Update: {
+          user_id?: string;
+          prodotto_id?: string;
+          creato_il?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "preferiti_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "clienti";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "preferiti_prodotto_id_fkey";
+            columns: ["prodotto_id"];
+            referencedRelation: "prodotti";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      auth_richieste: {
+        Row: {
+          id: string;
+          email: string;
+          ip: string | null;
+          tipo: string;
+          creato_il: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          ip?: string | null;
+          tipo: string;
+          creato_il?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          ip?: string | null;
+          tipo?: string;
+          creato_il?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -503,6 +652,15 @@ export interface Database {
           p_shipping_cents?: number | null;
           p_indirizzo?: Json | null;
         };
+        /** true SOLO alla prima finalizzazione (guida l'invio email una tantum). */
+        Returns: boolean;
+      };
+      aggancia_ordini_cliente: {
+        Args: { p_user_id: string };
+        Returns: number;
+      };
+      imposta_indirizzo_predefinito: {
+        Args: { p_id: string };
         Returns: undefined;
       };
       segna_ordine_pagato_manuale: {

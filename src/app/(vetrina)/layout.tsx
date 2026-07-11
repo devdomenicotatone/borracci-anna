@@ -5,27 +5,40 @@
 //
 // Async: legge lo stato del carrello lato server (il cookie cart_id e httpOnly,
 // non leggibile dal client) e lo passa al CartProvider, che da li in poi guida
-// badge, mini-cart e totali. ToasterProvider avvolge tutto (lo usa il provider).
+// badge, mini-cart e totali. Legge anche la sessione cliente (memoizzata con
+// cache(): Header e pagine non ripetono il getUser) per l'icona account e la
+// sincronizzazione preferiti. ToasterProvider avvolge tutto (lo usa il provider).
+
+import { Suspense } from "react";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { ToasterProvider } from "@/components/Toaster";
 import { CartProvider } from "@/components/cart/CartProvider";
 import CartDrawer from "@/components/cart/CartDrawer";
+import SincronizzaPreferiti from "@/components/account/SincronizzaPreferiti";
+import AvvisoAccountEliminato from "@/components/account/AvvisoAccountEliminato";
 import { statoCarrello } from "@/lib/cart";
 import { caricaCategoriePubbliche } from "@/lib/categorie";
 import { gruppiCategorie } from "@/lib/categorie-albero";
+import { verificaSessioneCliente } from "@/lib/account/auth";
 
 export default async function VetrinaLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // Carrello e categorie sono indipendenti: falli partire insieme (Promise.all)
-  // invece di serializzarli (~2x latenza DB sul TTFB di ogni pagina).
-  const [statoIniziale, categorie] = await Promise.all([
+  // Carrello, categorie e sessione cliente sono indipendenti: falli partire
+  // insieme (Promise.all) invece di serializzarli (latenza DB sul TTFB).
+  const [statoIniziale, categorie, sessione] = await Promise.all([
     statoCarrello(),
     caricaCategoriePubbliche(),
+    verificaSessioneCliente(),
   ]);
   const gruppi = gruppiCategorie(categorie);
+  // Ai client component passa solo il minimo serializzabile (mai il client
+  // Supabase della sessione).
+  const cliente = sessione
+    ? { nome: sessione.cliente.nome, email: sessione.email }
+    : null;
 
   return (
     <ToasterProvider>
@@ -38,13 +51,19 @@ export default async function VetrinaLayout({
           Vai al contenuto
         </a>
         <div className="flex min-h-screen flex-col">
-          <Header gruppi={gruppi} />
+          <Header gruppi={gruppi} cliente={cliente} />
           <main id="contenuto" className="flex-1">
             {children}
           </main>
           <Footer />
         </div>
         <CartDrawer />
+        <SincronizzaPreferiti userId={sessione?.userId ?? null} />
+        {/* useSearchParams richiede un confine Suspense per non de-optimizzare
+            la pagina a dynamic. */}
+        <Suspense fallback={null}>
+          <AvvisoAccountEliminato />
+        </Suspense>
       </CartProvider>
     </ToasterProvider>
   );

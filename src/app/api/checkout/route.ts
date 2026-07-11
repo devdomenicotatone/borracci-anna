@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 import { getStripe } from "@/lib/stripe";
 import { leggiCarrello, riconciliaCarrello } from "@/lib/cart";
+import { verificaSessioneCliente } from "@/lib/account/auth";
+import { assicuraStripeCustomer } from "@/lib/account/stripe-cliente";
 import {
   CONSEGNA_MAX_GG,
   CONSEGNA_MIN_GG,
@@ -133,6 +135,15 @@ export async function POST(): Promise<Response> {
     },
   }));
 
+  // Cliente loggato? Il checkout si "aggancia" al suo Customer Stripe: email
+  // prefillata (e bloccata sull'email dell'account: cosi il trigger DB collega
+  // sempre l'ordine allo storico), indirizzo prefillato dal predefinito,
+  // pagamenti unificati sotto un solo customer. Per l'OSPITE non cambia nulla.
+  const sessioneCliente = await verificaSessioneCliente();
+  const customerId = sessioneCliente
+    ? await assicuraStripeCustomer(sessioneCliente)
+    : null;
+
   try {
     const stripe = getStripe();
 
@@ -146,6 +157,28 @@ export async function POST(): Promise<Response> {
       billing_address_collection: "auto",
       shipping_address_collection: { allowed_countries: ["IT"] },
       locale: "it",
+      ...(customerId
+        ? {
+            customer: customerId,
+            // Obbligatorio con customer + shipping_address_collection: salva
+            // sul customer l'indirizzo inserito (prefill al prossimo acquisto).
+            customer_update: {
+              shipping: "auto" as const,
+              address: "auto" as const,
+            },
+          }
+        : sessioneCliente
+          ? // Stripe degradato (niente customer): almeno l'email prefillata.
+            { customer_email: sessioneCliente.email }
+          : {}),
+      ...(sessioneCliente
+        ? {
+            // Solo osservabilita (dashboard Stripe): l'aggancio ordine<->account
+            // lo fa il trigger DB sull'email verificata, non questi metadata.
+            client_reference_id: sessioneCliente.userId,
+            metadata: { user_id: sessioneCliente.userId },
+          }
+        : {}),
     });
 
     // 5) NIENTE ordine salvato qui. Un checkout abbandonato (cliente che torna

@@ -11,18 +11,32 @@ import CartBadge from "@/components/cart/CartBadge";
 import MenuMobile from "@/components/MenuMobile";
 import PreferitiBadge from "@/components/preferiti/PreferitiBadge";
 import Wordmark from "@/components/Wordmark";
+import AvatarCliente from "@/components/account/AvatarCliente";
+import { logoutClienteAction } from "@/lib/account/auth-actions";
 import type { GruppoCategorie } from "@/lib/categorie-albero";
+
+/** Il minimo del cliente loggato che serve alla UI (dal layout vetrina). */
+export interface ClienteHeader {
+  nome: string | null;
+  email: string;
+}
 
 // I gruppi categorie arrivano come prop dal layout: cosi il fetch categorie e
 // quello del carrello partono in parallelo (Promise.all nel layout) invece di
 // serializzarsi (statoCarrello -> render Header -> fetch categorie).
-export default function Header({ gruppi }: { gruppi: GruppoCategorie[] }) {
+export default function Header({
+  gruppi,
+  cliente,
+}: {
+  gruppi: GruppoCategorie[];
+  cliente: ClienteHeader | null;
+}) {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-5 sm:gap-4">
         <div className="flex items-center gap-2">
           {/* Hamburger: solo mobile, prima del wordmark. */}
-          <MenuMobile gruppi={gruppi} />
+          <MenuMobile gruppi={gruppi} cliente={cliente} />
 
           {/* Wordmark "Onda Sole": sigillo + "Anna" corallo / "Shop" blu.
               Il sole "sorge" all'hover grazie a .group su questo Link. */}
@@ -116,6 +130,83 @@ export default function Header({ gruppi }: { gruppi: GruppoCategorie[] }) {
           >
             Vieni a trovarci
           </Link>
+
+          {/* Account: ospite -> login; loggato -> avatar a iniziali con
+              dropdown CSS-only su desktop (stesso pattern del menu categorie:
+              hover o focus da tastiera via :has(:focus-visible)); su touch il
+              tap porta direttamente a /account. */}
+          {cliente ? (
+            <div className="group relative">
+              <Link
+                href="/account"
+                aria-label="Il tuo account"
+                className="grid h-11 w-11 place-items-center rounded-full bg-surface transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+              >
+                <AvatarCliente
+                  nome={cliente.nome}
+                  email={cliente.email}
+                  dimensione="sm"
+                />
+              </Link>
+              <div className="invisible absolute right-0 top-full z-30 hidden pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100 lg:block">
+                <div className="min-w-52 rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
+                  <p className="truncate px-3.5 py-2 text-xs text-muted">
+                    Ciao, {cliente.nome ?? cliente.email}
+                  </p>
+                  <Link
+                    href="/account"
+                    className="block rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface hover:text-sea"
+                  >
+                    Il mio account
+                  </Link>
+                  <Link
+                    href="/account/ordini"
+                    className="block rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface hover:text-sea"
+                  >
+                    I miei ordini
+                  </Link>
+                  <Link
+                    href="/account/indirizzi"
+                    className="block rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface hover:text-sea"
+                  >
+                    I miei indirizzi
+                  </Link>
+                  <form
+                    action={logoutClienteAction}
+                    className="mt-1 border-t border-line pt-1"
+                  >
+                    <button
+                      type="submit"
+                      className="block w-full rounded-xl px-3.5 py-2.5 text-left text-sm font-bold text-coral-ink transition-colors hover:bg-coral/10"
+                    >
+                      Esci
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Link
+              href="/accedi"
+              aria-label="Accedi o registrati"
+              className="grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </Link>
+          )}
 
           {/* Preferiti: cuore con badge, stessi codici visivi del carrello. */}
           <Link
