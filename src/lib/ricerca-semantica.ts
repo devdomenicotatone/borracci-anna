@@ -33,11 +33,13 @@ const MIN_CHAR_SEMANTICA = 3;
  *  colori, prezzo, tema, categoria) si applicano DOPO, sulle card. */
 const LIMITE_CANDIDATI = 200;
 
-/** Distanza coseno massima (0 = identico). Taratura iniziale LARGA di
- *  proposito: i semantici si accodano ai letterali, meglio un match tiepido
- *  in coda che perdere il bersaglio. Da stringere coi numeri veri del
- *  catalogo (le distanze si leggono dalla RPC in fase di verifica). */
-const MAX_DISTANZA = 0.85;
+/** Distanza coseno massima (0 = identico). Tarata sul catalogo reale
+ *  (2026-07-11, 3-large@1536): i match buoni stanno a 0.29-0.57 ("felpa uomo
+ *  ragno"->Felpa Spiderman 0.29, "maglia del mago con gli occhiali"->Harry
+ *  Potter 0.43-0.50, refusi 0.52-0.57), il rumore parte da 0.72 (query senza
+ *  match reali). 0.65 = centro del gap: tiene i refusi, esclude la coda a
+ *  caso. Se si cambia modello va ritarata. */
+const MAX_DISTANZA = 0.65;
 
 /** Timeout OpenAI sul percorso di ricerca: oltre, meglio il solo letterale. */
 const TIMEOUT_RICERCA_MS = 2500;
