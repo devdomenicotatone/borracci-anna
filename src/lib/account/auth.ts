@@ -111,6 +111,48 @@ export const verificaSessioneCliente = cache(
 );
 
 /**
+ * Finestra di freschezza per le sessioni nate da un link email: allineata alla
+ * durata promessa nell'email di recovery ("il link scade dopo un'ora").
+ */
+const FINESTRA_LINK_EMAIL_MS = 60 * 60 * 1000;
+
+/**
+ * True se la sessione corrente e nata da un link email verificato di recente
+ * (verifyOtp in /api/auth/conferma), non da un login con password.
+ *
+ * ATTENZIONE: nel claim `amr` Supabase NON etichetta la verifica recovery come
+ * "recovery": ogni verifyOtp via token_hash (recovery, conferma registrazione)
+ * registra il metodo "otp", mentre signInWithPassword registra "password"
+ * (verificato empiricamente su questo progetto). Si accetta anche "recovery"
+ * nel caso GoTrue inizi un giorno a etichettarla correttamente.
+ *
+ * Il timestamp del claim e il momento del clic sul link e sopravvive ai
+ * refresh del token: voci senza timestamp vengono rifiutate (fail-closed).
+ */
+export async function sessioneDaLinkEmail(
+  supabase: SupabaseClient<Database>,
+): Promise<boolean> {
+  const { data: datiClaims } = await supabase.auth.getClaims();
+  const amr =
+    (
+      datiClaims?.claims as
+        | { amr?: Array<{ method?: string; timestamp?: number } | string> }
+        | undefined
+    )?.amr ?? [];
+
+  const adesso = Date.now();
+  return amr.some((voce) => {
+    const metodo = typeof voce === "string" ? voce : voce?.method;
+    if (metodo !== "otp" && metodo !== "recovery") return false;
+    const timestamp = typeof voce === "string" ? undefined : voce?.timestamp;
+    return (
+      typeof timestamp === "number" &&
+      adesso - timestamp * 1000 <= FINESTRA_LINK_EMAIL_MS
+    );
+  });
+}
+
+/**
  * Come verificaSessioneCliente ma redirige se non autorizzato:
  * anonimo -> /accedi; gestore loggato -> /gestore (il suo pannello).
  */

@@ -14,7 +14,10 @@ import { redirect } from "next/navigation";
 
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
-import { verificaSessioneCliente } from "@/lib/account/auth";
+import {
+  sessioneDaLinkEmail,
+  verificaSessioneCliente,
+} from "@/lib/account/auth";
 import { consentiRichiestaAuth } from "@/lib/account/rate-limit";
 import { destinazioneSicura } from "@/lib/account/url-sicuro";
 
@@ -220,17 +223,11 @@ export async function reimpostaPasswordAction(
     };
   }
 
-  // La sessione DEVE provenire dal flusso recovery (verifyOtp type=recovery),
-  // non da un login normale: altrimenti chi trova una sessione aperta su un
-  // dispositivo condiviso cambierebbe la password senza conoscere quella
-  // attuale, aggirando la ri-verifica di cambiaPasswordAction. Il discriminante
-  // e il claim `amr` del JWT (method "recovery").
-  const { data: datiClaims } = await supabase.auth.getClaims();
-  const amr = (datiClaims?.claims as { amr?: Array<{ method?: string } | string> } | undefined)?.amr ?? [];
-  const daRecovery = amr.some((e) =>
-    typeof e === "string" ? e === "recovery" : e?.method === "recovery",
-  );
-  if (!daRecovery) {
+  // La sessione DEVE provenire da un link email recente (verifyOtp), non da un
+  // login normale: altrimenti chi trova una sessione aperta su un dispositivo
+  // condiviso cambierebbe la password senza conoscere quella attuale,
+  // aggirando la ri-verifica di cambiaPasswordAction.
+  if (!(await sessioneDaLinkEmail(supabase))) {
     return {
       error: "Link scaduto o già usato. Richiedi un nuovo link di recupero.",
     };

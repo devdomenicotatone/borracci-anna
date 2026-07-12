@@ -8,6 +8,7 @@ import Link from "next/link";
 
 import GuscioAuth from "@/components/account/GuscioAuth";
 import FormReimpostaPassword from "@/components/account/FormReimpostaPassword";
+import { sessioneDaLinkEmail } from "@/lib/account/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -21,19 +22,11 @@ export default async function PaginaReimpostaPassword() {
   const supabase = await createServerSupabase();
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
 
-  // La sessione deve provenire dal link di recovery (claim amr "recovery"), non
-  // da un login normale: un cliente gia loggato NON deve poter reimpostare la
-  // password da qui senza la password attuale (la barriera reale e nell'action).
-  let daRecovery = false;
-  if (user && supabase) {
-    const { data: datiClaims } = await supabase.auth.getClaims();
-    const amr =
-      (datiClaims?.claims as { amr?: Array<{ method?: string } | string> } | undefined)
-        ?.amr ?? [];
-    daRecovery = amr.some((e) =>
-      typeof e === "string" ? e === "recovery" : e?.method === "recovery",
-    );
-  }
+  // La sessione deve provenire dal link email di recovery, non da un login
+  // normale: un cliente gia loggato NON deve poter reimpostare la password da
+  // qui senza la password attuale (la barriera reale e nell'action).
+  const daRecovery =
+    user && supabase ? await sessioneDaLinkEmail(supabase) : false;
 
   if (!user || !daRecovery) {
     return (
