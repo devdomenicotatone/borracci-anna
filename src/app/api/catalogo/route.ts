@@ -12,9 +12,12 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
-// Il catalogo cambia di rado: la CDN puo servirlo per 5 minuti e rinfrescarlo
-// in background fino a un giorno (stale-while-revalidate).
-const CACHE = "public, s-maxage=300, stale-while-revalidate=86400";
+// Il catalogo cambia di rado: la CDN lo serve per 5 minuti; alla scadenza puo
+// servire la copia vecchia per ALTRI 10 minuti al massimo mentre rinfresca in
+// background. La finestra stale era di un giorno: dopo un cambio prezzi in
+// blocco, GestiShop (che legge da qui per i cartellini) poteva stampare
+// prezzi vecchi anche a distanza di ore.
+const CACHE = "public, s-maxage=300, stale-while-revalidate=600";
 
 export async function GET(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
