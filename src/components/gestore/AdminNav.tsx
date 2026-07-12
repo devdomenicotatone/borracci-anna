@@ -83,6 +83,25 @@ function IconaCategorie({ className }: { className?: string }) {
   );
 }
 
+function IconaPrezzi({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {/* Cartellino del prezzo con foro */}
+      <path d="M20.6 11.2 12.8 3.4A2 2 0 0 0 11.4 3H5a2 2 0 0 0-2 2v6.4c0 .5.2 1 .6 1.4l7.8 7.8a2 2 0 0 0 2.8 0l6.4-6.4a2 2 0 0 0 0-2.8z" />
+      <circle cx="7.5" cy="7.5" r="1.2" />
+    </svg>
+  );
+}
+
 function IconaVetrina({ className }: { className?: string }) {
   return (
     <svg
@@ -157,6 +176,7 @@ export default function AdminNav({
   const suProdotti = pathname.startsWith("/gestore/prodotti") && !suNuovo;
   const suVetrina = pathname.startsWith("/gestore/vetrina");
   const suCategorie = pathname.startsWith("/gestore/categorie");
+  const suPrezzi = pathname.startsWith("/gestore/prezzi");
   const suOrdini = pathname.startsWith("/gestore/ordini");
   const suMedia = pathname.startsWith("/gestore/media");
   const suSicurezza = pathname.startsWith("/gestore/sicurezza");
@@ -226,6 +246,10 @@ export default function AdminNav({
             <IconaCategorie className="h-5 w-5" />
             Categorie
           </Link>
+          <Link href="/gestore/prezzi" aria-current={suPrezzi ? "page" : undefined} className={voceSidebar(suPrezzi)}>
+            <IconaPrezzi className="h-5 w-5" />
+            Prezzi
+          </Link>
           <Link href="/gestore/ordini" aria-current={suOrdini ? "page" : undefined} className={voceSidebar(suOrdini)}>
             <IconaOrdini className="h-5 w-5" />
             Ordini
@@ -282,7 +306,7 @@ export default function AdminNav({
 
       {/* BOTTOM-NAV mobile (nascosta sulle pagine di form) */}
       {!suFormProdotto && (
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <Link href="/gestore/prodotti" aria-current={suProdotti ? "page" : undefined} className={voceBottom(suProdotti)}>
             <IconaProdotti className="h-5 w-5" />
             <span>Prodotti</span>
@@ -294,6 +318,10 @@ export default function AdminNav({
           <Link href="/gestore/categorie" aria-current={suCategorie ? "page" : undefined} className={voceBottom(suCategorie)}>
             <IconaCategorie className="h-5 w-5" />
             <span>Categorie</span>
+          </Link>
+          <Link href="/gestore/prezzi" aria-current={suPrezzi ? "page" : undefined} className={voceBottom(suPrezzi)}>
+            <IconaPrezzi className="h-5 w-5" />
+            <span>Prezzi</span>
           </Link>
           <Link href="/gestore/ordini" aria-current={suOrdini ? "page" : undefined} className={voceBottom(suOrdini)}>
             <span className="relative">
