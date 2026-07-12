@@ -38,15 +38,42 @@ export async function GET(request: Request) {
     const PAGINA = 1000;
     const prodotti: unknown[] = [];
     for (let da = 0; da < PAGINA * 10; da += PAGINA) {
+      // prodotto_foto in embed: la galleria e pubblica (RLS: solo prodotti
+      // attivi) ed e gia mostrata per intero nella pagina prodotto.
       const { data, error } = await supabase
         .from("prodotti")
-        .select("slug, nome, prezzo_cents, valuta, immagine_url, solo_online")
+        .select("slug, nome, prezzo_cents, valuta, immagine_url, solo_online, prodotto_foto(url, ordine)")
         .eq("attivo", true)
         .order("nome", { ascending: true })
         .order("slug", { ascending: true }) // pareggio stabile tra pagine a parita di nome
         .range(da, da + PAGINA - 1);
       if (error) throw error;
-      prodotti.push(...(data ?? []));
+      // `foto` = galleria in ordine sito (la prima e la copertina: le action
+      // del gestore tengono immagine_url sincronizzata con foto[0]). Esposta
+      // solo quando le foto sono ALMENO DUE — serve a chi deve scegliere una
+      // foto alternativa (i cartellini GestiShop); per il resto del catalogo
+      // il payload resta quello di prima. Dedup per path senza query: la
+      // copertina porta un ?v= che una riga galleria potrebbe non avere.
+      for (const riga of data ?? []) {
+        const { prodotto_foto, ...campi } = riga as {
+          immagine_url: string | null;
+          prodotto_foto: { url: string | null; ordine: number | null }[] | null;
+        } & Record<string, unknown>;
+        const galleria = [...(prodotto_foto ?? [])]
+          .sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0))
+          .map((f) => f.url)
+          .filter((u): u is string => typeof u === "string" && u !== "");
+        const visti = new Set<string>();
+        const foto: string[] = [];
+        for (const u of [campi.immagine_url, ...galleria]) {
+          if (typeof u !== "string" || u === "") continue;
+          const chiave = u.split("?")[0];
+          if (visti.has(chiave)) continue;
+          visti.add(chiave);
+          foto.push(u);
+        }
+        prodotti.push(foto.length >= 2 ? { ...campi, foto } : campi);
+      }
       if (!data || data.length < PAGINA) break;
     }
     return NextResponse.json(
