@@ -4,6 +4,10 @@
 // e dalla scheda prodotto. Stato letto/scritto nello store localStorage (vedi
 // lib/preferiti-client): pieno corallo = salvato. Dentro la card vive sopra un
 // <Link>: preventDefault/stopPropagation cosi il tap non apre la scheda.
+// Visivamente 36px, ma con area di tocco 44px (before invisibile, come
+// QuickAddTaglie): -inset-1 e non di più, per non coprire il Link della card.
+// Il before richiede un bottone posizionato: absolute nella card (via
+// className), relative nella PDP.
 
 import { togglePreferito, usePreferiti } from "@/lib/preferiti-client";
 
@@ -34,7 +38,7 @@ export default function CuorePreferito({
       }
       title={attivo ? "Togli dai preferiti" : "Salva nei preferiti"}
       className={[
-        "grid h-9 w-9 place-items-center rounded-full bg-white/90 shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-110",
+        "grid h-9 w-9 place-items-center rounded-full bg-white/90 shadow-soft ring-1 ring-line backdrop-blur transition-transform before:absolute before:-inset-1 before:content-[''] hover:scale-110",
         attivo ? "text-coral" : "text-foreground/70",
         className,
       ].join(" ")}

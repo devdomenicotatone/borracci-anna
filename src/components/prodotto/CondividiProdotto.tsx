@@ -491,7 +491,8 @@ export default function CondividiProdotto({
         onClick={() => (aperto ? setAperto(false) : apri())}
         aria-haspopup="dialog"
         aria-expanded={aperto}
-        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25 transition-colors hover:bg-sea/10"
+        // min-h-11: porta il tocco a 44px senza ingrandire il testo della pill.
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25 transition-colors hover:bg-sea/10"
       >
         <IconaShare />
         Condividi

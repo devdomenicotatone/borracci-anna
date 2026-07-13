@@ -241,8 +241,14 @@ export default function ProdottoDettaglio({
             </svg>
             Dettaglio prodotto
           </span>
-          <div className="flex items-center gap-2">
-            <CuorePreferito prodottoId={prodotto.id} nome={prodotto.nome} />
+          {/* gap-3: cuore e pill hanno estensioni tattili da 44px, con gap-2 le
+              due aree si toccavano. relative: ancora l'estensione del cuore. */}
+          <div className="flex items-center gap-3">
+            <CuorePreferito
+              prodottoId={prodotto.id}
+              nome={prodotto.nome}
+              className="relative"
+            />
             <CondividiProdotto
               slug={prodotto.slug}
               nome={prodotto.nome}
@@ -280,7 +286,9 @@ export default function ProdottoDettaglio({
             Solo online — spedizione a casa o ritiro in negozio
           </span>
         ) : (
-          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-lagoon/10 px-3 py-1.5 font-display text-xs font-bold text-lagoon ring-1 ring-lagoon/25">
+          // lagoon-ink: il lagoon pieno su fondo chiaro non regge il contrasto
+          // AA (stesso token del badge gemello nelle card).
+          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-lagoon/10 px-3 py-1.5 font-display text-xs font-bold text-lagoon-ink ring-1 ring-lagoon/25">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -343,7 +351,9 @@ export default function ProdottoDettaglio({
                       sel
                         ? "ring-2 ring-sea ring-offset-2"
                         : "ring-1 ring-line hover:-translate-y-0.5",
-                      esaurita ? "cursor-not-allowed opacity-40" : "",
+                      esaurita
+                        ? "cursor-not-allowed opacity-40"
+                        : "active:scale-95",
                       coloreChiaro(hex) && !sel ? "ring-line" : "",
                     ].join(" ")}
                     style={{ backgroundColor: hex }}
@@ -411,8 +421,8 @@ export default function ProdottoDettaglio({
                       esaurita
                         ? "cursor-not-allowed text-muted line-through ring-2 ring-surface-2 [background:repeating-linear-gradient(45deg,#fff,#fff_6px,#f1f5f8_6px,#f1f5f8_12px)]"
                         : sel
-                          ? "bg-sea text-white shadow-sea"
-                          : "bg-white text-foreground ring-2 ring-surface-2 hover:-translate-y-0.5 hover:ring-lagoon",
+                          ? "bg-sea text-white shadow-sea active:scale-95"
+                          : "bg-white text-foreground ring-2 ring-surface-2 hover:-translate-y-0.5 hover:ring-lagoon active:scale-95",
                     ].join(" ")}
                   >
                     {t}
