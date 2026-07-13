@@ -1,9 +1,30 @@
 // Fascia BANNER promozionale: striscia larga arrotondata con titolo, testo e
 // una CTA. Sfondo a gradiente (config.tono) o immagine (config.immagineUrl).
 
+import Image from "next/image";
 import Link from "next/link";
 
 import type { FasciaVetrina } from "@/lib/vetrina-home";
+
+/**
+ * True se l'URL punta al bucket Supabase whitelistato nei remotePatterns di
+ * next.config.ts: solo quegli host possono passare da next/image (un host non
+ * whitelistato manderebbe l'optimizer in errore 500). Duplicata volutamente in
+ * FasciaHero.tsx: verra estratta quando servira altrove.
+ */
+function urlSuBucketSupabase(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.protocol === "https:" &&
+      u.hostname === "ozbsslebqtzslfpqpwyz.supabase.co" &&
+      u.pathname.startsWith("/storage/v1/object/public/")
+    );
+  } catch {
+    // URL relativo o malformato: si resta sull'<img> nativo.
+    return false;
+  }
+}
 
 // Toni ammessi -> classi tile (globals.css). tile-sun e chiara: testo scuro.
 const TONI = new Set([
@@ -32,15 +53,32 @@ export default function FasciaBanner({ fascia }: { fascia: FasciaVetrina }) {
       >
         {immagine && (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element -- sfondo banner scelto dal gestore (URL libero) */}
-            <img
-              src={immagine}
-              alt=""
-              aria-hidden="true"
-              loading="lazy"
-              decoding="async"
-              className="absolute inset-0 -z-20 h-full w-full object-cover"
-            />
+            {urlSuBucketSupabase(immagine) ? (
+              // Sfondo dal bucket whitelistato: next/image negozia AVIF/WebP e
+              // taglia le varianti sul viewport. Il banner e sotto la piega:
+              // lazy (default). sizes segue il contenitore max-w-6xl (1152px):
+              // full-bleed sotto, ~1104px (al netto del padding) sopra.
+              // fill si aggancia al div `relative` qui sopra.
+              <Image
+                src={immagine}
+                alt=""
+                aria-hidden="true"
+                fill
+                sizes="(max-width: 1152px) 100vw, 1104px"
+                quality={75}
+                className="-z-20 object-cover"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- sfondo banner scelto dal gestore (URL libero, host non whitelistato: next/image darebbe 500)
+              <img
+                src={immagine}
+                alt=""
+                aria-hidden="true"
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 -z-20 h-full w-full object-cover"
+              />
+            )}
             <span
               aria-hidden="true"
               className="absolute inset-0 -z-10 bg-[#00395f]/55"

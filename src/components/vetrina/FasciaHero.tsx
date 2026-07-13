@@ -3,9 +3,30 @@
 // pannello). Immagine di sfondo opzionale (config.immagineUrl): se assente
 // resta il gradiente mare con sole, puntini e sticker.
 
+import Image from "next/image";
 import Link from "next/link";
 
 import type { FasciaVetrina } from "@/lib/vetrina-home";
+
+/**
+ * True se l'URL punta al bucket Supabase whitelistato nei remotePatterns di
+ * next.config.ts: solo quegli host possono passare da next/image (un host non
+ * whitelistato manderebbe l'optimizer in errore 500). Duplicata volutamente in
+ * FasciaBanner.tsx: verra estratta quando servira altrove.
+ */
+function urlSuBucketSupabase(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.protocol === "https:" &&
+      u.hostname === "ozbsslebqtzslfpqpwyz.supabase.co" &&
+      u.pathname.startsWith("/storage/v1/object/public/")
+    );
+  } catch {
+    // URL relativo o malformato: si resta sull'<img> nativo.
+    return false;
+  }
+}
 
 /** CTA che diventa <Link> per i path interni e <a> per hash/URL esterni. */
 function BottoneCta({
@@ -43,18 +64,36 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
       {/* Immagine di sfondo opzionale + velo per la leggibilita del testo. */}
       {immagine && (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element -- sfondo hero scelto dal gestore (URL libero) */}
-          <img
-            src={immagine}
-            alt=""
-            aria-hidden="true"
-            // Immagine LCP della home: priorita alta e decoding asincrono per non
-            // ritardare il render del testo dell'hero (l'URL e libero, quindi resta
-            // un <img> nativo invece di next/image).
-            fetchPriority="high"
-            decoding="async"
-            className="absolute inset-0 -z-20 h-full w-full object-cover"
-          />
+          {urlSuBucketSupabase(immagine) ? (
+            // Immagine LCP della home servita dal bucket whitelistato: next/image
+            // negozia AVIF/WebP e taglia le varianti sul viewport (sizes 100vw).
+            // In Next 16 `priority` e deprecato -> loading="eager" +
+            // fetchPriority="high" (stesso pattern di GalleriaProdotto.tsx).
+            // fill si aggancia alla <section> (position: relative qui sopra).
+            <Image
+              src={immagine}
+              alt=""
+              aria-hidden="true"
+              fill
+              sizes="100vw"
+              quality={75}
+              loading="eager"
+              fetchPriority="high"
+              className="-z-20 object-cover"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- sfondo hero scelto dal gestore (URL libero, host non whitelistato: next/image darebbe 500)
+            <img
+              src={immagine}
+              alt=""
+              aria-hidden="true"
+              // Immagine LCP della home: priorita alta e decoding asincrono per
+              // non ritardare il render del testo dell'hero.
+              fetchPriority="high"
+              decoding="async"
+              className="absolute inset-0 -z-20 h-full w-full object-cover"
+            />
+          )}
           <span
             aria-hidden="true"
             className="absolute inset-0 -z-10 bg-[#00395f]/55"
