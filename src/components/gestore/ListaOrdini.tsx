@@ -5,6 +5,7 @@
 // aggiorna in locale dopo ogni azione (le action revalidano anche il server).
 
 import { useMemo, useState, useTransition } from "react";
+import Image from "next/image";
 
 import {
   confermaOrdineAction,
@@ -479,7 +480,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                                     type="button"
                                     disabled={pending}
                                     onClick={() => toggleRimozione(o.id, r.id)}
-                                    className="rounded-full px-2 py-1 text-xs font-bold text-sea transition-colors hover:bg-sea/10 disabled:opacity-50"
+                                    className="inline-flex min-h-10 items-center rounded-full px-2 text-xs font-bold text-sea transition hover:bg-sea/10 active:scale-95 disabled:opacity-50"
                                   >
                                     Ripristina
                                   </button>
@@ -489,7 +490,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                                   type="button"
                                   disabled={pending}
                                   onClick={() => toggleRimozione(o.id, r.id)}
-                                  className="-ml-2 rounded-full px-2 py-1 text-xs font-bold text-coral-ink transition-colors hover:bg-coral/10 disabled:opacity-50"
+                                  className="-ml-2 inline-flex min-h-10 items-center rounded-full px-2 text-xs font-bold text-coral-ink transition hover:bg-coral/10 active:scale-95 disabled:opacity-50"
                                 >
                                   Non disponibile
                                 </button>
@@ -554,7 +555,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                           type="button"
                           disabled={pending}
                           onClick={() => setRifiutaId(o.id)}
-                          className="rounded-full px-3 py-2 text-xs font-bold text-coral-ink transition-colors hover:bg-coral/10 disabled:opacity-50"
+                          className="inline-flex min-h-11 items-center rounded-full px-3 text-xs font-bold text-coral-ink transition hover:bg-coral/10 active:scale-95 disabled:opacity-50"
                         >
                           Rifiuta
                         </button>
@@ -562,7 +563,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                           type="button"
                           disabled={pending || tutteRimosse}
                           onClick={() => avviaConferma(o)}
-                          className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50 lg:w-full"
+                          className="inline-flex min-h-11 items-center justify-center rounded-full bg-sea px-4 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 lg:w-full"
                         >
                           {parziale
                             ? `Conferma parziale (${numAttive} di ${righe.length})`
@@ -582,7 +583,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                           <button
                             type="button"
                             onClick={() => copiaLink(o.token as string)}
-                            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold text-sea ring-1 ring-line transition-colors hover:bg-surface lg:w-full lg:justify-center"
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-sea ring-1 ring-line transition hover:bg-surface active:scale-95 lg:w-full lg:justify-center"
                           >
                             <svg
                               viewBox="0 0 24 24"
@@ -611,7 +612,7 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                               "Segnato come pagato.",
                             )
                           }
-                          className="rounded-full bg-sea px-4 py-2 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 disabled:opacity-50 lg:w-full"
+                          className="inline-flex min-h-11 items-center justify-center rounded-full bg-sea px-4 text-xs font-bold text-white shadow-sea transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 lg:w-full"
                         >
                           Segna pagato
                         </button>
@@ -668,13 +669,19 @@ function MiniaturaRiga({ url }: { url: string | null }) {
     "h-10 w-10 shrink-0 rounded-lg ring-1 ring-line lg:h-12 lg:w-12";
   if (url) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- snapshot da Storage
-      <img
-        src={url}
-        alt=""
-        loading="lazy"
-        className={`${cls} bg-surface object-cover`}
-      />
+      <span className={`${cls} relative block overflow-hidden bg-surface`}>
+        {/* Miniatura via optimizer di Next (lazy, ~48px):
+            mai il master pieno usato come thumbnail. */}
+        <Image
+          src={url}
+          alt=""
+          fill
+          sizes="48px"
+          quality={75}
+          loading="lazy"
+          className="object-cover"
+        />
+      </span>
     );
   }
   return (
