@@ -6,6 +6,15 @@
 // Se Supabase non e configurato tutto degrada con grazia: leggiCarrello -> [],
 // le mutazioni ritornano un esito ok=false motivo="non_configurato".
 //
+// SICUREZZA: carrelli/carrello_righe sono riservate al SERVICE ROLE (migration
+// 20260713120000): la anon key e' pubblica e con le vecchie policy USING(true)
+// chiunque poteva leggere/svuotare/gonfiare i carrelli altrui via PostgREST.
+// Qui usiamo quindi l'admin client (bypassa la RLS) e la proprieta' del carrello
+// resta garantita dal cookie httpOnly `cart_id` + il filtro `.eq(carrello_id)`.
+// Poiche' il service role NON applica la RLS, il filtro sui prodotti ATTIVI (che
+// prima la RLS faceva implicitamente, nascondendo i prodotti soft-deleted) va
+// ora fatto ESPLICITAMENTE dove serve (vedi `.attivo` sotto).
+//
 // Le mutazioni RITORNANO sempre lo stato corrente del carrello (EsitoCarrello):
 // righe + count + subtotale. Cosi il client (CartProvider) aggiorna badge,
 // mini-cart e totali in un solo round-trip, senza rileggere a parte.
@@ -13,13 +22,26 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createAdminSupabase } from "@/lib/supabase/admin";
 import type {
   EsitoCarrello,
   Prodotto,
   RigaCarrello,
   Variante,
 } from "@/lib/types";
+
+/**
+ * Client Supabase con service role per le operazioni carrello. Ritorna null se
+ * le env admin mancano (createAdminSupabase lancia): cosi i chiamanti degradano
+ * con grazia esattamente come facevano col null di createServerSupabase.
+ */
+function creaAdminCarrello() {
+  try {
+    return createAdminSupabase();
+  } catch {
+    return null;
+  }
+}
 
 /** Nome del cookie che contiene l'id del carrello corrente. */
 const COOKIE_CARRELLO = "cart_id";
@@ -38,9 +60,12 @@ interface RigaGrezza {
   variante: Variante | Variante[] | null;
 }
 
-/** Flag prodotto embeddato per decidere se applicare il magazzino. */
+/** Flag prodotto embeddato per decidere se applicare il magazzino e se il
+ *  prodotto e ancora pubblicato (col service role la RLS non filtra piu i
+ *  soft-deleted: il controllo su `attivo` va fatto esplicitamente). */
 interface ProdottoFlag {
   disponibilita_su_richiesta: boolean;
+  attivo: boolean;
 }
 
 /** Normalizza una relazione che puo arrivare come oggetto o array. */
@@ -107,7 +132,7 @@ async function leggiCartId(): Promise<string | null> {
  */
 export async function leggiCarrello(): Promise<RigaCarrello[]> {
   try {
-    const supabase = await createServerSupabase();
+    const supabase = creaAdminCarrello();
     if (!supabase) {
       return [];
     }
@@ -135,8 +160,11 @@ export async function leggiCarrello(): Promise<RigaCarrello[]> {
     for (const r of data as unknown as RigaGrezza[]) {
       const prodotto = primo(r.prodotto);
       const variante = primo(r.variante);
-      // Salta righe orfane (prodotto/variante eliminati o non leggibili).
-      if (!prodotto || !variante) {
+      // Salta righe orfane (prodotto/variante eliminati) o con prodotto non piu
+      // pubblicato (attivo=false): col service role la RLS non le nasconde piu,
+      // quindi il filtro e esplicito. Un prodotto hard-deleted sparisce da se
+      // (carrello_righe ha ON DELETE CASCADE su prodotto/variante).
+      if (!prodotto || !variante || !prodotto.attivo) {
         continue;
       }
       righe.push({
@@ -168,7 +196,7 @@ export async function statoCarrello(): Promise<EsitoCarrello> {
  * Ritorna null se Supabase non e configurato.
  */
 async function assicuraCarrello(): Promise<string | null> {
-  const supabase = await createServerSupabase();
+  const supabase = creaAdminCarrello();
   if (!supabase) {
     return null;
   }
@@ -216,7 +244,7 @@ export async function aggiungiAlCarrello(
       return esitoCorrente(false, "errore");
     }
 
-    const supabase = await createServerSupabase();
+    const supabase = creaAdminCarrello();
     if (!supabase) {
       return esitoVuoto(false, "non_configurato");
     }
@@ -229,19 +257,26 @@ export async function aggiungiAlCarrello(
     // Risolve prodotto_id, stock e modalita "su richiesta" della variante.
     const { data: variante, error: errVar } = await supabase
       .from("varianti")
-      .select("id, prodotto_id, stock, prodotti (disponibilita_su_richiesta)")
+      .select("id, prodotto_id, stock, prodotti (disponibilita_su_richiesta, attivo)")
       .eq("id", varianteId)
       .single();
 
     if (errVar || !variante) {
       return esitoCorrente(false, "errore");
     }
-    // Su richiesta: magazzino non in tempo reale -> niente blocco/cap di stock.
-    const suRichiesta = !!primo(
+    const flagProdotto = primo(
       (variante as unknown as {
         prodotti: ProdottoFlag | ProdottoFlag[] | null;
       }).prodotti,
-    )?.disponibilita_su_richiesta;
+    );
+    // Prodotto non piu pubblicato (soft-delete): col service role la RLS non lo
+    // nasconde piu, quindi lo rifiutiamo esplicitamente (prima la variante di un
+    // prodotto disattivato non era leggibile -> stesso esito d'errore).
+    if (!flagProdotto?.attivo) {
+      return esitoCorrente(false, "errore");
+    }
+    // Su richiesta: magazzino non in tempo reale -> niente blocco/cap di stock.
+    const suRichiesta = !!flagProdotto.disponibilita_su_richiesta;
     if (!suRichiesta && variante.stock <= 0) {
       return esitoCorrente(false, "esaurito");
     }
@@ -326,7 +361,7 @@ export async function aggiornaQuantita(
       return rimuoviDalCarrello(rigaId);
     }
 
-    const supabase = await createServerSupabase();
+    const supabase = creaAdminCarrello();
     if (!supabase) {
       return esitoVuoto(false, "non_configurato");
     }
@@ -340,7 +375,7 @@ export async function aggiornaQuantita(
     const { data: riga } = await supabase
       .from("carrello_righe")
       .select(
-        "id, variante:varianti (stock, prodotti (disponibilita_su_richiesta))",
+        "id, variante:varianti (stock, prodotti (disponibilita_su_richiesta, attivo))",
       )
       .eq("id", rigaId)
       .eq("carrello_id", cartId)
@@ -357,8 +392,19 @@ export async function aggiornaQuantita(
         )
       : null;
     const stock = variante?.stock;
-    const suRichiesta = !!primo(variante?.prodotti ?? null)
-      ?.disponibilita_su_richiesta;
+    const flagProdotto = primo(variante?.prodotti ?? null);
+    const suRichiesta = !!flagProdotto?.disponibilita_su_richiesta;
+
+    // Prodotto non piu pubblicato (soft-delete): col service role la RLS non lo
+    // nasconde piu. Lo togliamo dal carrello come un esaurito, cosi non arriva
+    // mai al checkout.
+    if (flagProdotto && !flagProdotto.attivo) {
+      const esito = await rimuoviDalCarrello(rigaId);
+      if (esito.ok) {
+        esito.avviso = "Articolo non più disponibile, rimosso dal carrello.";
+      }
+      return esito;
+    }
 
     // Variante passata a stock 0 (sync BLT, vendite, ritiro): la riga non e piu
     // acquistabile. La togliamo del tutto invece di cappare a 1, che lascerebbe
@@ -404,7 +450,7 @@ export async function rimuoviDalCarrello(
   rigaId: string,
 ): Promise<EsitoCarrello> {
   try {
-    const supabase = await createServerSupabase();
+    const supabase = creaAdminCarrello();
     if (!supabase) {
       return esitoVuoto(false, "non_configurato");
     }
@@ -435,7 +481,7 @@ export async function rimuoviDalCarrello(
  */
 export async function svuotaCarrello(): Promise<EsitoCarrello> {
   try {
-    const supabase = await createServerSupabase();
+    const supabase = creaAdminCarrello();
     const cartId = await leggiCartId();
 
     let erroreDelete = false;
@@ -464,8 +510,8 @@ interface RigaRiconc {
   id: string;
   quantita: number;
   prodotto:
-    | { nome: string; disponibilita_su_richiesta: boolean }
-    | { nome: string; disponibilita_su_richiesta: boolean }[]
+    | { nome: string; disponibilita_su_richiesta: boolean; attivo: boolean }
+    | { nome: string; disponibilita_su_richiesta: boolean; attivo: boolean }[]
     | null;
   variante: { stock: number } | { stock: number }[] | null;
 }
@@ -497,7 +543,7 @@ export async function riconciliaCarrello(): Promise<EsitoRiconciliazione> {
     cappati: [],
   };
   try {
-    const supabase = await createServerSupabase();
+    const supabase = creaAdminCarrello();
     if (!supabase) return invariato;
     const cartId = await leggiCartId();
     if (!cartId) return invariato;
@@ -506,7 +552,7 @@ export async function riconciliaCarrello(): Promise<EsitoRiconciliazione> {
       .from("carrello_righe")
       .select(
         `id, quantita,
-         prodotto:prodotti (nome, disponibilita_su_richiesta),
+         prodotto:prodotti (nome, disponibilita_su_richiesta, attivo),
          variante:varianti (stock)`,
       )
       .eq("carrello_id", cartId);
@@ -519,8 +565,8 @@ export async function riconciliaCarrello(): Promise<EsitoRiconciliazione> {
       const prodotto = primo(r.prodotto);
       const variante = primo(r.variante);
 
-      // Riga orfana: prodotto/variante non piu leggibili (disattivati via RLS o
-      // eliminati). Non deve mai finire in un pagamento → rimuovila.
+      // Riga orfana: prodotto/variante non piu leggibili (es. hard-deleted).
+      // Non deve mai finire in un pagamento → rimuovila.
       if (!prodotto || !variante) {
         await supabase
           .from("carrello_righe")
@@ -528,6 +574,19 @@ export async function riconciliaCarrello(): Promise<EsitoRiconciliazione> {
           .eq("id", r.id)
           .eq("carrello_id", cartId);
         rimossi.push(prodotto?.nome ?? "Articolo non più disponibile");
+        continue;
+      }
+
+      // Prodotto non piu pubblicato (soft-delete, attivo=false): col service
+      // role la RLS non lo nasconde piu, quindi il controllo qui e esplicito.
+      // Trattalo come non piu disponibile: fuori dal carrello e dal pagamento.
+      if (!prodotto.attivo) {
+        await supabase
+          .from("carrello_righe")
+          .delete()
+          .eq("id", r.id)
+          .eq("carrello_id", cartId);
+        rimossi.push(prodotto.nome);
         continue;
       }
 
