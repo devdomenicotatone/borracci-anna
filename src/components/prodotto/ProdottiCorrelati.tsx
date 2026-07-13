@@ -29,9 +29,29 @@ export default async function ProdottiCorrelati({ slug }: { slug: string }) {
         Ti potrebbe piacere anche
       </h2>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+      {/* Mobile: rail orizzontale con snap (la griglia 2-col allungava troppo la
+          pagina e le righe sotto la prima non le vedeva quasi nessuno); il pb-3
+          lascia respirare la shadow-soft dentro il contenitore scrollabile.
+          ATTENZIONE: con overflow-x-auto anche overflow-y computa ad auto (spec
+          CSS), quindi il rail ritaglia pure in verticale e il pannello quick-add
+          taglie — che si apre verso l'alto oltre il bordo della card — verrebbe
+          tagliato sul lato start, irraggiungibile scrollando. Rimedio: pt-36 crea
+          headroom DENTRO il padding box del rail (l'area di clip è il padding
+          box, lì il pannello dipinge libero: basta per ~5 righe di taglie) e
+          -mt-36 lo compensa, così il layout non cambia; il box trasparente in più
+          copre solo il titolo della sezione e il margine vuoto sopra, mai i
+          controlli della scheda prodotto. Da sm in su torna la griglia della
+          vetrina (overflow-visible: nessun trucco necessario). */}
+      <div className="-mt-36 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain pb-3 pt-36 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-0 sm:grid sm:grid-cols-3 sm:gap-5 sm:overflow-visible sm:pb-0 sm:pt-0 lg:grid-cols-4">
         {prodotti.map((prodotto) => (
-          <ProductCard key={prodotto.id} prodotto={prodotto} />
+          // min-w-40: sotto ~355px di viewport 45vw farebbe scendere il pannello
+          // quick-add a 1 taglia per riga (pannello altissimo, oltre l'headroom).
+          <div
+            key={prodotto.id}
+            className="w-[45vw] min-w-40 max-w-[220px] shrink-0 snap-start sm:w-auto sm:min-w-0 sm:max-w-none"
+          >
+            <ProductCard prodotto={prodotto} />
+          </div>
         ))}
       </div>
     </section>
