@@ -1,10 +1,11 @@
 // Header del sito: wordmark "Anna Shop", navigazione con menu categorie e
 // link al carrello. Server component async: carica le categorie da Supabase
-// (degrada a nessun menu se non configurato). Su desktop ogni macro categoria
-// e un link con dropdown CSS (hover/focus-within) delle figlie; su mobile e
-// sui dispositivi touch senza puntatore fine (dove l'hover non scatta) la
-// navigazione sta nel drawer hamburger (MenuMobile, client). Il badge
-// contatore (CartBadge) e un figlio client che legge il CartProvider.
+// (degrada a nessun menu se non configurato). Con puntatore fine (mouse o
+// trackpad, da lg in su) ogni macro categoria e un link con dropdown CSS
+// (hover/focus-within) delle figlie; su mobile e sui dispositivi touch senza
+// puntatore fine (dove l'hover non scatta, anche iPad >=lg) la navigazione
+// sta nel drawer hamburger (MenuMobile, client). Il badge contatore
+// (CartBadge) e un figlio client che legge il CartProvider.
 
 import Link from "next/link";
 
@@ -37,8 +38,9 @@ export default function Header({
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-5">
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Hamburger, prima del wordmark: sempre sotto lg; da lg in su solo
-              sui dispositivi senza puntatore fine (touch), dove i dropdown
-              hover-only qui sotto non si aprirebbero mai. */}
+              sui dispositivi senza puntatore fine (touch), dove la nav inline
+              qui sotto e nascosta (pointer-fine:) perche i suoi dropdown
+              hover-only non si aprirebbero mai. */}
           <MenuMobile gruppi={gruppi} cliente={cliente} />
 
           {/* Wordmark "Onda Sole": sigillo + "Anna" corallo / "Shop" blu.
@@ -59,7 +61,7 @@ export default function Header({
         >
           <Link
             href="/"
-            className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea lg:inline-flex"
+            className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea pointer-fine:lg:inline-flex"
           >
             Vetrina
           </Link>
@@ -68,21 +70,26 @@ export default function Header({
               (dove vive anche la ricerca della toolbar). */}
           <Link
             href="/prodotti"
-            className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea lg:inline-flex"
+            className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea pointer-fine:lg:inline-flex"
           >
             Tutti i prodotti
           </Link>
 
-          {/* Menu categorie: inline solo da lg in su. Sotto lg le categorie
-              vivono nell'hamburger (MenuMobile), cosi con molte radici la riga
-              header non sfonda ne spinge fuori le icone carrello/preferiti.
-              Su touch >=lg (iPad landscape) il link diretto funziona ma il
-              dropdown hover no (hover: in Tailwind v4 è sotto
-              @media (hover:hover)): il chevron è quindi solo pointer-fine:,
-              per non promettere un menu che non si apre; le figlie restano
-              raggiungibili dall'hamburger, visibile anche lì. */}
+          {/* Menu categorie: inline solo con puntatore fine E da lg in su
+              (pointer-fine:lg:, media query annidate come l'hamburger in
+              MenuMobile). Sotto lg le categorie vivono nell'hamburger
+              (MenuMobile), cosi con molte radici la riga header non sfonda ne
+              spinge fuori le icone carrello/preferiti. Su touch >=lg (iPad
+              landscape) il dropdown hover non si aprirebbe (hover: in
+              Tailwind v4 è sotto @media (hover:hover)) e l'hamburger resta
+              visibile: la nav inline sparisce del tutto e l'header rimane
+              quello mobile, che entra sempre; figlie e nipoti si raggiungono
+              dal drawer. */}
           {gruppi.map(({ radice, figlie }) => (
-            <div key={radice.id} className="group relative hidden lg:block">
+            <div
+              key={radice.id}
+              className="group relative hidden pointer-fine:lg:block"
+            >
               <Link
                 href={`/categoria/${radice.slug}`}
                 className="inline-flex items-center gap-1 rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea"
@@ -96,7 +103,7 @@ export default function Header({
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="hidden h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea group-has-[:focus-visible]:rotate-180 group-has-[:focus-visible]:text-sea pointer-fine:block"
+                    className="h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea group-has-[:focus-visible]:rotate-180 group-has-[:focus-visible]:text-sea"
                     aria-hidden="true"
                   >
                     <path d="m6 9 6 6 6-6" />
