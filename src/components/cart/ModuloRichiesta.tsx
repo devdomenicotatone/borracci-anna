@@ -8,35 +8,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import { conTimeout, ErroreTimeout } from "@/lib/con-timeout";
 import { inviaRichiestaAction, type StatoRichiesta } from "@/lib/ordini";
 
 const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
-
-/** Errore sentinella: l'action non ha risposto entro il tetto di tempo. */
-class ErroreTimeout extends Error {}
-
-/**
- * Esegue la promise con un tetto di `ms`: oltre, rigetta con ErroreTimeout.
- * Le server action non accettano un AbortSignal come fetch: la richiesta in
- * volo non viene annullata, ma la UI si sblocca comunque (stesso effetto
- * dell'AbortController in CheckoutButton, CartItem.tsx).
- */
-function conTimeout<T>(promessa: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new ErroreTimeout()), ms);
-    promessa.then(
-      (valore) => {
-        clearTimeout(timer);
-        resolve(valore);
-      },
-      (motivo) => {
-        clearTimeout(timer);
-        reject(motivo);
-      },
-    );
-  });
-}
 
 /** Dati del cliente loggato per il prefill (campi comunque modificabili). */
 export interface PrefillRichiesta {
@@ -50,7 +26,7 @@ export default function ModuloRichiesta({
   prefill?: PrefillRichiesta | null;
 }) {
   const router = useRouter();
-  const { svuota } = useCarrello();
+  const { svuota, attendiSincronizzazioni } = useCarrello();
   const [stato, setStato] = useState<StatoRichiesta>({});
   const [pending, startTransition] = useTransition();
 
@@ -59,10 +35,15 @@ export default function ModuloRichiesta({
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
       try {
-        const esito = await conTimeout(
-          inviaRichiestaAction({}, formData),
-          15000,
-        );
+        // Prima di creare l'ordine: fa scattare i debounce quantità pendenti
+        // e attende le scritture in volo, così l'ordine nasce con le quantità
+        // che l'utente vede. Il flush ha un tetto SUO (best effort: se una
+        // scrittura si incaglia si procede com'era prima) e resta SEPARATO
+        // dall'invio: concatenarli sotto un unico timeout dispaccerebbe
+        // l'ordine in background dopo che l'utente ha già visto l'errore,
+        // e un suo retry creerebbe un doppione.
+        await conTimeout(attendiSincronizzazioni(), 5000).catch(() => {});
+        const esito = await conTimeout(inviaRichiestaAction({}, formData), 15000);
         if (esito.token) {
           // Ordine creato: svuota il carrello (client + server) e vai allo
           // stato. Se lo svuotamento fallisce (rete), non bloccare: l'ordine

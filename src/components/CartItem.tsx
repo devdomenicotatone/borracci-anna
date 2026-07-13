@@ -14,6 +14,7 @@ import { useTransition } from "react";
 
 import { useCarrello } from "@/components/cart/CartProvider";
 import { useToast } from "@/components/Toaster";
+import { conTimeout } from "@/lib/con-timeout";
 import { formatPrezzo } from "@/lib/format";
 import type { RigaCarrello } from "@/lib/types";
 
@@ -186,11 +187,20 @@ export function CheckoutButton({
   disabilitato?: boolean;
 }) {
   const { mostra } = useToast();
-  const { ricarica } = useCarrello();
+  const { attendiSincronizzazioni, ricarica } = useCarrello();
   const [inAttesa, startTransition] = useTransition();
 
   function vaiAlPagamento() {
     startTransition(async () => {
+      // Tap recenti sullo stepper possono essere ancora nel debounce del
+      // provider: falli scrivere subito e attendi le richieste in volo (si
+      // risolve anche in errore), cosi /api/checkout legge le quantita che
+      // l'utente vede e non quelle vecchie. Best effort col proprio tetto:
+      // se una scrittura si incaglia si procede comunque (com'era prima del
+      // flush) invece di tenere il bottone appeso per minuti — i cap di
+      // stock li riconcilia comunque il 409 del checkout.
+      await conTimeout(attendiSincronizzazioni(), 5000).catch(() => {});
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
       try {

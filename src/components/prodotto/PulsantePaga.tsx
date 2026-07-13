@@ -8,32 +8,8 @@
 
 import { useState, useTransition } from "react";
 
+import { conTimeout, ErroreTimeout } from "@/lib/con-timeout";
 import { creaCheckoutOrdineAction } from "@/lib/ordini";
-
-/** Errore sentinella: l'action non ha risposto entro il tetto di tempo. */
-class ErroreTimeout extends Error {}
-
-/**
- * Esegue la promise con un tetto di `ms`: oltre, rigetta con ErroreTimeout.
- * Le server action non accettano un AbortSignal come fetch: la richiesta in
- * volo non viene annullata, ma la UI si sblocca comunque (stesso effetto
- * dell'AbortController in CheckoutButton).
- */
-function conTimeout<T>(promessa: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new ErroreTimeout()), ms);
-    promessa.then(
-      (valore) => {
-        clearTimeout(timer);
-        resolve(valore);
-      },
-      (motivo) => {
-        clearTimeout(timer);
-        reject(motivo);
-      },
-    );
-  });
-}
 
 export default function PulsantePaga({ token }: { token: string }) {
   const [inCorso, startTransition] = useTransition();

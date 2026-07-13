@@ -25,6 +25,10 @@
 // scarta le risposte arrivate fuori ordine, cosi una risposta vecchia non
 // sovrascrive uno stato piu recente; in caso di errore si torna all'ultimo
 // stato confermato dal server (`righeConfermate`) con toast.
+//
+// Prima di pagare (checkout/richiesta): `attendiSincronizzazioni` fa scattare
+// subito i debounce pendenti e attende le scritture in volo, cosi il server
+// non legge quantita piu vecchie di quelle mostrate all'utente.
 
 import {
   createContext,
@@ -98,6 +102,11 @@ interface SyncQuantita {
   quantita: number;
   /** Resolver delle promise dei tap in attesa del prossimo invio. */
   inAttesa: Array<() => void>;
+  /**
+   * Resolver di chi attende la fine di TUTTA la sincronizzazione della riga
+   * (attendiSincronizzazioni): sbloccati quando la entry viene rimossa.
+   */
+  alTermine: Array<() => void>;
 }
 
 interface CartContextValue {
@@ -128,6 +137,13 @@ interface CartContextValue {
   svuota: () => Promise<void>;
   /** Rilegge il carrello dal server (es. dopo che il checkout lo ha riconciliato). */
   ricarica: () => Promise<void>;
+  /**
+   * Flush pre-pagamento: fa scattare SUBITO i debounce quantita pendenti e
+   * attende la conclusione delle scritture in volo. Si risolve anche in caso
+   * di errore (fa fede il rollback), cosi checkout e invio richiesta leggono
+   * dal server le quantita che l'utente vede.
+   */
+  attendiSincronizzazioni: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -186,7 +202,7 @@ export function CartProvider({
   /**
    * Annulla la sincronizzazione pendente di una riga (es. prima di rimuoverla):
    * ferma il debounce, invalida l'eventuale richiesta in volo (la risposta
-   * verra scartata) e sblocca le promise dei tap in attesa.
+   * verra scartata) e sblocca le promise in attesa (tap e flush).
    */
   const annullaSyncQuantita = useCallback((rigaId: string) => {
     const sync = syncQuantita.current.get(rigaId);
@@ -198,6 +214,7 @@ export function CartProvider({
       (generazioneRiga.current.get(rigaId) ?? 0) + 1,
     );
     for (const risolvi of sync.inAttesa) risolvi();
+    for (const risolvi of sync.alTermine) risolvi();
   }, []);
 
   const apriDrawer = useCallback(() => setDrawerAperto(true), []);
@@ -234,6 +251,57 @@ export function CartProvider({
     [righe, mostra, applicaRigheServer],
   );
 
+  /**
+   * Corpo dell'invio coalizzato dello stepper: parte allo scadere del debounce
+   * oppure subito (attendiSincronizzazioni). Chi lo chiama SENZA passare dal
+   * timer deve prima cancellarlo con clearTimeout, altrimenti scatterebbe
+   * comunque producendo un secondo invio.
+   */
+  const inviaQuantita = useCallback(
+    async (rigaId: string, sync: SyncQuantita) => {
+      sync.timer = null;
+      // Numera l'invio: solo il piu recente puo applicare la risposta.
+      const gen = (generazioneRiga.current.get(rigaId) ?? 0) + 1;
+      generazioneRiga.current.set(rigaId, gen);
+      const richiesta = sync.quantita;
+      const daRisolvere = sync.inAttesa;
+      sync.inAttesa = [];
+
+      let esito: EsitoCarrello | null = null;
+      try {
+        esito = await aggiornaQuantita(rigaId, richiesta);
+      } catch {
+        // Errore di rete/imprevisto: trattato come esito negativo.
+      }
+
+      // Risposta superata se nel frattempo la riga e stata annullata
+      // (rimuovi/svuota) o un tap ha rimesso in coda un invio piu nuovo:
+      // sara quello a riconciliare, questa risposta va scartata.
+      const superata =
+        gen !== generazioneRiga.current.get(rigaId) || sync.timer !== null;
+      if (!superata) {
+        syncQuantita.current.delete(rigaId);
+        if (esito?.ok) {
+          applicaRigheServer(esito.righe);
+          if (esito.avviso) {
+            mostra(esito.avviso, "errore");
+          }
+        } else {
+          // Rollback all'ultimo stato confermato dal server.
+          applicaRigheServer(righeConfermate.current);
+          if (esito === null || esito.motivo !== "non_configurato") {
+            mostra("Aggiornamento non riuscito. Riprova.", "errore");
+          }
+        }
+        // Sincronizzazione della riga conclusa (bene o male): sblocca anche
+        // chi la attende tutta con attendiSincronizzazioni.
+        for (const risolvi of sync.alTermine) risolvi();
+      }
+      for (const risolvi of daRisolvere) risolvi();
+    },
+    [mostra, applicaRigheServer],
+  );
+
   const aggiorna = useCallback<CartContextValue["aggiorna"]>(
     (rigaId, quantita) => {
       // Feedback immediato: functional update, cosi i tap ravvicinati si
@@ -247,6 +315,7 @@ export function CartProvider({
         timer: null,
         quantita,
         inAttesa: [],
+        alTermine: [],
       };
       syncQuantita.current.set(rigaId, sync);
       sync.quantita = quantita; // last-write-wins
@@ -254,48 +323,34 @@ export function CartProvider({
 
       return new Promise<void>((risolvi) => {
         sync.inAttesa.push(risolvi);
-        sync.timer = setTimeout(async () => {
-          sync.timer = null;
-          // Numera l'invio: solo il piu recente puo applicare la risposta.
-          const gen = (generazioneRiga.current.get(rigaId) ?? 0) + 1;
-          generazioneRiga.current.set(rigaId, gen);
-          const richiesta = sync.quantita;
-          const daRisolvere = sync.inAttesa;
-          sync.inAttesa = [];
-
-          let esito: EsitoCarrello | null = null;
-          try {
-            esito = await aggiornaQuantita(rigaId, richiesta);
-          } catch {
-            // Errore di rete/imprevisto: trattato come esito negativo.
-          }
-
-          // Risposta superata se nel frattempo la riga e stata annullata
-          // (rimuovi/svuota) o un tap ha rimesso in coda un invio piu nuovo:
-          // sara quello a riconciliare, questa risposta va scartata.
-          const superata =
-            gen !== generazioneRiga.current.get(rigaId) || sync.timer !== null;
-          if (!superata) {
-            syncQuantita.current.delete(rigaId);
-            if (esito?.ok) {
-              applicaRigheServer(esito.righe);
-              if (esito.avviso) {
-                mostra(esito.avviso, "errore");
-              }
-            } else {
-              // Rollback all'ultimo stato confermato dal server.
-              applicaRigheServer(righeConfermate.current);
-              if (esito === null || esito.motivo !== "non_configurato") {
-                mostra("Aggiornamento non riuscito. Riprova.", "errore");
-              }
-            }
-          }
-          for (const risolvi of daRisolvere) risolvi();
+        sync.timer = setTimeout(() => {
+          void inviaQuantita(rigaId, sync);
         }, DEBOUNCE_QUANTITA_MS);
       });
     },
-    [mostra, applicaRigheServer],
+    [inviaQuantita],
   );
+
+  /**
+   * Flush pre-pagamento: anticipa i debounce pendenti (cancellando i timer
+   * originali, cosi nessun invio doppio) e attende che ogni riga con
+   * sincronizzazione in corso arrivi a conclusione — anche in caso di errore,
+   * dove fa fede il rollback di `inviaQuantita`. La semantica last-write-wins
+   * resta intatta: e lo stesso invio del debounce, solo senza attesa.
+   */
+  const attendiSincronizzazioni = useCallback<
+    CartContextValue["attendiSincronizzazioni"]
+  >(async () => {
+    const attese: Array<Promise<void>> = [];
+    for (const [rigaId, sync] of syncQuantita.current) {
+      if (sync.timer !== null) {
+        clearTimeout(sync.timer);
+        void inviaQuantita(rigaId, sync);
+      }
+      attese.push(new Promise<void>((risolvi) => sync.alTermine.push(risolvi)));
+    }
+    await Promise.all(attese);
+  }, [inviaQuantita]);
 
   const rimuovi = useCallback<CartContextValue["rimuovi"]>(
     async (rigaId) => {
@@ -368,6 +423,7 @@ export function CartProvider({
       rimuovi,
       svuota,
       ricarica,
+      attendiSincronizzazioni,
     }),
     [
       righe,
@@ -382,6 +438,7 @@ export function CartProvider({
       rimuovi,
       svuota,
       ricarica,
+      attendiSincronizzazioni,
     ],
   );
 
