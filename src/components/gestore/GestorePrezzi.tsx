@@ -11,7 +11,15 @@
 // L'anteprima usa la STESSA funzione pura della server action
 // (lib/prezzi-regola): quello che si vede e quello che viene scritto.
 
-import { useMemo, useState, useTransition } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
+import Image from "next/image";
 
 import { formatPrezzo, parsePrezzoCents } from "@/lib/format";
 import {
@@ -36,6 +44,16 @@ import type { Categoria } from "@/lib/types";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import { Campo, ChevronSelect, Spinner, inputCls } from "@/components/gestore/ui";
 import { useToast } from "@/components/gestore/Toaster";
+
+// Attesa dopo l'ultimo tasto prima di derivare la regola: l'anteprima
+// (centinaia di righe + riepilogo) ricalcola a digitazione ferma, non a ogni
+// tasto — altrimenti l'input si blocca per secondi su CPU mobile.
+const DEBOUNCE_VALORE_MS = 280;
+
+// Righe dell'anteprima montate per blocco con "Mostra altri" (stesso pattern
+// di GestoreMedia): con 1000+ prodotti montare tutto in un colpo satura DOM
+// e memoria. Selezioni e riepilogo lavorano comunque sull'intero elenco.
+const PRODOTTI_PER_BLOCCO = 50;
 
 export default function GestorePrezzi({
   categorie,
@@ -117,6 +135,7 @@ export default function GestorePrezzi({
       }
       setProdotti(esito.prodotti);
       setEsclusi(new Set());
+      setLimiteRighe(PRODOTTI_PER_BLOCCO);
     });
   }
 
@@ -126,20 +145,42 @@ export default function GestorePrezzi({
   const [valoreTxt, setValoreTxt] = useState("");
   const [arrotonda, setArrotonda] = useState<ArrotondamentoPrezzi>("no");
 
-  // Regola corrente, o null finche il valore non e un numero sensato.
-  const regola: RegolaPrezzi | null = useMemo(() => {
-    const txt = valoreTxt.trim();
-    if (!txt) return null;
-    const valore =
-      modo === "percento"
-        ? Number(txt.replace(",", "."))
-        : (parsePrezzoCents(txt) ?? Number.NaN);
-    if (!Number.isFinite(valore)) return null;
-    return { direzione, modo, valore, arrotonda };
-  }, [valoreTxt, modo, direzione, arrotonda]);
+  // Copia "a digitazione ferma" di valoreTxt: l'input resta reattivo (legge
+  // valoreTxt), la regola e tutto cio che ne deriva ripartono solo quando la
+  // digitazione si e fermata (setState nel timeout, mai sincrono nell'effect).
+  const [valoreFermo, setValoreFermo] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setValoreFermo(valoreTxt), DEBOUNCE_VALORE_MS);
+    return () => clearTimeout(t);
+  }, [valoreTxt]);
 
+  // Deriva la regola da un testo, o null finche non e un numero sensato.
+  // Callback e non solo useMemo: serve anche al click su "Applica" per
+  // validare il valore VIVO (valoreTxt) senza aspettare il debounce.
+  const regolaDa = useCallback(
+    (testo: string): RegolaPrezzi | null => {
+      const txt = testo.trim();
+      if (!txt) return null;
+      const valore =
+        modo === "percento"
+          ? Number(txt.replace(",", "."))
+          : (parsePrezzoCents(txt) ?? Number.NaN);
+      if (!Number.isFinite(valore)) return null;
+      return { direzione, modo, valore, arrotonda };
+    },
+    [modo, direzione, arrotonda],
+  );
+
+  // Regola corrente (segue il valore fermo, a digitazione conclusa).
+  const regola: RegolaPrezzi | null = useMemo(
+    () => regolaDa(valoreFermo),
+    [regolaDa, valoreFermo],
+  );
+
+  // L'errore segue il valore fermo (come la regola): niente "numero non
+  // valido" lampeggiato mentre si sta ancora scrivendo.
   const erroreRegola =
-    valoreTxt.trim() === ""
+    valoreFermo.trim() === ""
       ? null
       : regola
         ? validaRegolaPrezzi(regola)
@@ -149,6 +190,7 @@ export default function GestorePrezzi({
   // --- Passo 3: anteprima, selezione prodotti e applicazione ----------------
   const [confermaAperta, setConfermaAperta] = useState(false);
   const [applicando, startApplica] = useTransition();
+  const [limiteRighe, setLimiteRighe] = useState(PRODOTTI_PER_BLOCCO);
 
   const selezionati = useMemo(
     () => (prodotti ?? []).filter((p) => !esclusi.has(p.id)),
@@ -176,14 +218,34 @@ export default function GestorePrezzi({
     return { prima, dopo, saltati, cambiano };
   }, [selezionati, regola, regolaValida]);
 
-  function toggleProdotto(id: string) {
+  // Righe montate nell'anteprima (primo blocco + "Mostra altri"), con nuovo
+  // prezzo ed etichetta categoria gia risolti: si ricalcolano solo al cambio
+  // di regola/blocco/elenco, e le righe memoizzate ridisegnano solo se le
+  // loro props cambiano davvero.
+  const righeVisibili = useMemo(
+    () =>
+      (prodotti ?? []).slice(0, limiteRighe).map((p) => ({
+        prodotto: p,
+        etichetta: p.categoria_id
+          ? etichettaCategoria(categorie, p.categoria_id)
+          : "Senza categoria",
+        nuovo:
+          regolaValida && regola
+            ? calcolaNuovoPrezzoCents(p.prezzo_cents, regola)
+            : undefined,
+      })),
+    [prodotti, limiteRighe, categorie, regola, regolaValida],
+  );
+
+  // Callback stabile: le righe memoizzate non ridisegnano per colpa sua.
+  const toggleProdotto = useCallback((id: string) => {
     setEsclusi((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
   function applica() {
     if (!regola || !regolaValida) return;
@@ -198,8 +260,10 @@ export default function GestorePrezzi({
       }
       setConfermaAperta(false);
       // Il valore si azzera per evitare un secondo "Applica" involontario
-      // (la stessa regola due volte = doppio aumento).
+      // (la stessa regola due volte = doppio aumento). Anche la copia ferma,
+      // senza aspettare il debounce: la regola decade subito.
       setValoreTxt("");
+      setValoreFermo("");
       mostra(
         `Prezzi aggiornati su ${esito.aggiornati ?? 0} ${
           (esito.aggiornati ?? 0) === 1 ? "prodotto" : "prodotti"
@@ -451,89 +515,39 @@ export default function GestorePrezzi({
             </div>
 
             <ul className="mt-4 flex flex-col gap-2 lg:gap-0 lg:divide-y lg:divide-line lg:overflow-hidden lg:rounded-2xl lg:ring-1 lg:ring-line">
-              {prodotti.map((p) => {
-                const incluso = !esclusi.has(p.id);
-                const nuovo =
-                  regolaValida && regola
-                    ? calcolaNuovoPrezzoCents(p.prezzo_cents, regola)
-                    : undefined;
-                return (
-                  <li
-                    key={p.id}
-                    className={[
-                      "flex items-center gap-3 rounded-2xl p-3 ring-1 transition-all lg:rounded-none lg:px-4 lg:py-2.5 lg:ring-0",
-                      incluso
-                        ? "bg-white ring-line lg:bg-sea/5"
-                        : "bg-white opacity-55 ring-line lg:bg-white",
-                    ].join(" ")}
-                  >
-                    <input
-                      type="checkbox"
-                      aria-label={`Includi ${p.nome}`}
-                      checked={incluso}
-                      onChange={() => toggleProdotto(p.id)}
-                      className="h-5 w-5 shrink-0 cursor-pointer rounded accent-sea"
-                    />
-                    <MiniaturaPrezzi url={p.immagine_url} nome={p.nome} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-display text-sm font-bold text-foreground">
-                        {p.nome}
-                        {!p.attivo && (
-                          <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold text-muted">
-                            Nascosto
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-muted">
-                        {p.categoria_id
-                          ? etichettaCategoria(categorie, p.categoria_id)
-                          : "Senza categoria"}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right tabular-nums">
-                      {nuovo === undefined ? (
-                        <span className="text-sm font-bold text-sea">
-                          {formatPrezzo(p.prezzo_cents, p.valuta)}
-                        </span>
-                      ) : nuovo == null ? (
-                        <>
-                          <span className="block text-sm font-bold text-foreground">
-                            {formatPrezzo(p.prezzo_cents, p.valuta)}
-                          </span>
-                          <span className="rounded-full bg-sun/25 px-2 py-0.5 text-[11px] font-bold text-[#8a6500]">
-                            fuori limiti: saltato
-                          </span>
-                        </>
-                      ) : nuovo === p.prezzo_cents ? (
-                        <>
-                          <span className="block text-sm font-bold text-foreground">
-                            {formatPrezzo(p.prezzo_cents, p.valuta)}
-                          </span>
-                          <span className="text-[11px] font-bold text-muted">
-                            invariato
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="block text-xs text-muted line-through">
-                            {formatPrezzo(p.prezzo_cents, p.valuta)}
-                          </span>
-                          <span
-                            className={`block text-sm font-bold ${
-                              nuovo > p.prezzo_cents
-                                ? "text-foreground"
-                                : "text-sea"
-                            }`}
-                          >
-                            {formatPrezzo(nuovo, p.valuta)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+              {righeVisibili.map(({ prodotto: p, etichetta, nuovo }) => (
+                <RigaProdottoPrezzi
+                  key={p.id}
+                  id={p.id}
+                  nome={p.nome}
+                  attivo={p.attivo}
+                  prezzoCents={p.prezzo_cents}
+                  valuta={p.valuta}
+                  immagineUrl={p.immagine_url}
+                  etichetta={etichetta}
+                  incluso={!esclusi.has(p.id)}
+                  nuovo={nuovo}
+                  onToggle={toggleProdotto}
+                />
+              ))}
             </ul>
+
+            {prodotti.length > righeVisibili.length && (
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <p className="text-sm tabular-nums text-muted">
+                  Hai visto {righeVisibili.length} prodotti di {prodotti.length}
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLimiteRighe(righeVisibili.length + PRODOTTI_PER_BLOCCO)
+                  }
+                  className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+                >
+                  Mostra altri
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>
@@ -568,7 +582,16 @@ export default function GestorePrezzi({
             </span>
             <button
               type="button"
-              onClick={() => setConfermaAperta(true)}
+              onClick={() => {
+                // Il debounce (~280ms) potrebbe non aver ancora recepito
+                // l'ultima digitazione: si valida il valore VIVO e si
+                // allinea subito la copia ferma, cosi il dialog non puo
+                // aprirsi su una regola gia decaduta (conferma no-op).
+                setValoreFermo(valoreTxt);
+                const viva = regolaDa(valoreTxt);
+                if (!viva || validaRegolaPrezzi(viva) != null) return;
+                setConfermaAperta(true);
+              }}
               disabled={
                 !regolaValida || applicando || (riepilogo?.cambiano ?? 0) === 0
               }
@@ -709,17 +732,119 @@ function RigaCategoria({
   );
 }
 
+/**
+ * Riga dell'anteprima prezzi, memoizzata con props primitive: quando cambia
+ * la regola ridisegnano solo le righe il cui esito cambia davvero, e spuntare
+ * un prodotto non ridisegna tutte le altre.
+ */
+const RigaProdottoPrezzi = memo(function RigaProdottoPrezzi({
+  id,
+  nome,
+  attivo,
+  prezzoCents,
+  valuta,
+  immagineUrl,
+  etichetta,
+  incluso,
+  nuovo,
+  onToggle,
+}: {
+  id: string;
+  nome: string;
+  attivo: boolean;
+  prezzoCents: number;
+  valuta: string;
+  immagineUrl: string | null;
+  /** Percorso leggibile della categoria, gia risolto dal genitore. */
+  etichetta: string;
+  incluso: boolean;
+  /** Nuovo prezzo: undefined = regola non impostata, null = fuori limiti. */
+  nuovo: number | null | undefined;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <li
+      className={[
+        "flex items-center gap-3 rounded-2xl p-3 ring-1 transition-all lg:rounded-none lg:px-4 lg:py-2.5 lg:ring-0",
+        incluso
+          ? "bg-white ring-line lg:bg-sea/5"
+          : "bg-white opacity-55 ring-line lg:bg-white",
+      ].join(" ")}
+    >
+      <input
+        type="checkbox"
+        aria-label={`Includi ${nome}`}
+        checked={incluso}
+        onChange={() => onToggle(id)}
+        className="h-5 w-5 shrink-0 cursor-pointer rounded accent-sea"
+      />
+      <MiniaturaPrezzi url={immagineUrl} nome={nome} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-display text-sm font-bold text-foreground">
+          {nome}
+          {!attivo && (
+            <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold text-muted">
+              Nascosto
+            </span>
+          )}
+        </p>
+        <p className="truncate text-xs text-muted">{etichetta}</p>
+      </div>
+      <div className="shrink-0 text-right tabular-nums">
+        {nuovo === undefined ? (
+          <span className="text-sm font-bold text-sea">
+            {formatPrezzo(prezzoCents, valuta)}
+          </span>
+        ) : nuovo == null ? (
+          <>
+            <span className="block text-sm font-bold text-foreground">
+              {formatPrezzo(prezzoCents, valuta)}
+            </span>
+            <span className="rounded-full bg-sun/25 px-2 py-0.5 text-[11px] font-bold text-[#8a6500]">
+              fuori limiti: saltato
+            </span>
+          </>
+        ) : nuovo === prezzoCents ? (
+          <>
+            <span className="block text-sm font-bold text-foreground">
+              {formatPrezzo(prezzoCents, valuta)}
+            </span>
+            <span className="text-[11px] font-bold text-muted">invariato</span>
+          </>
+        ) : (
+          <>
+            <span className="block text-xs text-muted line-through">
+              {formatPrezzo(prezzoCents, valuta)}
+            </span>
+            <span
+              className={`block text-sm font-bold ${
+                nuovo > prezzoCents ? "text-foreground" : "text-sea"
+              }`}
+            >
+              {formatPrezzo(nuovo, valuta)}
+            </span>
+          </>
+        )}
+      </div>
+    </li>
+  );
+});
+
 /** Miniatura compatta (come la lista prodotti, ma quadrata e piu piccola). */
 function MiniaturaPrezzi({ url, nome }: { url: string | null; nome: string }) {
   return (
-    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-line">
+    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-line">
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- url da Storage con cache-bust
-        <img
+        // Miniatura via optimizer di Next (lazy, ~44px): mai il master pieno
+        // da 2560px usato come thumbnail (pattern GestoreMedia).
+        <Image
           src={url}
           alt={nome}
+          fill
+          sizes="44px"
+          quality={75}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="object-cover"
         />
       ) : (
         <div className="tile-cyan h-full w-full" />
