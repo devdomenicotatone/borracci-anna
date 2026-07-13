@@ -4,6 +4,7 @@
 // useToast().mostra(messaggio, "ok" | "errore") da qualunque client component.
 // Storicamente viveva in components/gestore/Toaster.tsx, che ora ne fa il re-export.
 
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -44,16 +45,25 @@ export function ToasterProvider({
   const counter = useRef(0);
   // Id dei timeout di auto-dismiss ancora attivi, per ripulirli allo smontaggio.
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // Solo nell'area gestore esiste una bottom-nav mobile (AdminNav) da scavalcare.
+  const pathname = usePathname();
+  const inGestore = pathname.startsWith("/gestore");
 
   const mostra = useCallback((messaggio: string, tipo: TipoToast = "ok") => {
     const id = (counter.current += 1);
     setToasts((t) => [...t, { id, tipo, messaggio }]);
-    // Auto-dismiss dopo 3,5s.
+    // Auto-dismiss dopo 3,5s (oltre alla chiusura manuale al tap).
     const timer = setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id));
       timers.current.delete(timer);
     }, 3500);
     timers.current.add(timer);
+  }, []);
+
+  // Chiusura anticipata al tap sul toast; l'eventuale timeout residuo che
+  // scatterà più tardi filtra un id ormai assente ed è innocuo.
+  const rimuovi = useCallback((id: number) => {
+    setToasts((t) => t.filter((x) => x.id !== id));
   }, []);
 
   // Cleanup: cancella i timeout pendenti allo smontaggio del provider.
@@ -67,18 +77,24 @@ export function ToasterProvider({
   return (
     <ToastContext.Provider value={{ mostra }}>
       {children}
-      {/* Sopra la bottom-nav su mobile (bottom-20), in basso su desktop. */}
+      {/* Su mobile: nel gestore sopra la bottom-nav (AdminNav, h-16 + safe-area),
+          in vetrina (che non ha bottom-nav) appena sopra il fondo. Desktop: bottom-6. */}
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6"
+        className={[
+          "pointer-events-none fixed inset-x-0 z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6",
+          inGestore
+            ? "bottom-[calc(env(safe-area-inset-bottom)+5rem)]"
+            : "bottom-[calc(env(safe-area-inset-bottom)+1rem)]",
+        ].join(" ")}
       >
         {toasts.map((t) => (
           <div
             key={t.id}
             role={t.tipo === "errore" ? "alert" : "status"}
             className={[
-              "pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-2xl px-4 py-3 font-display text-sm font-bold text-white",
+              "pointer-events-auto relative flex max-w-sm items-center gap-2.5 rounded-2xl px-4 py-3 font-display text-sm font-bold text-white",
               t.tipo === "errore"
                 ? "bg-coral shadow-coral"
                 : "bg-sea shadow-sea",
@@ -114,6 +130,13 @@ export function ToasterProvider({
               )}
             </span>
             {t.messaggio}
+            {/* Tap ovunque sul toast per chiuderlo senza aspettare il timer. */}
+            <button
+              type="button"
+              aria-label="Chiudi la notifica"
+              onClick={() => rimuovi(t.id)}
+              className="absolute inset-0 rounded-2xl"
+            />
           </div>
         ))}
       </div>
