@@ -5,8 +5,9 @@
 // cache locale per id cosi togliere un cuore NON rifa la fetch — la card
 // sparisce e basta. Skeleton finche non si e montati (SSR non conosce i
 // preferiti) o durante il caricamento degli id nuovi. Se la fetch fallisce
-// (rete mobile assente/instabile) NIENTE stato vuoto — direbbe il falso —
-// ma un blocco di errore con "Riprova" che rilancia la fetch dei mancanti.
+// (rete mobile assente/instabile) o il server risponde ok:false (errore lato
+// server) NIENTE stato vuoto — direbbe il falso — ma un blocco di errore con
+// "Riprova" che rilancia la fetch dei mancanti.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -38,8 +39,9 @@ export default function ElencoPreferiti() {
   const mancanti = ids.filter((id) => !perId.has(id));
   const chiaveMancanti = mancanti.join(",");
 
-  // Fetch dei mancanti fallita (rete): distinta dagli id davvero assenti dal
-  // catalogo. `tentativo` rilancia l'effect a parita di id (bottone Riprova).
+  // Fetch dei mancanti fallita (rete o errore lato server): distinta dagli id
+  // davvero assenti dal catalogo. `tentativo` rilancia l'effect a parita di id
+  // (bottone Riprova).
   const [errore, setErrore] = useState(false);
   const [tentativo, setTentativo] = useState(0);
   // Se l'insieme dei mancanti cambia (cuore tolto, fetch riuscita) l'errore
@@ -58,11 +60,17 @@ export default function ElencoPreferiti() {
     if (!montato || mancanti.length === 0) return;
     let vivo = true;
     prodottiPerId(mancanti)
-      .then((prodotti) => {
+      .then((esito) => {
         if (!vivo) return;
+        if (!esito.ok) {
+          // Errore lato server (Supabase giu, query fallita): stessa sorte
+          // della rete assente — id NON marcati null, il Riprova li richiede.
+          setErrore(true);
+          return;
+        }
         setPerId((prima) => {
           const dopo = new Map(prima);
-          for (const p of prodotti) dopo.set(p.id, p);
+          for (const p of esito.prodotti) dopo.set(p.id, p);
           // Id che il server non ha ritornato (prodotto rimosso/disattivato):
           // si marcano comunque, cosi non vengono richiesti in loop.
           for (const id of mancanti) {
