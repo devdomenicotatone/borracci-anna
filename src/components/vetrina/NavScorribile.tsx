@@ -2,9 +2,9 @@
 
 // Riga orizzontale scorribile con frecce ‹ ›: i chip di navigazione restano su
 // UNA sola riga; le frecce compaiono solo quando c'e contenuto oltre il bordo
-// (e indicano che si puo scorrere). Su mobile lo swipe resta primario, ma le
-// frecce aiutano dove non c'e touch. Il contenuto (i chip) arriva come children
-// dal Server Component che le renderizza.
+// (e indicano che si puo scorrere) e solo sui puntatori fini: sui touch lo
+// swipe e primario e le frecce coprirebbero i chip ai bordi. Il contenuto
+// (i chip) arriva come children dal Server Component che le renderizza.
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
@@ -53,8 +53,10 @@ export default function NavScorribile({
     el.scrollBy({ left: verso * el.clientWidth * 0.8, behavior: "smooth" });
   }
 
+  // pointer-coarse:hidden: su touch le frecce coprivano i chip ai bordi
+  // intercettandone i tap; li' lo swipe basta, le frecce servono col mouse.
   const frecciaCls =
-    "absolute top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white text-foreground shadow-sea ring-1 ring-line transition-colors hover:ring-sea";
+    "pointer-coarse:hidden absolute top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white text-foreground shadow-sea ring-1 ring-line transition-colors hover:ring-sea";
 
   return (
     <div className="relative">

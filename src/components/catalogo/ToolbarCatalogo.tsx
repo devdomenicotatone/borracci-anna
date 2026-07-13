@@ -208,12 +208,16 @@ export default function ToolbarCatalogo({
             aria-label="Cerca nel catalogo"
             className="h-12 w-full rounded-full bg-white pl-12 pr-11 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 hover:ring-sea focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:hidden"
           />
+          {/* Area tattile piena (44px, a filo del bordo destro): un tap
+              mancato sull'icona nuda finirebbe nell'input riaprendo la
+              tastiera. L'input ha pr-11, quindi la zona coincide col padding
+              e non copre il testo digitato. */}
           {ricerca && (
             <button
               type="button"
               onClick={() => setRicerca("")}
               aria-label="Cancella la ricerca"
-              className="absolute inset-y-0 right-3 flex items-center text-muted transition-colors hover:text-foreground"
+              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted transition hover:text-foreground active:scale-95"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -247,7 +251,7 @@ export default function ToolbarCatalogo({
               onClick={() => naviga({ ...filtri, franchise: "" })}
               aria-pressed={filtri.franchise === ""}
               className={[
-                "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
+                "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all active:scale-95",
                 filtri.franchise === ""
                   ? "bg-sea text-white shadow-sea"
                   : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
@@ -266,7 +270,7 @@ export default function ToolbarCatalogo({
                   }
                   aria-pressed={attivo}
                   className={[
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all active:scale-95",
                     attivo
                       ? "bg-sea text-white shadow-sea"
                       : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
@@ -294,7 +298,7 @@ export default function ToolbarCatalogo({
           type="button"
           onClick={apriDrawer}
           aria-haspopup="dialog"
-          className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+          className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface active:scale-95"
         >
           <svg
             viewBox="0 0 24 24"
@@ -333,7 +337,7 @@ export default function ToolbarCatalogo({
             onChange={(e) =>
               naviga({ ...filtri, ordina: e.target.value as Ordinamento })
             }
-            className="h-11 appearance-none rounded-full bg-white pl-4 pr-9 font-display text-base font-bold text-foreground ring-1 ring-line outline-none transition-shadow hover:ring-sea sm:text-sm"
+            className="h-11 appearance-none rounded-full bg-white pl-4 pr-9 font-display text-base font-bold text-foreground ring-1 ring-line outline-none transition hover:ring-sea active:scale-95 sm:text-sm"
           >
             {ORDINAMENTI.map((o) => (
               <option key={o} value={o}>
@@ -406,7 +410,7 @@ export default function ToolbarCatalogo({
                   ordina: filtri.ordina,
                 })
               }
-              className="ml-1 font-display text-sm font-bold text-coral-ink transition-colors hover:text-coral"
+              className="ml-1 font-display text-sm font-bold text-coral-ink transition hover:text-coral active:scale-95"
             >
               Azzera tutto
             </button>
@@ -454,11 +458,14 @@ function ChipFiltro({
         />
       )}
       {etichetta}
+      {/* Area tattile estesa a ~44px (24px + 2×10px) col pseudo-elemento:
+          coi chip adiacenti a gap-2 la X nuda faceva rimuovere il filtro
+          sbagliato (stesso pattern di QuickAddTaglie). */}
       <button
         type="button"
         onClick={onRimuovi}
         aria-label={`Rimuovi filtro ${etichetta}`}
-        className="grid h-6 w-6 place-items-center rounded-full text-muted transition-colors hover:bg-white hover:text-foreground"
+        className="relative grid h-6 w-6 place-items-center rounded-full text-muted transition after:absolute after:-inset-2.5 hover:bg-white hover:text-foreground active:scale-95"
       >
         <svg
           viewBox="0 0 24 24"
@@ -586,7 +593,7 @@ function DrawerFiltri({
             type="button"
             onClick={onChiudi}
             aria-label="Chiudi"
-            className="grid h-10 w-10 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-foreground"
+            className="grid h-10 w-10 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-foreground active:scale-95"
           >
             <svg
               viewBox="0 0 24 24"
@@ -669,7 +676,7 @@ function DrawerFiltri({
                         setBozza((b) => ({ ...b, taglie: toggle(b.taglie, t) }))
                       }
                       className={[
-                        "h-10 min-w-12 rounded-full px-3 font-display text-sm font-bold transition-all",
+                        "h-10 min-w-12 rounded-full px-3 font-display text-sm font-bold transition-all active:scale-95",
                         attiva
                           ? "bg-sea text-white shadow-sea"
                           : "bg-white text-foreground ring-1 ring-line hover:ring-sea",
@@ -702,7 +709,7 @@ function DrawerFiltri({
                         setBozza((b) => ({ ...b, colori: toggle(b.colori, c) }))
                       }
                       className={[
-                        "inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all",
+                        "inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all active:scale-95",
                         attivo
                           ? "bg-sea/10 text-sea ring-2 ring-sea"
                           : "bg-white text-foreground ring-1 ring-line hover:ring-sea",
@@ -730,14 +737,14 @@ function DrawerFiltri({
           <button
             type="button"
             onClick={onAzzera}
-            className="flex h-12 items-center justify-center rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface"
+            className="flex h-12 items-center justify-center rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-surface-2 transition hover:bg-surface active:scale-[.98]"
           >
             Azzera
           </button>
           <button
             type="button"
             onClick={onApplica}
-            className="flex h-12 items-center justify-center rounded-full bg-sea px-4 font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
+            className="flex h-12 items-center justify-center rounded-full bg-sea px-4 font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-[.98]"
           >
             Applica filtri
           </button>
