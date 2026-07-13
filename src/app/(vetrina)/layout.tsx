@@ -52,7 +52,9 @@ export default async function VetrinaLayout({
         </a>
         <div className="flex min-h-screen flex-col">
           <Header gruppi={gruppi} cliente={cliente} />
-          <main id="contenuto" className="flex-1">
+          {/* scroll-mt-20: l'header sticky (h-16) non copre il target dello
+              skip link (stesso accorgimento di #contatti nel Footer). */}
+          <main id="contenuto" className="flex-1 scroll-mt-20">
             {children}
           </main>
           <Footer />

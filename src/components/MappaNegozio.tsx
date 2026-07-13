@@ -43,6 +43,9 @@ export default function MappaNegozio() {
         center: [lat, lng],
         zoom: 18,
         scrollWheelZoom: false, // niente hijack dello scroll di pagina
+        // Su mobile il pan a un dito catturerebbe lo scroll della pagina
+        // (mappa full-width): disattivato. Resta lo zoom a due dita (touchZoom).
+        dragging: !L.Browser.mobile,
       });
       mappaRef.current = mappa;
       mappa.attributionControl.setPosition("bottomleft");

@@ -137,7 +137,7 @@ export default function CartItem({
               onClick={() => impostaQuantita(riga.quantita - 1)}
               disabled={riga.quantita <= 1}
               aria-label="Diminuisci quantita"
-              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition hover:bg-surface active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               −
             </button>
@@ -152,18 +152,19 @@ export default function CartItem({
               onClick={() => impostaQuantita(riga.quantita + 1)}
               disabled={riga.quantita >= maxQuantita}
               aria-label="Aumenta quantita"
-              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition hover:bg-surface active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               +
             </button>
           </div>
 
-          {/* Rimuovi */}
+          {/* Rimuovi: aspetto testuale ma area tattile ≥44px; i margini
+              negativi compensano il padding per non spostare il layout. */}
           <button
             type="button"
             onClick={rimuoviRiga}
             disabled={inAttesa}
-            className="text-sm font-medium text-muted underline-offset-2 transition-colors hover:text-coral hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            className="-mx-3 -my-2 inline-flex min-h-11 items-center px-3 text-sm font-medium text-muted underline-offset-2 transition hover:text-coral hover:underline active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Rimuovi
           </button>
@@ -243,7 +244,7 @@ export function CheckoutButton({
       type="button"
       onClick={vaiAlPagamento}
       disabled={disabilitato || inAttesa}
-      className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+      className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
     >
       {inAttesa ? "Reindirizzamento…" : "Vai al pagamento"}
     </button>

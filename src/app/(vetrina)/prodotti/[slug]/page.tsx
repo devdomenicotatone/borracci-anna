@@ -292,7 +292,13 @@ export default async function PaginaProdotto({
             >
               <path d="m9 6 6 6-6 6" />
             </svg>
-            <span aria-current="page" className="font-medium text-foreground">
+            {/* Troncato: su 360px il nome intero occuperebbe 3-4 righe e
+                spingerebbe la galleria sotto la piega (è ripetuto nell'h1). */}
+            <span
+              aria-current="page"
+              title={prodotto.nome}
+              className="max-w-[18ch] truncate font-medium text-foreground"
+            >
               {prodotto.nome}
             </span>
           </li>
