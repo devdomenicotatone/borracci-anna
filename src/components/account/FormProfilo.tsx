@@ -39,6 +39,7 @@ export default function FormProfilo({ nome }: { nome: string | null }) {
           name="nome"
           type="text"
           autoComplete="name"
+          autoCapitalize="words"
           required
           maxLength={200}
           defaultValue={nome ?? ""}

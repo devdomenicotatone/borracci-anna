@@ -6,7 +6,12 @@
 // un ritocco al design system andava replicato a mano e le copie restavano
 // indietro. Fonte unica qui, cosi select, toggle e spinner restano coerenti.
 
-import type { ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 // Stile base dei campi input/select del pannello. Include il focus ring (era
 // presente solo nella vetrina): unificarlo verso l'alto non toglie la
@@ -16,7 +21,11 @@ export const inputCls =
 
 /** Etichetta + campo + hint/errore. Con `htmlFor` l'etichetta e un <label>
  *  associato; senza (es. quando il controllo non ha un id) degrada a <span>.
- *  `errore` (rosso) ha la precedenza su `hint`: serve ai form con validazione. */
+ *  `errore` (rosso) ha la precedenza su `hint`: serve ai form con validazione.
+ *  L'errore e annunciato dagli screen reader (role="alert") e collegato al
+ *  controllo: con errore attivo il figlio, se e un elemento singolo, viene
+ *  clonato con aria-invalid/aria-describedby. Retro-compatibile: wrapper e
+ *  componenti custom ignorano senza danni le prop aria extra. */
 export function Campo({
   label,
   htmlFor,
@@ -30,6 +39,23 @@ export function Campo({
   errore?: string;
   children: ReactNode;
 }) {
+  // Id del messaggio d'errore, derivato dall'id del controllo (`htmlFor`).
+  const idErrore = htmlFor ? `${htmlFor}-errore` : undefined;
+  // Le prop aria hanno senso solo sul controllo vero: sui tag nativi che non
+  // sono campi (es. il <div className="relative"> input+suffisso di
+  // GestorePrezzi/FormProdotto) aria-invalid violerebbe ARIA (role generic)
+  // e l'associazione resterebbe inerte, quindi il wrapper non si clona.
+  const clonabile =
+    isValidElement(children) &&
+    (typeof children.type !== "string" ||
+      ["input", "select", "textarea"].includes(children.type));
+  const controllo =
+    errore && clonabile
+      ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+          "aria-invalid": true,
+          ...(idErrore ? { "aria-describedby": idErrore } : null),
+        })
+      : children;
   return (
     <div className="flex flex-col gap-1.5">
       {htmlFor ? (
@@ -44,9 +70,11 @@ export function Campo({
           {label}
         </span>
       )}
-      {children}
+      {controllo}
       {errore ? (
-        <p className="text-xs font-bold text-coral-ink">{errore}</p>
+        <p id={idErrore} role="alert" className="text-sm font-bold text-coral-ink">
+          {errore}
+        </p>
       ) : hint ? (
         <p className="text-xs text-muted">{hint}</p>
       ) : null}

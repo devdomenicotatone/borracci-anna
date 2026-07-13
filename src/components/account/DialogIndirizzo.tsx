@@ -95,6 +95,7 @@ export default function DialogIndirizzo({
               name="nome"
               type="text"
               autoComplete="name"
+              autoCapitalize="words"
               required
               maxLength={200}
               defaultValue={val("nome")}
@@ -146,6 +147,7 @@ export default function DialogIndirizzo({
                 required
                 maxLength={5}
                 pattern="\d{5}"
+                title="CAP di 5 cifre"
                 defaultValue={val("cap")}
                 className={inputCls}
               />
@@ -178,6 +180,7 @@ export default function DialogIndirizzo({
                 required
                 maxLength={2}
                 pattern="[A-Za-z]{2}"
+                title="Sigla provincia di 2 lettere (es. RN)"
                 defaultValue={val("provincia")}
                 className={`${inputCls} uppercase`}
               />
@@ -204,12 +207,13 @@ export default function DialogIndirizzo({
             Spediamo in tutta <strong>Italia</strong>.
           </p>
 
+          {/* Riga intera cliccabile: min-h-11 (44px) + padding verticale. */}
           {!indirizzo?.predefinito && (
-            <label className="flex items-center gap-2.5 text-sm text-foreground">
+            <label className="flex min-h-11 items-center gap-2.5 py-1.5 text-sm text-foreground">
               <input
                 type="checkbox"
                 name="predefinito"
-                className="h-4 w-4 accent-[var(--sea)]"
+                className="h-5 w-5 accent-[var(--sea)]"
               />
               Usa come indirizzo predefinito
             </label>

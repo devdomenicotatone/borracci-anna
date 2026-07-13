@@ -103,11 +103,20 @@ export default function ModuloRichiesta({
           name="nome"
           required
           autoComplete="name"
+          autoCapitalize="words"
           defaultValue={prefill?.nome ?? ""}
+          aria-invalid={stato.errors?.nome ? true : undefined}
+          aria-describedby={stato.errors?.nome ? "r-nome-errore" : undefined}
           className={inputCls}
         />
         {stato.errors?.nome && (
-          <p className="text-xs font-bold text-coral-ink">{stato.errors.nome}</p>
+          <p
+            id="r-nome-errore"
+            role="alert"
+            className="text-sm font-bold text-coral-ink"
+          >
+            {stato.errors.nome}
+          </p>
         )}
       </div>
 
@@ -126,10 +135,18 @@ export default function ModuloRichiesta({
           required
           autoComplete="email"
           defaultValue={prefill?.email ?? ""}
+          aria-invalid={stato.errors?.email ? true : undefined}
+          aria-describedby={stato.errors?.email ? "r-email-errore" : undefined}
           className={inputCls}
         />
         {stato.errors?.email && (
-          <p className="text-xs font-bold text-coral-ink">{stato.errors.email}</p>
+          <p
+            id="r-email-errore"
+            role="alert"
+            className="text-sm font-bold text-coral-ink"
+          >
+            {stato.errors.email}
+          </p>
         )}
       </div>
 

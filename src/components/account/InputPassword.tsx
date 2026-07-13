@@ -13,12 +13,18 @@ export default function InputPassword({
   autoComplete,
   required = true,
   minLength,
+  // Inoltrate all'<input> vero: il Campo di ui.tsx le mette sul componente
+  // (aria-invalid/aria-describedby per l'errore) e senza il pass-through
+  // l'associazione non arriverebbe mai al campo reale.
+  ...aria
 }: {
   id: string;
   name?: string;
   autoComplete: "current-password" | "new-password";
   required?: boolean;
   minLength?: number;
+  "aria-invalid"?: boolean | "true" | "false";
+  "aria-describedby"?: string;
 }) {
   const [visibile, setVisibile] = useState(false);
   return (
@@ -31,6 +37,7 @@ export default function InputPassword({
         required={required}
         minLength={minLength}
         className={`${inputCls} pr-12`}
+        {...aria}
       />
       <button
         type="button"

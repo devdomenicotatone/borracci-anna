@@ -59,6 +59,7 @@ export default function FormRegistrazione() {
           name="nome"
           type="text"
           autoComplete="name"
+          autoCapitalize="words"
           required
           maxLength={200}
           defaultValue={stato?.valori?.nome ?? ""}
