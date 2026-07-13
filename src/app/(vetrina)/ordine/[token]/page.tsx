@@ -11,6 +11,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import PulsantePaga from "@/components/prodotto/PulsantePaga";
+import AttesaPagamento from "@/components/ordini/AttesaPagamento";
 import BadgeStatoOrdine from "@/components/ordini/BadgeStatoOrdine";
 import DettaglioOrdine from "@/components/ordini/DettaglioOrdine";
 import { createAdminSupabase } from "@/lib/supabase/admin";
@@ -114,10 +115,9 @@ export default async function PaginaOrdine({
       </p>
 
       {inElaborazione ? (
-        <p className="mt-4 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-sun-ink ring-1 ring-sun/40">
-          Stiamo registrando il pagamento… aggiorna la pagina tra qualche
-          secondo.
-        </p>
+        // Polling client-side: router.refresh() periodico finche il webhook
+        // non registra il pagamento (poi il componente non viene piu montato).
+        <AttesaPagamento />
       ) : (
         <p className="mt-4 max-w-prose leading-relaxed text-muted">{ui.testo}</p>
       )}
