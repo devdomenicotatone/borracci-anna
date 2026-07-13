@@ -143,8 +143,10 @@ export default function ProductCard({
               >
                 <path d="M32 18 L18 28 L24 40 L31 35 L31 84 L69 84 L69 35 L76 40 L82 28 L68 18 C64 24 56 26 50 26 C44 26 36 24 32 18 Z" />
               </svg>
+              {/* Ancorata in basso, cresce verso l'alto: senza clamp i nomi
+                  lunghi arrivano a coprire l'icona. */}
               <span
-                className={`absolute inset-x-3 bottom-3 z-10 font-display text-sm font-bold ${
+                className={`absolute inset-x-3 bottom-3 z-10 line-clamp-2 font-display text-sm font-bold ${
                   inchiostro
                     ? "text-foreground"
                     : "text-white drop-shadow-[0_2px_8px_rgba(0,30,55,.5)]"
@@ -158,7 +160,7 @@ export default function ProductCard({
 
         {esaurito && (
           // Pill centrata sulla foto (il cuoricino occupa l'angolo in alto a dx).
-          <span className="absolute left-1/2 top-1/2 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full bg-foreground/85 px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur">
+          <span className="absolute left-1/2 top-1/2 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full bg-foreground/85 px-3 py-1 font-display text-xs font-bold uppercase tracking-wide text-white backdrop-blur">
             Esaurito
           </span>
         )}
@@ -169,8 +171,12 @@ export default function ProductCard({
           nome={prodotto.nome}
           className="absolute right-2 top-2 z-20"
         />
+        {/* Badge canale a 11px (10px era sotto la soglia di leggibilità mobile):
+            il max-w riserva lo spazio del cuoricino (36px + margini) così sulle
+            card strette della griglia a 2 colonne i due non si accavallano mai;
+            in quel caso limite il testo si tronca con l'ellissi. */}
         {prodotto.solo_online ? (
-          <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-sea ring-1 ring-sea/25 backdrop-blur">
+          <span className="absolute left-2 top-2 z-20 inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.5 font-display text-[11px] font-bold text-sea ring-1 ring-sea/25 backdrop-blur">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -178,16 +184,16 @@ export default function ProductCard({
               strokeWidth={2.5}
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-2.5 w-2.5"
+              className="h-2.5 w-2.5 shrink-0"
               aria-hidden="true"
             >
               <circle cx="12" cy="12" r="9" />
               <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
             </svg>
-            Solo online
+            <span className="truncate">Solo online</span>
           </span>
         ) : (
-          <span className="absolute left-2 top-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 font-display text-[10px] font-bold text-lagoon-ink ring-1 ring-lagoon/30 backdrop-blur">
+          <span className="absolute left-2 top-2 z-20 inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.5 font-display text-[11px] font-bold text-lagoon-ink ring-1 ring-lagoon/30 backdrop-blur">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -195,13 +201,13 @@ export default function ProductCard({
               strokeWidth={2.5}
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-2.5 w-2.5"
+              className="h-2.5 w-2.5 shrink-0"
               aria-hidden="true"
             >
               <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z" />
               <circle cx="12" cy="10" r="2.5" />
             </svg>
-            In negozio
+            <span className="truncate">In negozio</span>
           </span>
         )}
 
@@ -211,7 +217,11 @@ export default function ProductCard({
       </div>
 
       <div className="px-2 pb-1 pt-3">
-        <h3 className="font-display text-base font-bold leading-snug text-foreground">
+        {/* Nomi lunghi (merch licenziato) troncati a 2 righe: il min-h pareggia
+            le altezze delle card in griglia (2 righe × leading-snug 1.375 =
+            2.75em). Il nome completo resta nella PDP e nell'aria-label del
+            link overlay qui sotto. */}
+        <h3 className="line-clamp-2 min-h-[2.75em] font-display text-base font-bold leading-snug text-foreground">
           {prodotto.nome}
         </h3>
         <span className="mt-0.5 block font-bold tabular-nums text-sea">
