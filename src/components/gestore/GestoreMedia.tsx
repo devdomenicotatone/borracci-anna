@@ -4,8 +4,9 @@
 // prodotto. Per ogni foto: Modifica (apre l'editor condiviso) ed Elimina. Non e
 // un DAM — le foto restano legate al prodotto; qui si sfoglia/rifinisce/pulisce.
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import Link from "next/link";
 
 import {
@@ -24,6 +25,10 @@ const EditorImmagine = dynamic(
   () => import("@/components/gestore/EditorImmagine"),
   { ssr: false },
 );
+
+// Foto montate per blocco con "Mostra altri": i gruppi non vengono mai
+// spezzati, quindi il blocco reale puo superare di poco questa soglia.
+const FOTO_PER_BLOCCO = 60;
 
 export interface FotoMedia {
   id: string;
@@ -66,6 +71,23 @@ export default function GestoreMedia({
 
   const totale = gruppi.reduce((n, g) => n + g.foto.length, 0);
   const occupato = pending || ripulitura !== null;
+
+  // Paginazione client-side: con ~1840 prodotti montare tutte le miniature in
+  // un colpo satura rete e memoria (soprattutto da telefono). Si mostrano
+  // gruppi interi finche il budget foto del blocco non e esaurito; le azioni
+  // batch (es. ripulitura bordi) lavorano comunque sull'intero `gruppi`.
+  const [limiteFoto, setLimiteFoto] = useState(FOTO_PER_BLOCCO);
+  const gruppiVisibili = useMemo(() => {
+    const out: GruppoMedia[] = [];
+    let conteggio = 0;
+    for (const g of gruppi) {
+      if (out.length > 0 && conteggio >= limiteFoto) break;
+      out.push(g);
+      conteggio += g.foto.length;
+    }
+    return out;
+  }, [gruppi, limiteFoto]);
+  const fotoVisibili = gruppiVisibili.reduce((n, g) => n + g.foto.length, 0);
 
   // Riallinea un gruppo allo stato canonico ritornato dall'azione; i gruppi
   // rimasti senza foto spariscono.
@@ -225,82 +247,109 @@ export default function GestoreMedia({
           </p>
         </div>
       ) : (
-        gruppi.map((g) => (
-          <section key={g.prodottoId} className="mb-8">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <Link
-                  href={`/gestore/prodotti/${g.prodottoId}`}
-                  className="truncate font-display text-base font-bold text-foreground transition-colors hover:text-sea"
-                >
-                  {g.nome}
-                </Link>
-                {!g.attivo && (
-                  <span className="shrink-0 rounded-full bg-sun/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-coral-ink">
-                    Bozza
-                  </span>
-                )}
-              </div>
-              <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-bold text-sea">
-                {g.foto.length}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {g.foto.map((f) => (
-                <div
-                  key={f.id}
-                  className="overflow-hidden rounded-xl bg-white shadow-soft ring-1 ring-line"
-                >
-                  <div className="relative aspect-square bg-surface">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- url Storage */}
-                    <img
-                      src={f.url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                    {f.colore && (
-                      <span className="absolute left-1.5 top-1.5 rounded-full bg-foreground/70 px-2 py-0.5 text-[10px] font-bold text-white">
-                        {f.colore}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-1 p-1.5">
-                    <button
-                      type="button"
-                      disabled={occupato}
-                      onClick={() =>
-                        setDaModificare({ prodottoId: g.prodottoId, foto: f })
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold text-sea transition-colors hover:bg-surface-2 disabled:opacity-50"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
-                        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                      </svg>
-                      Modifica
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Elimina foto"
-                      disabled={occupato}
-                      onClick={() =>
-                        setDaEliminare({
-                          prodottoId: g.prodottoId,
-                          fotoId: f.id,
-                        })
-                      }
-                      className="grid h-8 w-8 place-items-center rounded-full text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
-                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                      </svg>
-                    </button>
-                  </div>
+        <>
+          {gruppiVisibili.map((g) => (
+            <section key={g.prodottoId} className="mb-8">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Link
+                    href={`/gestore/prodotti/${g.prodottoId}`}
+                    className="truncate font-display text-base font-bold text-foreground transition-colors hover:text-sea"
+                  >
+                    {g.nome}
+                  </Link>
+                  {!g.attivo && (
+                    <span className="shrink-0 rounded-full bg-sun/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-coral-ink">
+                      Bozza
+                    </span>
+                  )}
                 </div>
-              ))}
+                <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-bold text-sea">
+                  {g.foto.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {g.foto.map((f) => (
+                  <div
+                    key={f.id}
+                    className="overflow-hidden rounded-xl bg-white shadow-soft ring-1 ring-line"
+                  >
+                    <div className="relative aspect-square bg-surface">
+                      {/* Miniatura via optimizer di Next (lazy, ~200px):
+                          mai il master pieno usato come thumbnail. */}
+                      <Image
+                        src={f.url}
+                        alt=""
+                        fill
+                        sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 220px"
+                        quality={75}
+                        loading="lazy"
+                        className="object-cover"
+                      />
+                      {f.colore && (
+                        <span className="absolute left-1.5 top-1.5 rounded-full bg-foreground/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                          {f.colore}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-1 p-1.5">
+                      <button
+                        type="button"
+                        disabled={occupato}
+                        onClick={() =>
+                          setDaModificare({
+                            prodottoId: g.prodottoId,
+                            foto: f,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold text-sea transition-colors hover:bg-surface-2 disabled:opacity-50"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+                          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                        Modifica
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Elimina foto"
+                        disabled={occupato}
+                        onClick={() =>
+                          setDaEliminare({
+                            prodottoId: g.prodottoId,
+                            fotoId: f.id,
+                          })
+                        }
+                        className="grid h-8 w-8 place-items-center rounded-full text-coral transition-colors hover:bg-coral/10 disabled:opacity-50"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {/* Il limite riparte da cio che e gia in vista: i gruppi interi
+              possono sforare il blocco e un semplice +60 resterebbe muto. */}
+          {fotoVisibili < totale && (
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <p className="text-sm tabular-nums text-muted">
+                Hai visto {fotoVisibili} foto di {totale}
+              </p>
+              <button
+                type="button"
+                onClick={() => setLimiteFoto(fotoVisibili + FOTO_PER_BLOCCO)}
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
+              >
+                Mostra altri
+              </button>
             </div>
-          </section>
-        ))
+          )}
+        </>
       )}
 
       <ConfermaDialog
