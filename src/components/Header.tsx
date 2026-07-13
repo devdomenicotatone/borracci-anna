@@ -1,7 +1,8 @@
 // Header del sito: wordmark "Anna Shop", navigazione con menu categorie e
 // link al carrello. Server component async: carica le categorie da Supabase
 // (degrada a nessun menu se non configurato). Su desktop ogni macro categoria
-// e un link con dropdown CSS (hover/focus-within) delle figlie; su mobile la
+// e un link con dropdown CSS (hover/focus-within) delle figlie; su mobile e
+// sui dispositivi touch senza puntatore fine (dove l'hover non scatta) la
 // navigazione sta nel drawer hamburger (MenuMobile, client). Il badge
 // contatore (CartBadge) e un figlio client che legge il CartProvider.
 
@@ -35,7 +36,9 @@ export default function Header({
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-5">
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Hamburger: solo mobile, prima del wordmark. */}
+          {/* Hamburger, prima del wordmark: sempre sotto lg; da lg in su solo
+              sui dispositivi senza puntatore fine (touch), dove i dropdown
+              hover-only qui sotto non si aprirebbero mai. */}
           <MenuMobile gruppi={gruppi} cliente={cliente} />
 
           {/* Wordmark "Onda Sole": sigillo + "Anna" corallo / "Shop" blu.
@@ -72,7 +75,12 @@ export default function Header({
 
           {/* Menu categorie: inline solo da lg in su. Sotto lg le categorie
               vivono nell'hamburger (MenuMobile), cosi con molte radici la riga
-              header non sfonda ne spinge fuori le icone carrello/preferiti. */}
+              header non sfonda ne spinge fuori le icone carrello/preferiti.
+              Su touch >=lg (iPad landscape) il link diretto funziona ma il
+              dropdown hover no (hover: in Tailwind v4 è sotto
+              @media (hover:hover)): il chevron è quindi solo pointer-fine:,
+              per non promettere un menu che non si apre; le figlie restano
+              raggiungibili dall'hamburger, visibile anche lì. */}
           {gruppi.map(({ radice, figlie }) => (
             <div key={radice.id} className="group relative hidden lg:block">
               <Link
@@ -88,7 +96,7 @@ export default function Header({
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea group-has-[:focus-visible]:rotate-180 group-has-[:focus-visible]:text-sea"
+                    className="hidden h-3.5 w-3.5 text-muted transition-transform duration-200 group-hover:rotate-180 group-hover:text-sea group-has-[:focus-visible]:rotate-180 group-has-[:focus-visible]:text-sea pointer-fine:block"
                     aria-hidden="true"
                   >
                     <path d="m6 9 6 6 6-6" />
@@ -147,14 +155,16 @@ export default function Header({
 
           {/* Account: ospite -> login; loggato -> avatar a iniziali con
               dropdown CSS-only su desktop (stesso pattern del menu categorie:
-              hover o focus da tastiera via :has(:focus-visible)); su touch il
-              tap porta direttamente a /account. */}
+              hover o focus da tastiera via :has(:focus-visible)); su touch
+              (anche iPad >=lg, dove l'hover non scatta) il tap porta
+              direttamente a /account, da cui si raggiunge il logout. Nessun
+              chevron qui, quindi niente da nascondere su pointer-coarse. */}
           {cliente ? (
             <div className="group relative">
               <Link
                 href="/account"
                 aria-label="Il tuo account"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 active:scale-95 sm:h-11 sm:w-11"
               >
                 <AvatarCliente
                   nome={cliente.nome}
@@ -203,7 +213,7 @@ export default function Header({
             <Link
               href="/accedi"
               aria-label="Accedi o registrati"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 active:scale-95 sm:h-11 sm:w-11"
             >
               <svg
                 width="22"
@@ -226,7 +236,7 @@ export default function Header({
           <Link
             href="/preferiti"
             aria-label="I tuoi preferiti"
-            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 active:scale-95 sm:h-11 sm:w-11"
           >
             <svg
               width="22"
@@ -250,7 +260,7 @@ export default function Header({
           <Link
             href="/carrello"
             aria-label="Carrello"
-            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 active:scale-95 sm:h-11 sm:w-11"
           >
             <svg
               width="22"

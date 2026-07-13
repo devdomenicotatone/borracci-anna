@@ -2,7 +2,10 @@
 
 // Menu di navigazione mobile (hamburger nell'header): drawer da sinistra con
 // la ricerca del catalogo, le pagine principali e l'albero categorie (macro +
-// figlie e nipoti indentate).
+// figlie e nipoti indentate). Resta disponibile anche da lg in su sui
+// dispositivi senza puntatore fine (pointer-fine:lg:hidden): su iPad in
+// landscape i dropdown hover-only dell'header non si aprono al tocco, quindi
+// figlie e nipoti si raggiungono da qui.
 // Stessa accessibilita dei drawer esistenti: dialog modale, ESC, overlay,
 // scroll-lock, focus trap, focus ripristinato. Si chiude a ogni navigazione,
 // anche quella esterna del back/forward del browser (usePathname); il tasto
@@ -145,13 +148,17 @@ export default function MenuMobile({
 
   return (
     <>
+      {/* pointer-fine:lg:hidden (media query annidate: pointer fine E >=lg):
+          da lg in su l'hamburger sparisce solo col mouse/trackpad, dove i
+          dropdown hover dell'header funzionano; su touch puro resta l'unico
+          accesso alle sotto-categorie. */}
       <button
         type="button"
         onClick={() => setAperto(true)}
         aria-label="Apri il menu"
         aria-haspopup="dialog"
         aria-expanded={aperto}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11 lg:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 active:scale-95 sm:h-11 sm:w-11 pointer-fine:lg:hidden"
       >
         <svg
           viewBox="0 0 24 24"
@@ -173,7 +180,9 @@ export default function MenuMobile({
           CartDrawer, che vive gia fuori dall'header nel layout). */}
       {aperto &&
         createPortal(
-          <div className="fixed inset-0 z-50 lg:hidden">
+          // Stessa condizione del bottone (pointer-fine:lg:hidden): senza, su
+          // touch >=lg il drawer aperto resterebbe display:none.
+          <div className="fixed inset-0 z-50 pointer-fine:lg:hidden">
             {/* Overlay */}
             <button
               type="button"
