@@ -113,7 +113,14 @@ export default function ElencoPreferiti() {
         className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
       >
         {prodotti.map((prodotto, i) => (
-          <ProductCard key={prodotto.id} prodotto={prodotto} priorita={i < 4} />
+          <ProductCard
+            key={prodotto.id}
+            prodotto={prodotto}
+            // Griglia a 2 colonne su mobile: fetchPriority high solo alla
+            // prima riga, eager senza high alla seconda (stesso schema del
+            // catalogo).
+            priorita={i < 2 ? "alta" : i < 4 ? "eager" : false}
+          />
         ))}
       </div>
     ) : null;

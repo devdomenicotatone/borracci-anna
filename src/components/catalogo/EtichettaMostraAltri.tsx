@@ -1,11 +1,14 @@
 "use client";
 
 // Etichetta del link "Mostra altri" con stato di pending (useLinkStatus).
-// Le navigazioni solo-searchParams NON mostrano il loading.tsx del segmento
-// (verificato sul dev server: la griglia resta visibile — giusto cosi, e
-// cumulativa), quindi senza questo feedback il click restava muto per tutto il
-// round-trip: su rete lenta sembrava non registrato (finding 23, audit lug 2026).
-// Va montata DENTRO il <Link> (requisito di useLinkStatus).
+// Con JS l'append avviene via Server Action (CaricamentoAutomatico intercetta
+// la navigazione e mostra il suo spinner), quindi il pending qui copre solo il
+// percorso di navigazione vera ?pagina=N+1 quando l'intercettazione non e in
+// gioco. Le navigazioni solo-searchParams NON mostrano il loading.tsx del
+// segmento (verificato sul dev server: la griglia resta visibile — giusto
+// cosi, e cumulativa), quindi senza questo feedback il click restava muto per
+// tutto il round-trip: su rete lenta sembrava non registrato (finding 23,
+// audit lug 2026). Va montata DENTRO il <Link> (requisito di useLinkStatus).
 
 import { useLinkStatus } from "next/link";
 

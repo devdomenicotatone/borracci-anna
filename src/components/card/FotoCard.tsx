@@ -101,10 +101,14 @@ export default function FotoCard({
   /** Foto in ordine (copertina per prima), gia deduplicate. Almeno 2. */
   urls: string[];
   nome: string;
-  /** true per le card above-the-fold: prima foto eager (candidate LCP). */
-  priorita: boolean;
+  /** "alta" (o true) = prima foto eager + fetchPriority high (candidate LCP,
+   *  prime 2 card su mobile); "eager" = eager senza high (card 3-4, above the
+   *  fold su desktop ma in competizione di banda con la LCP su mobile). */
+  priorita: boolean | "alta" | "eager";
 }) {
   const { idx, visti, vai } = useCarosello();
+  const prioritaAlta = priorita === true || priorita === "alta";
+  const prioritaEager = prioritaAlta || priorita === "eager";
 
   return (
     <div className="absolute inset-0">
@@ -118,8 +122,8 @@ export default function FotoCard({
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             quality={75}
-            loading={priorita && i === 0 ? "eager" : "lazy"}
-            fetchPriority={priorita && i === 0 ? "high" : "auto"}
+            loading={prioritaEager && i === 0 ? "eager" : "lazy"}
+            fetchPriority={prioritaAlta && i === 0 ? "high" : "auto"}
             className={[
               // transition su opacita (crossfade) E transform (scala su hover,
               // come la card statica).

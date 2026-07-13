@@ -45,9 +45,18 @@ export default function ProductCard({
   priorita = false,
 }: {
   prodotto: Prodotto;
-  /** true per le card above-the-fold (prima riga): candidate LCP. */
-  priorita?: boolean;
+  /** Priorita di caricamento dell'immagine:
+   *  - "alta": eager + fetchPriority high — SOLO le card certamente in vista
+   *    (le prime 2: su mobile la griglia e a 2 colonne, la vera candidate LCP
+   *    sta li);
+   *  - "eager": preload senza high — card probabilmente vicine alla piega
+   *    (3-4) che non devono rubare banda alla LCP;
+   *  - true: come "alta" (compatibilita coi consumatori esistenti);
+   *  - assente/false: lazy (default). */
+  priorita?: boolean | "alta" | "eager";
 }) {
+  const prioritaAlta = priorita === true || priorita === "alta";
+  const prioritaEager = prioritaAlta || priorita === "eager";
   const gradiente = gradientPer(prodotto.id || prodotto.slug);
   const inchiostro = TILE_INK.has(gradiente);
   // Esaurito: stock totale a 0 e NON "su richiesta" (i su-richiesta non hanno
@@ -90,7 +99,9 @@ export default function ProductCard({
             <FotoCard
               urls={fotoCarosello}
               nome={prodotto.nome}
-              priorita={priorita}
+              // Stessa distinzione della copertina singola: high solo per le
+              // prime 2 card, eager senza high per le 3-4.
+              priorita={prioritaAlta ? "alta" : prioritaEager ? "eager" : false}
             />
           ) : prodotto.immagine_url ? (
             // Le copertine sono sempre url del bucket Supabase Storage (whitelisted
@@ -103,11 +114,13 @@ export default function ProductCard({
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               quality={75}
-              // Card above-the-fold: caricala subito con priorita alta (candidate
-              // LCP). In Next 16 `priority` e deprecato -> loading="eager" +
-              // fetchPriority="high". Le altre restano lazy (default).
-              loading={priorita ? "eager" : "lazy"}
-              fetchPriority={priorita ? "high" : "auto"}
+              // Card above-the-fold: caricala subito (candidate LCP). In Next 16
+              // `priority` e deprecato -> loading="eager" + fetchPriority="high".
+              // fetchPriority high SOLO con priorita "alta" (prime 2 card): le
+              // eager-senza-high precaricano senza competere con la LCP; le
+              // altre restano lazy (default).
+              loading={prioritaEager ? "eager" : "lazy"}
+              fetchPriority={prioritaAlta ? "high" : "auto"}
               className="object-contain p-3 transition-transform duration-300 group-hover:scale-[1.04]"
             />
           ) : (

@@ -1,6 +1,7 @@
 // Blocco catalogo condiviso da home e pagine categoria: toolbar (ordinamento +
 // filtri), griglia di card, stati vuoti e paginazione a scorrimento infinito
-// (sentinella CaricamentoAutomatico + link "Mostra altri" come fallback).
+// (CaricamentoAutomatico: append incrementale via Server Action, con link
+// "Mostra altri" ?pagina=N+1 come fallback senza JS).
 // Server component: riceve dati gia caricati; l'interattivita sta nella
 // ToolbarCatalogo (client), lo stato dei filtri nell'URL.
 
@@ -8,7 +9,6 @@ import Link from "next/link";
 
 import ProductCard from "@/components/ProductCard";
 import CaricamentoAutomatico from "@/components/catalogo/CaricamentoAutomatico";
-import EtichettaMostraAltri from "@/components/catalogo/EtichettaMostraAltri";
 import ToolbarCatalogo from "@/components/catalogo/ToolbarCatalogo";
 import TornaSu from "@/components/catalogo/TornaSu";
 import Wordmark from "@/components/Wordmark";
@@ -40,14 +40,17 @@ export default function CatalogoSezione({
 }) {
   const attivi = contaFiltriAttivi(filtri);
 
-  // Link "Mostra altri": stessi filtri, pagina successiva. scroll={false}
-  // perche la griglia si estende sotto la posizione corrente. La chiave dei
-  // soli filtri (serializzaFiltri non include mai `pagina`) dice alla
-  // sentinella quando l'esplorazione riparte e il tetto auto si azzera.
-  const qsFiltri = new URLSearchParams(serializzaFiltri(filtri));
-  const chiaveFiltri = `${basePath}?${qsFiltri.toString()}`;
-  const qsAltri = new URLSearchParams(qsFiltri);
-  qsAltri.set("pagina", String(pagina + 1));
+  // Base dell'esplorazione corrente: percorso + filtri SENZA `pagina`
+  // (serializzaFiltri non la include mai). Fa da key di CaricamentoAutomatico:
+  // filtri/ricerca/ordinamento nuovi = rimonta = pagine appese e tetto auto
+  // azzerati.
+  const filtriQs = serializzaFiltri(filtri);
+  const chiaveFiltri = `${basePath}?${filtriQs}`;
+  // Slug per la Server Action dell'append: la risoluzione in id+discendenti
+  // resta sul server (lib/catalogo-actions), dal client viaggia solo lo slug.
+  const categoriaSlug = basePath.startsWith("/categoria/")
+    ? basePath.slice("/categoria/".length)
+    : "";
 
   return (
     <div>
@@ -92,34 +95,28 @@ export default function CatalogoSezione({
             className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
           >
             {prodotti.map((prodotto, i) => (
-              // Prima riga (fino a 4 col): priorita alta, candidate LCP.
+              // Su mobile la griglia e a 2 colonne: fetchPriority high SOLO
+              // alle prime 2 card (le vere candidate LCP); le card 3-4
+              // (seconda riga, spesso sotto la piega) restano eager ma senza
+              // high, per non rubare banda alla LCP; lazy dalla quinta in poi.
               <ProductCard
                 key={prodotto.id}
                 prodotto={prodotto}
-                priorita={i < 4}
+                priorita={i < 2 ? "alta" : i < 4 ? "eager" : undefined}
               />
             ))}
           </div>
 
           {prodotti.length < totale && (
-            <div className="mt-8 flex flex-col items-center gap-2">
-              <p className="text-sm tabular-nums text-muted">
-                Hai visto {prodotti.length} prodotti su {totale}
-              </p>
-              <CaricamentoAutomatico
-                pagina={pagina}
-                urlPaginaSuccessiva={`${basePath}?${qsAltri.toString()}`}
-                chiaveFiltri={chiaveFiltri}
-              >
-                <Link
-                  href={`${basePath}?${qsAltri.toString()}`}
-                  scroll={false}
-                  className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
-                >
-                  <EtichettaMostraAltri />
-                </Link>
-              </CaricamentoAutomatico>
-            </div>
+            <CaricamentoAutomatico
+              key={chiaveFiltri}
+              basePath={basePath}
+              categoriaSlug={categoriaSlug}
+              filtriQs={filtriQs}
+              pagina={pagina}
+              idsServer={prodotti.map((p) => p.id)}
+              totale={totale}
+            />
           )}
         </>
       )}

@@ -155,6 +155,16 @@ function patternRicerca(q: string): string {
  * DB risponde 42703) si ripiega sul percorso runtime pre-colonna: match col
  * dizionario (appartieneAlChip) su una scansione leggera `id, nome` gia
  * filtrata/ordinata dal DB, card della pagina caricate poi per id.
+ *
+ * `soloPagina`: ritorna SOLO le card della pagina `pagina` (il DELTA per
+ * l'append client dello scorrimento infinito, vedi lib/catalogo-actions),
+ * invece del cumulato 1..pagina che serve al percorso URL ?pagina=N. Stessi
+ * filtri e stesso ordinamento (tie-break su id): le card coincidono con quelle
+ * che il cumulato metterebbe in quella posizione. Una pagina e al massimo
+ * PRODOTTI_PER_PAGINA righe, ben sotto il max-rows di PostgREST: un singolo
+ * .range() con offset non rischia il troncamento silenzioso che impone la
+ * scansione a blocchi al cumulato (max-rows cappa le righe PER RISPOSTA, non
+ * l'offset).
  */
 export async function caricaProdottiVetrina(
   supabase: Supabase | null,
@@ -162,13 +172,20 @@ export async function caricaProdottiVetrina(
     filtri: FiltriCatalogo;
     categoriaIds?: string[];
     pagina?: number;
+    /** true = solo le card della pagina richiesta (delta), non il cumulato. */
+    soloPagina?: boolean;
   },
 ): Promise<EsitoCatalogo> {
-  if (!supabase) {
-    return { prodotti: PRODOTTI_ESEMPIO, totale: PRODOTTI_ESEMPIO.length };
-  }
+  const { filtri, categoriaIds, pagina = 1, soloPagina = false } = opzioni;
 
-  const { filtri, categoriaIds, pagina = 1 } = opzioni;
+  if (!supabase) {
+    // Dati demo (env assenti): stanno tutti in una pagina, il delta delle
+    // successive e legittimamente vuoto.
+    return {
+      prodotti: soloPagina && pagina > 1 ? [] : PRODOTTI_ESEMPIO,
+      totale: PRODOTTI_ESEMPIO.length,
+    };
+  }
 
   try {
     // Il join sulle varianti serve solo quando si filtra per taglia/colore:
@@ -276,11 +293,28 @@ export async function caricaProdottiVetrina(
       // si ferma a max-rows quando una categoria o un filtro supera le 1000 card
       // (senza scansione, .range(0, pagina*24-1) verrebbe troncato a 1000). Il
       // totale resta il count completo dei match, per sapere se c'e altro.
-      const { righe, totale } = await scansionaBlocchi<RigaCard>(
-        costruisciConTema,
-        { limite: pagina * PRODOTTI_PER_PAGINA },
-      );
-      const letterali = righe.map(normalizzaCard);
+      // Col delta (`soloPagina`) basta un singolo .range() con offset: al
+      // massimo PRODOTTI_PER_PAGINA righe, mai vicine a max-rows.
+      let letterali: Prodotto[];
+      let totale: number;
+      if (soloPagina) {
+        const offset = (pagina - 1) * PRODOTTI_PER_PAGINA;
+        const { data, error, count } = await costruisciConTema(true).range(
+          offset,
+          offset + PRODOTTI_PER_PAGINA - 1,
+        );
+        if (error) throw error; // stesso trattamento del cumulato (catch sotto)
+        letterali = ((data as unknown as RigaCard[] | null) ?? []).map(
+          normalizzaCard,
+        );
+        totale = count ?? letterali.length;
+      } else {
+        const esito = await scansionaBlocchi<RigaCard>(costruisciConTema, {
+          limite: pagina * PRODOTTI_PER_PAGINA,
+        });
+        letterali = esito.righe.map(normalizzaCard);
+        totale = esito.totale;
+      }
 
       // — Fallback semantico integrativo (Fase 3 dei temi) — Quando il
       // letterale trova POCO (sotto soglia: ricerca rotta o povera, es. "uomo
@@ -290,16 +324,43 @@ export async function caricaProdottiVetrina(
       // qualunque intoppo del percorso semantico NON deve finire nel catch
       // esterno (che svuoterebbe una griglia letterale gia buona).
       if (token.length > 0 && totale < SOGLIA_FALLBACK_SEMANTICO) {
+        // L'estensione vuole TUTTI i letterali (dedup completo). Nel delta
+        // delle pagine successive alla prima la pagina letterale e vuota (i
+        // letterali, sotto soglia, stanno tutti in pagina 1): si rileggono —
+        // sono meno di SOGLIA righe, una chiamata sola.
+        let tuttiLetterali = letterali;
+        if (soloPagina && pagina > 1) {
+          const { data, error } = await costruisciConTema(false).range(
+            0,
+            SOGLIA_FALLBACK_SEMANTICO - 1,
+          );
+          if (error) throw error;
+          tuttiLetterali = ((data as unknown as RigaCard[] | null) ?? []).map(
+            normalizzaCard,
+          );
+        }
         const esteso = await estendiConSemantica(supabase, {
           q: filtri.q,
           ordina: filtri.ordina,
-          letterali,
+          letterali: tuttiLetterali,
           totaleLetterale: totale,
           limite: pagina * PRODOTTI_PER_PAGINA,
           costruisciCard: (ids) =>
             costruisciConTema(false, false).in("id", ids),
         }).catch(() => null);
-        if (esteso) return esteso;
+        if (esteso) {
+          // Il delta della lista estesa e la sua fetta di pagina: la lista
+          // (letterali + semantici, gia limitata a pagina*24) e ricalcolata
+          // per intero ma al client viaggia solo la pagina richiesta.
+          return soloPagina
+            ? {
+                prodotti: esteso.prodotti.slice(
+                  (pagina - 1) * PRODOTTI_PER_PAGINA,
+                ),
+                totale: esteso.totale,
+              }
+            : esteso;
+        }
       }
       return { prodotti: letterali, totale };
     } catch (err) {
@@ -319,6 +380,19 @@ export async function caricaProdottiVetrina(
     // della colonna. Slug ignoto al dizionario (link vecchio/manomesso): si
     // ignora il filtro, come faceva il vecchio percorso.
     if (etichettaFranchise(filtri.franchise) == null) {
+      if (soloPagina) {
+        // Delta: singolo .range() con offset (vedi commento del percorso DB).
+        const offset = (pagina - 1) * PRODOTTI_PER_PAGINA;
+        const { data, error, count } = await costruisci(CAMPI_CARD, true).range(
+          offset,
+          offset + PRODOTTI_PER_PAGINA - 1,
+        );
+        if (error) throw error; // -> catch esterno: degrada a vuoto
+        const prodotti = ((data as unknown as RigaCard[] | null) ?? []).map(
+          normalizzaCard,
+        );
+        return { prodotti, totale: count ?? prodotti.length };
+      }
       const { righe, totale } = await scansionaBlocchi<RigaCard>(
         (conteggio) => costruisci(CAMPI_CARD, conteggio),
         { limite: pagina * PRODOTTI_PER_PAGINA },
@@ -343,8 +417,12 @@ export async function caricaProdottiVetrina(
       appartieneAlChip(r.nome, filtri.franchise, visibili),
     );
     const totale = filtrate.length;
+    // Cumulato: pagine 1..N; delta (`soloPagina`): solo la fetta della pagina N.
     const ids = filtrate
-      .slice(0, pagina * PRODOTTI_PER_PAGINA)
+      .slice(
+        soloPagina ? (pagina - 1) * PRODOTTI_PER_PAGINA : 0,
+        pagina * PRODOTTI_PER_PAGINA,
+      )
       .map((r) => r.id);
     if (ids.length === 0) return { prodotti: [], totale };
 

@@ -72,7 +72,18 @@ export default function CaroselloProdotti({
             key={prodotto.id}
             className="w-[44vw] max-w-[15rem] shrink-0 snap-start sm:w-52 lg:w-56"
           >
-            <ProductCard prodotto={prodotto} priorita={prioritaPrimi && i < 3} />
+            <ProductCard
+              prodotto={prodotto}
+              // Su mobile il rail mostra ~2 card: fetchPriority high solo a
+              // quelle, la terza eager senza competere in banda con la LCP.
+              priorita={
+                prioritaPrimi && i < 2
+                  ? "alta"
+                  : prioritaPrimi && i < 3
+                    ? "eager"
+                    : false
+              }
+            />
           </div>
         ))}
       </div>
