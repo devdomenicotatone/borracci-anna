@@ -171,7 +171,7 @@ export default function CartDrawer() {
             type="button"
             onClick={chiudi}
             aria-label="Chiudi"
-            className="grid h-10 w-10 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-foreground"
+            className="grid h-10 w-10 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-foreground active:scale-95"
           >
             <svg
               viewBox="0 0 24 24"
@@ -198,7 +198,7 @@ export default function CartDrawer() {
             <button
               type="button"
               onClick={chiudi}
-              className="flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+              className="flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98]"
             >
               Scopri i prodotti
             </button>
@@ -236,7 +236,7 @@ export default function CartDrawer() {
                   <Link
                     href="/carrello"
                     onClick={chiudiPerNavigazione}
-                    className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
+                    className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-[.98]"
                   >
                     Procedi con la richiesta
                   </Link>
@@ -249,14 +249,14 @@ export default function CartDrawer() {
                 <button
                   type="button"
                   onClick={chiudi}
-                  className="flex h-11 items-center justify-center rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface"
+                  className="flex h-11 items-center justify-center rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-surface-2 transition hover:bg-surface active:scale-[.98]"
                 >
                   Continua acquisti
                 </button>
                 <Link
                   href="/carrello"
                   onClick={chiudiPerNavigazione}
-                  className="flex h-11 items-center justify-center rounded-full bg-surface-2 px-4 font-display text-sm font-bold text-sea transition-colors hover:bg-line"
+                  className="flex h-11 items-center justify-center rounded-full bg-surface-2 px-4 font-display text-sm font-bold text-sea transition hover:bg-line active:scale-[.98]"
                 >
                   Vai al carrello
                 </Link>

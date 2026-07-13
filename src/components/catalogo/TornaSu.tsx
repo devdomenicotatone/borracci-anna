@@ -39,7 +39,7 @@ export default function TornaSu() {
       type="button"
       onClick={tornaSu}
       aria-label="Torna all'inizio"
-      className="animate-fade-in fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-30 grid h-12 w-12 place-items-center rounded-full bg-sea text-white shadow-sea transition-transform hover:-translate-y-0.5"
+      className="animate-fade-in fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-30 grid h-12 w-12 place-items-center rounded-full bg-sea text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-95"
     >
       <svg
         viewBox="0 0 24 24"

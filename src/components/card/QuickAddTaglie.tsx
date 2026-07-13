@@ -89,7 +89,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
         title="Aggiungi rapido"
         // Visivamente 36px, ma con area di tocco ~48px (before invisibile) per
         // arrivare al minimo tattile di 44px senza appesantire la card.
-        className="absolute bottom-2 right-2 z-20 grid h-9 w-9 place-items-center rounded-full bg-sea text-white shadow-sea transition-transform before:absolute before:-inset-1.5 before:content-[''] hover:scale-110"
+        className="absolute bottom-2 right-2 z-20 grid h-9 w-9 place-items-center rounded-full bg-sea text-white shadow-sea transition-transform before:absolute before:-inset-1.5 before:content-[''] hover:scale-110 active:scale-95"
       >
         <svg
           viewBox="0 0 24 24"
@@ -136,7 +136,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
               type="button"
               disabled={!multiColore && !varianteConStock(null)}
               onClick={(e) => scegli(e, null)}
-              className="flex h-10 w-full items-center justify-center rounded-xl bg-coral font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-full items-center justify-center rounded-xl bg-coral font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Aggiungi al carrello
             </button>
@@ -156,7 +156,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
                     className={[
                       "h-11 min-w-11 rounded-lg px-2 font-display text-sm font-bold transition-all",
                       disponibile
-                        ? "bg-white text-foreground ring-2 ring-surface-2 hover:-translate-y-0.5 hover:ring-sea"
+                        ? "bg-white text-foreground ring-2 ring-surface-2 hover:-translate-y-0.5 hover:ring-sea active:scale-95"
                         : "cursor-not-allowed text-muted line-through ring-2 ring-surface-2 opacity-60",
                     ].join(" ")}
                   >

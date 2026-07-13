@@ -116,7 +116,7 @@ export default function BarraAcquistoMobile({
             onClick={handleTap}
             disabled={inCorso}
             aria-disabled={!pronta}
-            className="flex h-12 flex-none items-center justify-center rounded-full bg-coral px-5 font-display font-bold text-white shadow-coral disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:opacity-60"
+            className="flex h-12 flex-none items-center justify-center rounded-full bg-coral px-5 font-display font-bold text-white shadow-coral transition-transform active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:opacity-60"
           >
             {inCorso
               ? "Aggiunta in corso..."

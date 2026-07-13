@@ -104,7 +104,7 @@ export default function BloccoAcquisto({
             aria-label="Diminuisci quantita"
             disabled={quantita <= 1}
             onClick={() => onQuantita(Math.max(1, quantita - 1))}
-            className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
+            className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition hover:bg-surface active:scale-95 disabled:opacity-40"
           >
             -
           </button>
@@ -129,7 +129,7 @@ export default function BloccoAcquisto({
             aria-label="Aumenta quantita"
             disabled={quantita >= quantitaMax}
             onClick={() => onQuantita(Math.min(quantitaMax, quantita + 1))}
-            className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
+            className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition hover:bg-surface active:scale-95 disabled:opacity-40"
           >
             +
           </button>
@@ -151,7 +151,7 @@ export default function BloccoAcquisto({
         onClick={handleAggiungi}
         disabled={suRichiesta ? inCorso : !puoAggiungere || inCorso}
         aria-disabled={suRichiesta ? !puoAggiungere : undefined}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
       >
         <svg
           className="h-5 w-5"

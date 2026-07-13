@@ -400,7 +400,7 @@ export default function GalleriaProdotto({
               type="button"
               onClick={() => vai(-1)}
               aria-label="Foto precedente"
-              className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-foreground shadow-soft backdrop-blur transition-transform hover:-translate-y-[calc(50%+2px)]"
+              className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-foreground shadow-soft backdrop-blur transition-transform hover:-translate-y-[calc(50%+2px)] active:scale-95"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
                 <path d="m15 18-6-6 6-6" />
@@ -410,7 +410,7 @@ export default function GalleriaProdotto({
               type="button"
               onClick={() => vai(1)}
               aria-label="Foto successiva"
-              className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-foreground shadow-soft backdrop-blur transition-transform hover:-translate-y-[calc(50%+2px)]"
+              className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-foreground shadow-soft backdrop-blur transition-transform hover:-translate-y-[calc(50%+2px)] active:scale-95"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
                 <path d="m9 18 6-6-6-6" />
@@ -438,7 +438,7 @@ export default function GalleriaProdotto({
                 aria-pressed={sel}
                 title={f.etichetta}
                 className={[
-                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl bg-white transition-all sm:w-[4.5rem]",
+                  "relative aspect-[3/4] w-16 shrink-0 snap-start overflow-hidden rounded-xl bg-white transition-all active:scale-95 sm:w-[4.5rem]",
                   sel
                     ? "ring-2 ring-sea"
                     : "opacity-70 ring-1 ring-line hover:-translate-y-0.5 hover:opacity-100",
@@ -515,7 +515,7 @@ export default function GalleriaProdotto({
             type="button"
             onClick={() => setZoomAperto(false)}
             aria-label="Chiudi la foto ingrandita"
-            className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] grid h-11 w-11 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105"
+            className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] grid h-11 w-11 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105 active:scale-95"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
               <path d="M6 6l12 12M18 6 6 18" />
@@ -528,7 +528,7 @@ export default function GalleriaProdotto({
                 type="button"
                 onClick={() => vai(-1)}
                 aria-label="Foto precedente"
-                className="absolute left-[max(0.75rem,env(safe-area-inset-left))] top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105"
+                className="absolute left-[max(0.75rem,env(safe-area-inset-left))] top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105 active:scale-95"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
                   <path d="m15 18-6-6 6-6" />
@@ -538,7 +538,7 @@ export default function GalleriaProdotto({
                 type="button"
                 onClick={() => vai(1)}
                 aria-label="Foto successiva"
-                className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105"
+                className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105 active:scale-95"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
                   <path d="m9 18 6-6-6-6" />
