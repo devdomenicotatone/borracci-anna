@@ -24,7 +24,11 @@
 // (debounce last-write-wins per riga). Un contatore di generazione per riga
 // scarta le risposte arrivate fuori ordine, cosi una risposta vecchia non
 // sovrascrive uno stato piu recente; in caso di errore si torna all'ultimo
-// stato confermato dal server (`righeConfermate`) con toast.
+// stato confermato dal server (`righeConfermate`) con toast. Le SCRITTURE
+// della stessa riga sono inoltre serializzate (catena per riga): la prossima
+// parte solo quando la precedente si e assestata, cosi anche l'ordine di
+// ESECUZIONE lato server segue i tap e il server non puo restare con una
+// quantita vecchia applicata dopo quella nuova.
 //
 // Prima di pagare (checkout/richiesta): `attendiSincronizzazioni` fa scattare
 // subito i debounce pendenti e attende le scritture in volo, cosi il server
@@ -180,6 +184,15 @@ export function CartProvider({
   const syncQuantita = useRef<Map<string, SyncQuantita>>(new Map());
   const generazioneRiga = useRef<Map<string, number>>(new Map());
   const righeConfermate = useRef<RigaCarrello[]>(statoIniziale.righe);
+  // Coda delle scritture PER RIGA: la prossima chiamata al server parte solo
+  // quando la precedente si e assestata, cosi l'ordine di ESECUZIONE lato
+  // server segue i tap (i contatori di generazione scartano le risposte
+  // vecchie solo lato client). Vive FUORI dalla entry di sincronizzazione:
+  // sopravvive a rimuovi/svuota falliti e a entry ricreate, cosi una
+  // scrittura orfana ancora in volo resta comunque ordinata con le nuove.
+  // La entry si ripulisce da sola quando la catena si assesta ed e ancora
+  // l'ultima della riga (mappa limitata alle righe attive).
+  const catenaRiga = useRef<Map<string, Promise<void>>>(new Map());
 
   /**
    * Applica uno stato autorevole del server preservando le quantita
@@ -267,12 +280,39 @@ export function CartProvider({
       const daRisolvere = sync.inAttesa;
       sync.inAttesa = [];
 
-      let esito: EsitoCarrello | null = null;
-      try {
-        esito = await aggiornaQuantita(rigaId, richiesta);
-      } catch {
-        // Errore di rete/imprevisto: trattato come esito negativo.
-      }
+      // Serializzazione per riga (vedi catenaRiga): la scrittura parte solo
+      // quando la precedente si e assestata. Valore e generazione restano
+      // quelli catturati QUI sopra, al dispatch: la semantica last-write-wins
+      // non cambia.
+      const precedente = catenaRiga.current.get(rigaId) ?? Promise.resolve();
+      const invio = (async (): Promise<EsitoCarrello | null> => {
+        // La catena non rigetta mai (gli errori diventano esito null), il
+        // catch e solo una cintura di sicurezza.
+        await precedente.catch(() => {});
+        // Superata gia in coda (nuovo tap o annulla mentre si aspettava il
+        // turno): il round-trip sarebbe morto — la risposta verrebbe scartata
+        // e l'invio piu nuovo, gia serializzato dopo questo, scrivera il
+        // valore giusto. Si salta la chiamata (accorcia anche il flush).
+        if (gen !== generazioneRiga.current.get(rigaId) || sync.timer !== null) {
+          return null;
+        }
+        try {
+          return await aggiornaQuantita(rigaId, richiesta);
+        } catch {
+          // Errore di rete/imprevisto: trattato come esito negativo.
+          return null;
+        }
+      })();
+      const catena = invio.then(() => {});
+      catenaRiga.current.set(rigaId, catena);
+      void catena.then(() => {
+        // Pulizia: se nessun invio piu nuovo ha allungato la catena, la
+        // entry non serve piu.
+        if (catenaRiga.current.get(rigaId) === catena) {
+          catenaRiga.current.delete(rigaId);
+        }
+      });
+      const esito = await invio;
 
       // Risposta superata se nel frattempo la riga e stata annullata
       // (rimuovi/svuota) o un tap ha rimesso in coda un invio piu nuovo:
