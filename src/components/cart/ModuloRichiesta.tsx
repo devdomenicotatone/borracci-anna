@@ -13,6 +13,31 @@ import { inviaRichiestaAction, type StatoRichiesta } from "@/lib/ordini";
 const inputCls =
   "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
 
+/** Errore sentinella: l'action non ha risposto entro il tetto di tempo. */
+class ErroreTimeout extends Error {}
+
+/**
+ * Esegue la promise con un tetto di `ms`: oltre, rigetta con ErroreTimeout.
+ * Le server action non accettano un AbortSignal come fetch: la richiesta in
+ * volo non viene annullata, ma la UI si sblocca comunque (stesso effetto
+ * dell'AbortController in CheckoutButton, CartItem.tsx).
+ */
+function conTimeout<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new ErroreTimeout()), ms);
+    promessa.then(
+      (valore) => {
+        clearTimeout(timer);
+        resolve(valore);
+      },
+      (motivo) => {
+        clearTimeout(timer);
+        reject(motivo);
+      },
+    );
+  });
+}
+
 /** Dati del cliente loggato per il prefill (campi comunque modificabili). */
 export interface PrefillRichiesta {
   nome: string;
@@ -33,14 +58,34 @@ export default function ModuloRichiesta({
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      const esito = await inviaRichiestaAction({}, formData);
-      if (esito.token) {
-        // Ordine creato: svuota il carrello (client + server) e vai allo stato.
-        await svuota();
-        router.push(`/ordine/${esito.token}`);
-        return;
+      try {
+        const esito = await conTimeout(
+          inviaRichiestaAction({}, formData),
+          15000,
+        );
+        if (esito.token) {
+          // Ordine creato: svuota il carrello (client + server) e vai allo
+          // stato. Se lo svuotamento fallisce (rete), non bloccare: l'ordine
+          // esiste già e /ordine/[token] è comunque la destinazione giusta.
+          try {
+            await svuota();
+          } catch {
+            // ignorato: solo il carrello resta da ripulire, niente di bloccante.
+          }
+          router.push(`/ordine/${esito.token}`);
+          return;
+        }
+        setStato(esito);
+      } catch (err) {
+        // Rete caduta o timeout: niente error boundary, si mostra il messaggio
+        // sopra il bottone (role="alert") e si lascia riprovare.
+        setStato({
+          error:
+            err instanceof ErroreTimeout
+              ? "L'invio sta impiegando troppo tempo. Riprova."
+              : "Si è verificato un problema. Riprova.",
+        });
       }
-      setStato(esito);
     });
   }
 

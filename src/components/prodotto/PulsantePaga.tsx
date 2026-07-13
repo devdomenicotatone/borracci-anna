@@ -2,10 +2,38 @@
 
 // Bottone "Paga ora" sulla pagina /ordine/[token] (solo ordini confermati).
 // Crea la Checkout Session Stripe on-demand e reindirizza al pagamento.
+// Come CheckoutButton (CartItem.tsx): timeout di 15s + gestione errori, così su
+// rete lenta o caduta il bottone non resta "Avvio pagamento…" per sempre e
+// l'errore compare accanto (role="alert") lasciando riprovare.
 
 import { useState, useTransition } from "react";
 
 import { creaCheckoutOrdineAction } from "@/lib/ordini";
+
+/** Errore sentinella: l'action non ha risposto entro il tetto di tempo. */
+class ErroreTimeout extends Error {}
+
+/**
+ * Esegue la promise con un tetto di `ms`: oltre, rigetta con ErroreTimeout.
+ * Le server action non accettano un AbortSignal come fetch: la richiesta in
+ * volo non viene annullata, ma la UI si sblocca comunque (stesso effetto
+ * dell'AbortController in CheckoutButton).
+ */
+function conTimeout<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new ErroreTimeout()), ms);
+    promessa.then(
+      (valore) => {
+        clearTimeout(timer);
+        resolve(valore);
+      },
+      (motivo) => {
+        clearTimeout(timer);
+        reject(motivo);
+      },
+    );
+  });
+}
 
 export default function PulsantePaga({ token }: { token: string }) {
   const [inCorso, startTransition] = useTransition();
@@ -14,12 +42,22 @@ export default function PulsantePaga({ token }: { token: string }) {
   function paga() {
     setErrore(null);
     startTransition(async () => {
-      const esito = await creaCheckoutOrdineAction(token);
-      if (esito.ok && esito.url) {
-        window.location.href = esito.url;
-        return;
+      try {
+        const esito = await conTimeout(creaCheckoutOrdineAction(token), 15000);
+        if (esito.ok && esito.url) {
+          window.location.href = esito.url;
+          return;
+        }
+        setErrore(esito.error ?? "Impossibile avviare il pagamento.");
+      } catch (err) {
+        // Rete caduta o timeout: niente error boundary, si mostra il messaggio
+        // vicino al bottone e si lascia riprovare.
+        setErrore(
+          err instanceof ErroreTimeout
+            ? "Il pagamento sta impiegando troppo tempo. Riprova."
+            : "Si è verificato un problema. Riprova.",
+        );
       }
-      setErrore(esito.error ?? "Impossibile avviare il pagamento.");
     });
   }
 
