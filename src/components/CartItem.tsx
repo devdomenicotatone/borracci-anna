@@ -3,8 +3,11 @@
 // Riga del carrello (client component), usata sia nella pagina /carrello sia
 // nel mini-cart drawer (prop `compatto`). Le mutazioni passano dal CartProvider
 // (aggiorna/rimuovi) cosi badge, totali e drawer restano sincronizzati con
-// feedback ottimistico. Lo useTransition locale gestisce il pending della riga
-// (e fornisce la transition richiesta dal dispatch ottimistico del provider).
+// feedback ottimistico. I bottoni dello stepper NON si disabilitano durante il
+// roundtrip: i tap si accumulano subito sulla quantita ottimistica e il
+// provider coalizza le Server Action (debounce last-write-wins); `disabled`
+// resta solo per i vincoli reali (quantita minima, stock massimo). Lo
+// useTransition locale da solo il feedback visivo di sincronizzazione.
 
 import Image from "next/image";
 import { useTransition } from "react";
@@ -52,9 +55,13 @@ export default function CartItem({
     if (nuova === riga.quantita || nuova < 1) {
       return;
     }
-    // La chiamata al provider (dispatch ottimistico) sta dentro la transition.
+    // Il provider applica la quantita ottimistica SUBITO (fuori transition,
+    // cosi il tap successivo legge gia il valore aggiornato) e coalizza le
+    // Server Action con un debounce last-write-wins. La transition serve solo
+    // al feedback `inAttesa` finche la sincronizzazione non si conclude.
+    const sincronizzata = aggiorna(riga.id, nuova);
     startTransition(async () => {
-      await aggiorna(riga.id, nuova);
+      await sincronizzata;
     });
   }
 
@@ -128,7 +135,7 @@ export default function CartItem({
             <button
               type="button"
               onClick={() => impostaQuantita(riga.quantita - 1)}
-              disabled={inAttesa || riga.quantita <= 1}
+              disabled={riga.quantita <= 1}
               aria-label="Diminuisci quantita"
               className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -143,7 +150,7 @@ export default function CartItem({
             <button
               type="button"
               onClick={() => impostaQuantita(riga.quantita + 1)}
-              disabled={inAttesa || riga.quantita >= maxQuantita}
+              disabled={riga.quantita >= maxQuantita}
               aria-label="Aumenta quantita"
               className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-sea transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
             >

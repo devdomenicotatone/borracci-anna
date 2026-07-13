@@ -18,12 +18,20 @@
 // e nell'istante di sovrapposizione il carrello mostrava base + delta = DOPPIO
 // (es. aggiungi 4 -> lampeggia 8 -> torna 4). Rimpiazzare invece di sommare
 // elimina la sovrapposizione: la riconciliazione e idempotente.
+//
+// Stepper quantita (aggiorna): i tap si accumulano SUBITO sullo stato
+// ottimistico; la Server Action parte una sola volta ~400ms dopo l'ultimo tap
+// (debounce last-write-wins per riga). Un contatore di generazione per riga
+// scarta le risposte arrivate fuori ordine, cosi una risposta vecchia non
+// sovrascrive uno stato piu recente; in caso di errore si torna all'ultimo
+// stato confermato dal server (`righeConfermate`) con toast.
 
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -79,6 +87,19 @@ function riduci(
   }
 }
 
+/** Attesa dopo l'ultimo tap sullo stepper prima di chiamare la Server Action. */
+const DEBOUNCE_QUANTITA_MS = 400;
+
+/** Sincronizzazione quantita in corso per una riga (debounce o richiesta in volo). */
+interface SyncQuantita {
+  /** Timer del debounce; null quando la richiesta e gia partita. */
+  timer: ReturnType<typeof setTimeout> | null;
+  /** Ultimo valore chiesto dall'utente (last-write-wins). */
+  quantita: number;
+  /** Resolver delle promise dei tap in attesa del prossimo invio. */
+  inAttesa: Array<() => void>;
+}
+
 interface CartContextValue {
   /** Righe correnti (ottimistiche): fonte di verita per UI client. */
   righe: RigaCarrello[];
@@ -97,6 +118,11 @@ interface CartContextValue {
     variante: Variante;
     quantita: number;
   }) => Promise<void>;
+  /**
+   * Imposta la quantita di una riga: feedback ottimistico immediato, Server
+   * Action coalizzata con debounce (l'ultimo valore vince). La promise si
+   * risolve quando l'invio che include questa scrittura si conclude.
+   */
   aggiorna: (rigaId: string, quantita: number) => Promise<void>;
   rimuovi: (rigaId: string) => Promise<void>;
   svuota: () => Promise<void>;
@@ -129,6 +155,51 @@ export function CartProvider({
   // errore: e tra le dipendenze dei metodi, che quindi si rigenerano a ogni
   // cambio del carrello — nessun costo extra, il context cambia comunque.
 
+  // --- Stepper quantita: tap accumulati + debounce last-write-wins ---------
+  // `syncQuantita` tiene, per riga, la sincronizzazione in corso (timer del
+  // debounce e/o richiesta in volo); `generazioneRiga` numera gli invii per
+  // scartare le risposte fuori ordine; `righeConfermate` e l'ultimo stato
+  // autorevole del server, target del rollback in caso di errore.
+  // (Ref mutati solo in handler/timeout, mai durante il render.)
+  const syncQuantita = useRef<Map<string, SyncQuantita>>(new Map());
+  const generazioneRiga = useRef<Map<string, number>>(new Map());
+  const righeConfermate = useRef<RigaCarrello[]>(statoIniziale.righe);
+
+  /**
+   * Applica uno stato autorevole del server preservando le quantita
+   * ottimistiche delle righe con sincronizzazione ancora in corso: cosi la
+   * risposta di un'altra azione non fa "saltare indietro" lo stepper.
+   */
+  const applicaRigheServer = useCallback((nuove: RigaCarrello[]) => {
+    righeConfermate.current = nuove;
+    let visibili = nuove;
+    for (const [rigaId, sync] of syncQuantita.current) {
+      visibili = riduci(visibili, {
+        tipo: "quantita",
+        rigaId,
+        quantita: sync.quantita,
+      });
+    }
+    setRighe(visibili);
+  }, []);
+
+  /**
+   * Annulla la sincronizzazione pendente di una riga (es. prima di rimuoverla):
+   * ferma il debounce, invalida l'eventuale richiesta in volo (la risposta
+   * verra scartata) e sblocca le promise dei tap in attesa.
+   */
+  const annullaSyncQuantita = useCallback((rigaId: string) => {
+    const sync = syncQuantita.current.get(rigaId);
+    if (!sync) return;
+    if (sync.timer !== null) clearTimeout(sync.timer);
+    syncQuantita.current.delete(rigaId);
+    generazioneRiga.current.set(
+      rigaId,
+      (generazioneRiga.current.get(rigaId) ?? 0) + 1,
+    );
+    for (const risolvi of sync.inAttesa) risolvi();
+  }, []);
+
   const apriDrawer = useCallback(() => setDrawerAperto(true), []);
   const chiudiDrawer = useCallback(() => setDrawerAperto(false), []);
 
@@ -146,7 +217,7 @@ export function CartProvider({
       const esito = await aggiungiAlCarrello(variante.id, quantita);
 
       if (esito.ok) {
-        setRighe(esito.righe);
+        applicaRigheServer(esito.righe);
         setDrawerAperto(true);
         if (esito.avviso) {
           mostra(esito.avviso, "errore");
@@ -160,40 +231,83 @@ export function CartProvider({
         }
       }
     },
-    [righe, mostra],
+    [righe, mostra, applicaRigheServer],
   );
 
   const aggiorna = useCallback<CartContextValue["aggiorna"]>(
-    async (rigaId, quantita) => {
-      const snapshot = righe;
-      setRighe(riduci(righe, { tipo: "quantita", rigaId, quantita }));
+    (rigaId, quantita) => {
+      // Feedback immediato: functional update, cosi i tap ravvicinati si
+      // accumulano senza dipendere dalla closure su `righe`.
+      setRighe((correnti) =>
+        riduci(correnti, { tipo: "quantita", rigaId, quantita }),
+      );
 
-      const esito = await aggiornaQuantita(rigaId, quantita);
+      // Coalizza gli invii: un'unica entry per riga, riusata dai tap successivi.
+      const sync: SyncQuantita = syncQuantita.current.get(rigaId) ?? {
+        timer: null,
+        quantita,
+        inAttesa: [],
+      };
+      syncQuantita.current.set(rigaId, sync);
+      sync.quantita = quantita; // last-write-wins
+      if (sync.timer !== null) clearTimeout(sync.timer);
 
-      if (esito.ok) {
-        setRighe(esito.righe);
-        if (esito.avviso) {
-          mostra(esito.avviso, "errore");
-        }
-      } else {
-        setRighe(snapshot);
-        if (esito.motivo !== "non_configurato") {
-          mostra("Aggiornamento non riuscito. Riprova.", "errore");
-        }
-      }
+      return new Promise<void>((risolvi) => {
+        sync.inAttesa.push(risolvi);
+        sync.timer = setTimeout(async () => {
+          sync.timer = null;
+          // Numera l'invio: solo il piu recente puo applicare la risposta.
+          const gen = (generazioneRiga.current.get(rigaId) ?? 0) + 1;
+          generazioneRiga.current.set(rigaId, gen);
+          const richiesta = sync.quantita;
+          const daRisolvere = sync.inAttesa;
+          sync.inAttesa = [];
+
+          let esito: EsitoCarrello | null = null;
+          try {
+            esito = await aggiornaQuantita(rigaId, richiesta);
+          } catch {
+            // Errore di rete/imprevisto: trattato come esito negativo.
+          }
+
+          // Risposta superata se nel frattempo la riga e stata annullata
+          // (rimuovi/svuota) o un tap ha rimesso in coda un invio piu nuovo:
+          // sara quello a riconciliare, questa risposta va scartata.
+          const superata =
+            gen !== generazioneRiga.current.get(rigaId) || sync.timer !== null;
+          if (!superata) {
+            syncQuantita.current.delete(rigaId);
+            if (esito?.ok) {
+              applicaRigheServer(esito.righe);
+              if (esito.avviso) {
+                mostra(esito.avviso, "errore");
+              }
+            } else {
+              // Rollback all'ultimo stato confermato dal server.
+              applicaRigheServer(righeConfermate.current);
+              if (esito === null || esito.motivo !== "non_configurato") {
+                mostra("Aggiornamento non riuscito. Riprova.", "errore");
+              }
+            }
+          }
+          for (const risolvi of daRisolvere) risolvi();
+        }, DEBOUNCE_QUANTITA_MS);
+      });
     },
-    [righe, mostra],
+    [mostra, applicaRigheServer],
   );
 
   const rimuovi = useCallback<CartContextValue["rimuovi"]>(
     async (rigaId) => {
+      // La rimozione supera un eventuale aggiornamento quantita in corso.
+      annullaSyncQuantita(rigaId);
       const snapshot = righe;
       setRighe(riduci(righe, { tipo: "rimuovi", rigaId }));
 
       const esito = await rimuoviDalCarrello(rigaId);
 
       if (esito.ok) {
-        setRighe(esito.righe);
+        applicaRigheServer(esito.righe);
       } else {
         setRighe(snapshot);
         if (esito.motivo !== "non_configurato") {
@@ -201,7 +315,7 @@ export function CartProvider({
         }
       }
     },
-    [righe, mostra],
+    [righe, mostra, annullaSyncQuantita, applicaRigheServer],
   );
 
   // Rilettura dal server: usata quando lo stato client puo essere disallineato
@@ -210,24 +324,28 @@ export function CartProvider({
   // questo, la lista mostrata resterebbe quella vecchia nonostante il "controllalo".
   const ricarica = useCallback<CartContextValue["ricarica"]>(async () => {
     const esito = await statoCarrello();
-    if (esito.ok) setRighe(esito.righe);
-  }, []);
+    if (esito.ok) applicaRigheServer(esito.righe);
+  }, [applicaRigheServer]);
 
   const svuota = useCallback<CartContextValue["svuota"]>(async () => {
+    // Lo svuotamento supera tutti gli aggiornamenti quantita in corso.
+    for (const rigaId of Array.from(syncQuantita.current.keys())) {
+      annullaSyncQuantita(rigaId);
+    }
     const snapshot = righe;
     setRighe([]);
 
     const esito = await svuotaCarrello();
 
     if (esito.ok) {
-      setRighe(esito.righe);
+      applicaRigheServer(esito.righe);
     } else {
       setRighe(snapshot);
       if (esito.motivo !== "non_configurato") {
         mostra("Svuotamento non riuscito. Riprova.", "errore");
       }
     }
-  }, [righe, mostra]);
+  }, [righe, mostra, annullaSyncQuantita, applicaRigheServer]);
 
   const count = righe.reduce((a, r) => a + r.quantita, 0);
   const subtotaleCents = righe.reduce(
