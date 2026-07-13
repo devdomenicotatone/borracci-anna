@@ -10,6 +10,7 @@ import ProductCard from "@/components/ProductCard";
 import CaricamentoAutomatico from "@/components/catalogo/CaricamentoAutomatico";
 import EtichettaMostraAltri from "@/components/catalogo/EtichettaMostraAltri";
 import ToolbarCatalogo from "@/components/catalogo/ToolbarCatalogo";
+import TornaSu from "@/components/catalogo/TornaSu";
 import Wordmark from "@/components/Wordmark";
 import {
   contaFiltriAttivi,
@@ -122,6 +123,9 @@ export default function CatalogoSezione({
           )}
         </>
       )}
+
+      {/* Risalita rapida a ricerca/filtri: compare dopo ~2 viewport di scroll. */}
+      <TornaSu />
     </div>
   );
 }

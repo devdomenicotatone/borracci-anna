@@ -12,7 +12,7 @@
 // click sull'overlay, scroll-lock, focus trap, focus ripristinato).
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import NavScorribile from "@/components/vetrina/NavScorribile";
 import {
@@ -67,9 +67,23 @@ export default function ToolbarCatalogo({
   totale: number;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [inTransito, startTransition] = useTransition();
   const [aperto, setAperto] = useState(false);
   const [bozza, setBozza] = useState<BozzaFiltri>(() => bozzaDaFiltri(filtri));
+
+  // Cambio di route col drawer aperto (back del browser verso un'altra pagina
+  // catalogo: il componente resta montato e lo stato sopravvive): il drawer va
+  // chiuso. I filtri toccano solo i searchParams, quindi il pathname non cambia
+  // e la navigazione filtri resta indisturbata. Aggiustamento di stato durante
+  // il render (pattern React "adjusting state when props change") invece di un
+  // effect: niente setState sincrono post-commit, la pagina nuova non vede mai
+  // il drawer aperto.
+  const [pathnamePrecedente, setPathnamePrecedente] = useState(pathname);
+  if (pathname !== pathnamePrecedente) {
+    setPathnamePrecedente(pathname);
+    setAperto(false);
+  }
 
   // Filtri del drawer (taglia/colore/prezzo), per il badge e i chip attivi.
   const filtriDrawer = contaFiltriDrawer(filtri);
@@ -588,8 +602,10 @@ function DrawerFiltri({
           </button>
         </div>
 
+        {/* overscroll-contain: a fine corsa lo scroll non si propaga alla
+            pagina ne innesca il pull-to-refresh del browser mobile. */}
         <form
-          className="flex-1 space-y-6 overflow-y-auto px-5 py-5"
+          className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-5"
           onSubmit={(e) => {
             e.preventDefault();
             onApplica();
