@@ -64,42 +64,66 @@ function argomentiCategoria(
 
 /**
  * Una pagina di prodotti del gestore che rispettano i filtri, con gli aggregati
- * (num varianti, stock totale) e il totale dei match. Modello "Mostra altri"
- * cumulativo: offset 0, limit crescente (come la vetrina). Su errore RPC ritorna
+ * (num varianti, stock totale) e il totale dei match. Su errore RPC ritorna
  * lista vuota ma con `errore: true`, cosi la UI lo distingue dal catalogo vuoto.
  * Il client Supabase e quello di sessione (RLS: il gestore vede anche i
  * nascosti).
+ *
+ * `soloPagina`: ritorna SOLO le righe della pagina `pagina` (il DELTA per
+ * l'append client dello scroll infinito, vedi lib/gestore/prodotti-lista-actions),
+ * invece del cumulato 1..pagina che serve al percorso URL ?pagina=N. Stessi
+ * filtri e stesso ordinamento (tie-break su id nella RPC): le righe coincidono
+ * con quelle che il cumulato metterebbe in quella posizione. Una pagina e al
+ * massimo PRODOTTI_PER_PAGINA_GESTORE righe, ben sotto il max-rows di PostgREST:
+ * basta una chiamata sola con p_offset, senza la scansione a blocchi.
  */
 export async function caricaProdottiGestore(
   supabase: SupabaseClient,
-  opzioni: { filtri: FiltriGestore; pagina: number; categorie: Categoria[] },
+  opzioni: {
+    filtri: FiltriGestore;
+    pagina: number;
+    categorie: Categoria[];
+    /** true = solo le righe della pagina richiesta (delta), non il cumulato. */
+    soloPagina?: boolean;
+  },
 ): Promise<EsitoListaGestore> {
-  const { filtri, pagina, categorie } = opzioni;
+  const { filtri, pagina, categorie, soloPagina = false } = opzioni;
   const cat = argomentiCategoria(filtri, categorie);
-  const limite = pagina * PRODOTTI_PER_PAGINA_GESTORE;
+  const argomenti = {
+    p_q: filtri.q,
+    p_stato: filtri.stato,
+    p_ordina: filtri.ordina,
+    ...cat,
+  };
 
-  // La RPC applica offset/limit e restituisce il totale (window count) su ogni
-  // riga, ma PostgREST tronca comunque la RISPOSTA a max-rows (1000): oltre la
-  // pagina 20 il "Mostra altri" resterebbe fermo e lo scroll infinito
-  // continuerebbe a chiedere righe che non arrivano mai. Leggiamo l'output della
-  // RPC a blocchi (l'ordinamento della funzione ha il tie-break su id, stabile).
   const righe: RigaRpc[] = [];
-  for (let da = 0; da < limite; da += BLOCCO_SCANSIONE) {
-    const a = Math.min(da + BLOCCO_SCANSIONE, limite) - 1;
-    const { data, error } = await supabase
-      .rpc("cerca_prodotti_gestore", {
-        p_q: filtri.q,
-        p_stato: filtri.stato,
-        p_ordina: filtri.ordina,
-        p_offset: 0,
-        p_limit: limite,
-        ...cat,
-      })
-      .range(da, a);
+  if (soloPagina) {
+    // Delta: l'offset lo applica la RPC, la risposta resta sotto max-rows.
+    const { data, error } = await supabase.rpc("cerca_prodotti_gestore", {
+      ...argomenti,
+      p_offset: (pagina - 1) * PRODOTTI_PER_PAGINA_GESTORE,
+      p_limit: PRODOTTI_PER_PAGINA_GESTORE,
+    });
     if (error) return { prodotti: [], totale: 0, errore: true };
-    const blocco = (data as RigaRpc[] | null) ?? [];
-    righe.push(...blocco);
-    if (blocco.length < a - da + 1) break; // blocco corto = match esauriti
+    righe.push(...((data as RigaRpc[] | null) ?? []));
+  } else {
+    // Cumulato (?pagina=N): la RPC applica offset/limit e restituisce il totale
+    // (window count) su ogni riga, ma PostgREST tronca comunque la RISPOSTA a
+    // max-rows (1000): oltre la pagina 20 il "Mostra altri" resterebbe fermo e
+    // lo scroll infinito continuerebbe a chiedere righe che non arrivano mai.
+    // Leggiamo l'output della RPC a blocchi (l'ordinamento della funzione ha il
+    // tie-break su id, stabile).
+    const limite = pagina * PRODOTTI_PER_PAGINA_GESTORE;
+    for (let da = 0; da < limite; da += BLOCCO_SCANSIONE) {
+      const a = Math.min(da + BLOCCO_SCANSIONE, limite) - 1;
+      const { data, error } = await supabase
+        .rpc("cerca_prodotti_gestore", { ...argomenti, p_offset: 0, p_limit: limite })
+        .range(da, a);
+      if (error) return { prodotti: [], totale: 0, errore: true };
+      const blocco = (data as RigaRpc[] | null) ?? [];
+      righe.push(...blocco);
+      if (blocco.length < a - da + 1) break; // blocco corto = match esauriti
+    }
   }
 
   const prodotti: ProdottoLista[] = righe.map((p) => ({
@@ -116,7 +140,9 @@ export async function caricaProdottiGestore(
     stockTotale: p.stock_totale,
   }));
 
-  // Il totale viaggia su ogni riga (window count): 0 righe = 0 match.
+  // Il totale viaggia su ogni riga (window count): 0 righe = 0 match. NB: nel
+  // delta una pagina oltre la fine torna 0 righe e quindi totale 0 — il client
+  // la tratta come fine lista, senza fidarsi di quel totale.
   const totale = righe.length > 0 ? Number(righe[0].totale) : 0;
   return { prodotti, totale };
 }

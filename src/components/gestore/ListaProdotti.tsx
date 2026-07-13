@@ -2,11 +2,20 @@
 
 // Lista prodotti del gestore: ricerca, filtro stato, filtro categoria,
 // ordinamento, paginazione e selezione multipla con azioni in blocco.
-// Ricerca/filtri/ordinamento/paginazione girano LATO SERVER (RPC) con lo stato
-// nell'URL: la pagina server (prodotti/page.tsx) legge i searchParams, carica la
-// pagina di risultati col totale e la passa qui gia pronta. Cosi il browser non
-// riceve piu l'intero catalogo (ne gli sku di tutte le varianti). La selezione e
-// le azioni bulk restano client.
+// Ricerca/filtri/ordinamento girano LATO SERVER (RPC) con lo stato nell'URL:
+// la pagina server (prodotti/page.tsx) legge i searchParams, carica la pagina
+// di risultati col totale e la passa qui gia pronta. Cosi il browser non
+// riceve piu l'intero catalogo (ne gli sku di tutte le varianti).
+//
+// SCROLL INFINITO ad APPEND incrementale (come CaricamentoAutomatico in
+// vetrina): la pagina successiva arriva via Server Action
+// (paginaProdottiGestoreAction) come DELTA di 50 righe e si accumula qui.
+// Prima ogni blocco rinavigava a ?pagina=N+1: il server rifaceva la RPC
+// dall'inizio e ritrasmetteva TUTTO il cumulato nel payload RSC — verso pagina
+// 20+ oltre 1000 righe ritrasferite per riceverne 50. Dopo ogni append l'URL
+// avanza comunque a ?pagina=N con replaceState nativo (integrato dal router di
+// Next): un refresh o il back ritrovano il cumulato giusto dal percorso URL.
+// La selezione e le azioni bulk restano client.
 
 import {
   Fragment,
@@ -17,6 +26,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -32,6 +42,7 @@ import {
   eliminaProdottiBulkAction,
   idsProdottiFiltratiAction,
 } from "@/lib/gestore/actions";
+import { paginaProdottiGestoreAction } from "@/lib/gestore/prodotti-lista-actions";
 import type { Categoria } from "@/lib/types";
 import {
   ETICHETTE_ORDINAMENTO_GESTORE,
@@ -71,6 +82,31 @@ const SOGLIA_SCORTE = 5;
 
 const BASE_PATH = "/gestore/prodotti";
 
+/** Stato dell'append dello scroll infinito, in un oggetto solo: ogni
+ *  aggiornamento e atomico e puo essere validato sulla `base` (il payload
+ *  server al momento della richiesta), cosi una risposta stantia arrivata dopo
+ *  una navigazione o un refresh si scarta intera invece di appendere doppioni
+ *  sullo stato appena azzerato. */
+type StatoAppend = {
+  /** Il cumulato server di riferimento: identita nuova = payload nuovo. */
+  base: ProdottoLista[];
+  /** Pagine appese dal client (delta gia deduplicati per id). */
+  blocchi: ProdottoLista[][];
+  /** Totale rinfrescato da ogni risposta (il catalogo puo cambiare sotto). */
+  totaleVivo: number;
+  /** Fine lista raggiunta (pagina vuota o dati slittati): stop alla catena. */
+  esaurito: boolean;
+  /** Errore (action o rete): l'automatico e in pausa, il bottone ritenta.
+   *  Vive nello stato (non in un ref) cosi si azzera col reset dell'accumulo
+   *  al cambio di vista, senza mutare ref durante il render. */
+  pausa: boolean;
+};
+
+/** Stato dell'append azzerato su un nuovo payload server. */
+function appendIniziale(base: ProdottoLista[], totale: number): StatoAppend {
+  return { base, blocchi: [], totaleVivo: totale, esaurito: false, pausa: false };
+}
+
 export default function ListaProdotti({
   prodotti,
   totale,
@@ -98,17 +134,11 @@ export default function ListaProdotti({
   const [navPending, startNav] = useTransition();
   const { mostra } = useToast();
 
-  /** Naviga con i filtri aggiornati. Ometti `pagina` = torna alla prima pagina
-   *  (ogni cambio di filtro riparte da capo); passala solo per "Mostra altri". */
+  /** Naviga con i filtri aggiornati, ripartendo sempre dalla prima pagina: le
+   *  pagine successive si accumulano ad append via Server Action, non via URL. */
   const naviga = useCallback(
-    (nuovi: Partial<FiltriGestore>, opts?: { pagina?: number }) => {
-      const params = new URLSearchParams(
-        serializzaFiltriGestore({ ...filtri, ...nuovi }),
-      );
-      if (opts?.pagina && opts.pagina > 1) {
-        params.set("pagina", String(opts.pagina));
-      }
-      const qs = params.toString();
+    (nuovi: Partial<FiltriGestore>) => {
+      const qs = serializzaFiltriGestore({ ...filtri, ...nuovi });
       startNav(() =>
         router.replace(qs ? `${BASE_PATH}?${qs}` : BASE_PATH, { scroll: false }),
       );
@@ -138,6 +168,32 @@ export default function ListaProdotti({
     ultimoPushQ.current = filtri.q;
     setQ(filtri.q);
   }, [filtri.q]);
+
+  // --- Scroll infinito ad APPEND (delta via Server Action) ---------------------
+  const [append, setAppend] = useState<StatoAppend>(() =>
+    appendIniziale(prodotti, totale),
+  );
+
+  // Payload server nuovo — cambio filtri/ricerca/ordinamento, back/forward su
+  // ?pagina=N, router.refresh() dopo un'azione bulk: il cumulato server copre
+  // (o sostituisce) gia tutto e i blocchi appesi si azzerano durante il render
+  // (pattern "adjusting state when props change", come CaricamentoAutomatico);
+  // le risposte ancora in volo verranno scartate dall'aggiornamento funzionale.
+  // La selezione invece persiste: e un insieme di id, non di indici.
+  if (append.base !== prodotti) {
+    setAppend(appendIniziale(prodotti, totale));
+  }
+
+  // Lista in vista = cumulato server + blocchi appesi (gia deduplicati per id
+  // all'append). TUTTE le feature esistenti (selezione con shift, "seleziona
+  // visibili", azioni bulk, render) lavorano su questa lista.
+  const prodottiVisibili = useMemo(
+    () =>
+      append.base === prodotti && append.blocchi.length > 0
+        ? [...prodotti, ...append.blocchi.flat()]
+        : prodotti,
+    [prodotti, append],
+  );
 
   // --- Selezione multipla (client) --------------------------------------------
   // La selezione e un insieme di id: puo coprire piu della pagina caricata
@@ -177,13 +233,13 @@ export default function ListaProdotti({
   // un ID, non un indice: resta valida anche se i filtri cambiano.
   function selezionaClick(id: string) {
     if (shiftRef.current && ancoraId && ancoraId !== id) {
-      const a = prodotti.findIndex((p) => p.id === ancoraId);
-      const b = prodotti.findIndex((p) => p.id === id);
+      const a = prodottiVisibili.findIndex((p) => p.id === ancoraId);
+      const b = prodottiVisibili.findIndex((p) => p.id === id);
       if (a !== -1 && b !== -1) {
         const [da, fine] = a < b ? [a, b] : [b, a];
         setSelezionati((prev) => {
           const next = new Set(prev);
-          for (let i = da; i <= fine; i++) next.add(prodotti[i].id);
+          for (let i = da; i <= fine; i++) next.add(prodottiVisibili[i].id);
           return next;
         });
         return; // ancora invariata: si puo continuare a estendere
@@ -194,17 +250,18 @@ export default function ListaProdotti({
   }
 
   const tuttiVisibiliSelezionati =
-    prodotti.length > 0 && prodotti.every((p) => selezionati.has(p.id));
+    prodottiVisibili.length > 0 &&
+    prodottiVisibili.every((p) => selezionati.has(p.id));
 
   function toggleTuttiVisibili() {
     setSelezionati((prev) => {
       if (tuttiVisibiliSelezionati) {
         const next = new Set(prev);
-        for (const p of prodotti) next.delete(p.id);
+        for (const p of prodottiVisibili) next.delete(p.id);
         return next;
       }
       const next = new Set(prev);
-      for (const p of prodotti) next.add(p.id);
+      for (const p of prodottiVisibili) next.add(p.id);
       return next;
     });
   }
@@ -295,29 +352,125 @@ export default function ListaProdotti({
     });
   }
 
+  const filtriQs = serializzaFiltriGestore(filtri);
+  /** Ultima pagina in vista: il cumulato server + i blocchi appesi qui. */
+  const paginaCaricata = pagina + append.blocchi.length;
   const puoMostrareAltri =
-    prodotti.length < totale && pagina < PAGINA_MAX_GESTORE;
-  const cappato = prodotti.length < totale && pagina >= PAGINA_MAX_GESTORE;
+    !append.esaurito &&
+    prodottiVisibili.length < append.totaleVivo &&
+    paginaCaricata < PAGINA_MAX_GESTORE;
+  const cappato =
+    !append.esaurito &&
+    prodottiVisibili.length < append.totaleVivo &&
+    paginaCaricata >= PAGINA_MAX_GESTORE;
+
+  const [caricoAltri, setCaricoAltri] = useState(false);
+  // Una sola richiesta in volo: il ref (non lo stato, che si aggiorna al render
+  // dopo) para il doppio invio da click + sentinella nello stesso tick.
+  const inVolo = useRef(false);
+
+  // Errore (action null o rete giu): pausa dell'automatico validata sulla base
+  // — se nel frattempo la vista e cambiata, la vista nuova non va in pausa.
+  function pausaSuErrore(baseRichiesta: ProdottoLista[]) {
+    setAppend((s) => (s.base === baseRichiesta ? { ...s, pausa: true } : s));
+  }
+
+  function caricaAltri() {
+    if (inVolo.current || !puoMostrareAltri) return;
+    inVolo.current = true;
+    setCaricoAltri(true);
+    // Catturato alla richiesta: se al ritorno il payload server e cambiato
+    // (filtri nuovi, refresh dopo un bulk), la risposta e stantia e l'updater
+    // la scarta intera.
+    const baseRichiesta = prodotti;
+    paginaProdottiGestoreAction({ filtriQs, pagina: paginaCaricata + 1 })
+      .then((esito) => {
+        // null = errore nell'action: NON e un fine lista — pausa
+        // dell'automatico, il bottone ritenta.
+        if (!esito) {
+          pausaSuErrore(baseRichiesta);
+          return;
+        }
+        setAppend((s) => {
+          if (s.base !== baseRichiesta) return s; // risposta stantia: scartata
+          // Pagina vuota = fine lista genuino. Il totale della RPC viaggia
+          // sulle righe (window count): una pagina vuota non ne porta uno
+          // affidabile, ci si allinea a quanto gia in vista.
+          if (esito.prodotti.length === 0) {
+            const visti =
+              baseRichiesta.length +
+              s.blocchi.reduce((n, b) => n + b.length, 0);
+            return { ...s, totaleVivo: visti, esaurito: true };
+          }
+          // Dedup per id contro tutto cio che e gia in vista: con
+          // l'ordinamento a offset un inserimento/rimozione concorrente fa
+          // slittare le pagine di una riga — meglio una riga in meno che un
+          // doppione.
+          const gia = new Set(baseRichiesta.map((p) => p.id));
+          for (const blocco of s.blocchi) for (const p of blocco) gia.add(p.id);
+          const nuovi = esito.prodotti.filter((p) => !gia.has(p.id));
+          // Nessuna riga nuova a totale non raggiunto (dati slittati): stop, o
+          // la sentinella richiederebbe la stessa pagina in loop.
+          if (nuovi.length === 0) {
+            return { ...s, totaleVivo: esito.totale, esaurito: true };
+          }
+          return {
+            ...s,
+            blocchi: [...s.blocchi, nuovi],
+            totaleVivo: esito.totale,
+          };
+        });
+      })
+      .catch(() => {
+        pausaSuErrore(baseRichiesta); // rete assente/instabile: il click ritenta
+      })
+      .finally(() => {
+        inVolo.current = false;
+        setCaricoAltri(false);
+      });
+  }
+
+  // Refresh e back devono ritrovare il punto raggiunto: dopo ogni append l'URL
+  // avanza a ?pagina=N via History API nativa (integrata dal router di Next,
+  // stesso pattern della vetrina) — nessun re-render server all'istante, ma un
+  // router.refresh() o un ritorno alla pagina ricaricano il cumulato giusto.
+  useEffect(() => {
+    if (append.blocchi.length === 0) return;
+    const params = new URLSearchParams(filtriQs);
+    params.set("pagina", String(pagina + append.blocchi.length));
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${BASE_PATH}?${params.toString()}`,
+    );
+  }, [append.blocchi.length, filtriQs, pagina]);
 
   // Scroll infinito: quando la sentinella (il blocco "Mostra altri") entra in
-  // vista si carica la pagina successiva. Durante il caricamento (navPending)
-  // l'observer si stacca — niente doppio fire —; a fine load si riaggancia e, se
-  // la sentinella e ancora in vista, prosegue. Il bottone resta come fallback
-  // accessibile (tastiera/screen reader) e per riprovare in caso di errore.
+  // vista (con ampio preload) si appende la pagina successiva. L'effetto si
+  // (ri)arma a ogni render — costa nulla e l'osservazione iniziale fa ripartire
+  // da sola la catena quando, ad append concluso, la sentinella e ancora in
+  // vista. Niente observer durante il caricamento, in pausa (dopo un errore) o
+  // a fine lista; il bottone resta come fallback accessibile (tastiera/screen
+  // reader) e per riprovare in caso di errore.
   const sentinellaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!puoMostrareAltri || navPending) return;
+    if (caricoAltri || append.pausa || !puoMostrareAltri) return;
     const el = sentinellaRef.current;
-    if (!el) return;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    // L'observer scatta a raffica durante lo scroll: una richiesta per armata.
+    let chiesto = false;
     const osservatore = new IntersectionObserver(
       (voci) => {
-        if (voci[0]?.isIntersecting) naviga({}, { pagina: pagina + 1 });
+        if (chiesto) return;
+        if (!voci.some((v) => v.isIntersecting)) return;
+        chiesto = true;
+        caricaAltri();
       },
       { rootMargin: "800px" },
     );
     osservatore.observe(el);
     return () => osservatore.disconnect();
-  }, [puoMostrareAltri, navPending, pagina, naviga]);
+  });
 
   return (
     <div className="mx-auto max-w-3xl lg:max-w-5xl">
@@ -494,9 +647,9 @@ export default function ListaProdotti({
               ? "Aggiorno…"
               : errore
                 ? ""
-                : prodotti.length >= totale
-                  ? `${totale} ${totale === 1 ? "prodotto" : "prodotti"}`
-                  : `${prodotti.length} di ${totale}`}
+                : prodottiVisibili.length >= append.totaleVivo
+                  ? `${append.totaleVivo} ${append.totaleVivo === 1 ? "prodotto" : "prodotti"}`
+                  : `${prodottiVisibili.length} di ${append.totaleVivo}`}
           </span>
 
           {attivi > 0 && (
@@ -515,13 +668,15 @@ export default function ListaProdotti({
           di selezionare l'INTERO set dei match (id presi dal server). Sparisce
           quando sono gia tutti selezionati. */}
       {tuttiVisibiliSelezionati &&
-        totale > prodotti.length &&
-        selezionati.size < totale && (
+        append.totaleVivo > prodottiVisibili.length &&
+        selezionati.size < append.totaleVivo && (
           <div className="mb-2.5 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-sea/10 px-4 py-2.5 text-center text-sm text-foreground">
             <span>
               Selezionati i{" "}
-              <span className="font-bold tabular-nums">{prodotti.length}</span> in
-              questa vista.
+              <span className="font-bold tabular-nums">
+                {prodottiVisibili.length}
+              </span>{" "}
+              in questa vista.
             </span>
             <button
               type="button"
@@ -529,14 +684,16 @@ export default function ListaProdotti({
               disabled={selezionandoTutti}
               className="font-display font-bold text-sea hover:text-sea/80 disabled:opacity-60"
             >
-              {selezionandoTutti ? "Seleziono…" : `Seleziona tutti i ${totale}`}
+              {selezionandoTutti
+                ? "Seleziono…"
+                : `Seleziona tutti i ${append.totaleVivo}`}
             </button>
           </div>
         )}
 
       {errore ? (
         <StatoErrore onRiprova={() => router.refresh()} />
-      ) : prodotti.length === 0 ? (
+      ) : prodottiVisibili.length === 0 ? (
         <StatoVuoto conFiltri={attivi > 0} onAzzera={azzeraFiltri} />
       ) : (
         // A lg la lista diventa una "tabella in card": sotto restano le card di sempre.
@@ -556,7 +713,7 @@ export default function ListaProdotti({
             <span className="text-right">In vendita</span>
           </div>
           <ul className="flex flex-col gap-2.5 lg:gap-0 lg:divide-y lg:divide-line">
-            {prodotti.map((p) => {
+            {prodottiVisibili.map((p) => {
               const selezionato = selezionati.has(p.id);
               return (
                 <li
@@ -678,31 +835,35 @@ export default function ListaProdotti({
       )}
 
       {/* Scroll infinito: questo blocco e la sentinella dell'IntersectionObserver
-          (autocarica la pagina successiva entrando in vista); il bottone resta
-          come fallback accessibile. */}
+          (appende la pagina successiva entrando in vista); il bottone resta
+          come fallback accessibile e per riprovare dopo un errore. */}
       {puoMostrareAltri && (
         <div
           ref={sentinellaRef}
           className="mt-6 flex flex-col items-center gap-2"
         >
           <p className="text-sm tabular-nums text-muted">
-            Hai visto {prodotti.length} di {totale}
+            Hai visto {prodottiVisibili.length} di {append.totaleVivo}
           </p>
           <button
             type="button"
-            onClick={() => naviga({}, { pagina: pagina + 1 })}
-            disabled={navPending}
+            onClick={() => {
+              // Il click riattiva anche l'automatico dopo un errore.
+              setAppend((s) => (s.pausa ? { ...s, pausa: false } : s));
+              caricaAltri();
+            }}
+            disabled={caricoAltri || navPending}
             className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface disabled:opacity-60"
           >
-            {navPending && <Spinner className="h-4 w-4 text-sea" />}
-            {navPending ? "Carico…" : "Mostra altri"}
+            {caricoAltri && <Spinner className="h-4 w-4 text-sea" />}
+            {caricoAltri ? "Carico…" : "Mostra altri"}
           </button>
         </div>
       )}
       {cappato && (
         <p className="mt-6 text-center text-sm text-muted">
-          Visualizzati {prodotti.length} prodotti su {totale}. Affina la ricerca o
-          i filtri per trovare gli altri.
+          Visualizzati {prodottiVisibili.length} prodotti su {append.totaleVivo}.
+          Affina la ricerca o i filtri per trovare gli altri.
         </p>
       )}
 
@@ -863,12 +1024,16 @@ function Miniatura({ url, nome }: { url: string | null; nome: string }) {
   return (
     <div className="relative aspect-[3/3.4] w-14 shrink-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line lg:w-12">
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- url da Storage con cache-bust
-        <img
+        // Miniatura via optimizer di Next (lazy, ~56px): mai il master 2560px
+        // usato come thumbnail (pattern GestoreMedia).
+        <Image
           src={url}
           alt={nome}
+          fill
+          sizes="56px"
+          quality={75}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="object-cover"
         />
       ) : (
         <div className="tile-cyan grid h-full w-full place-items-center text-white">
