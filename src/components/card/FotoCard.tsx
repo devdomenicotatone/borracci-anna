@@ -1,16 +1,97 @@
 "use client";
 
-// Mini-carosello foto dentro la card della griglia: frecce (desktop, su hover)
-// e swipe (touch) per scorrere le foto SENZA aprire la scheda prodotto, con i
-// pallini indicatore in basso. Vive dentro il <Link> della card: le frecce
-// fermano l'evento (preventDefault/stopPropagation) per non navigare.
+// Mini-carosello foto della card prodotto, in due pezzi che condividono lo
+// stato via context:
+//   - <SwipeFoto> (wrapper): in ProductCard avvolge TUTTO il contenuto della
+//     card, Link overlay compreso. I gestori touch vivono qui: i tocchi che
+//     atterrano sul Link (che copre la card, z-10) risalgono in bubbling fino
+//     al wrapper, cosi lo swipe cambia foto anche su mobile dove le frecce
+//     sono nascoste — senza rubare al tap la navigazione.
+//   - <FotoCard> (default): la pila di foto nel layer immagine, con frecce
+//     (desktop, su hover) e pallini indicatore in basso; le frecce fermano
+//     l'evento (preventDefault/stopPropagation) per non navigare.
 //
 // Le foto oltre la prima si montano SOLO alla prima visualizzazione (set
 // `visti`): niente download extra per chi non interagisce — con 24+ card a
 // pagina e la regola, non l'eccezione.
 
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
+
+interface CaroselloValue {
+  /** Indice della foto attualmente visibile. */
+  idx: number;
+  /** Indici gia mostrati almeno una volta (gli altri non si montano). */
+  visti: Set<number>;
+  /** Scorre di `delta` foto, con wrap-around. */
+  vai: (delta: number) => void;
+}
+
+const CaroselloContext = createContext<CaroselloValue | null>(null);
+
+function useCarosello(): CaroselloValue {
+  const ctx = useContext(CaroselloContext);
+  if (!ctx) {
+    throw new Error("FotoCard deve essere usato dentro <SwipeFoto>.");
+  }
+  return ctx;
+}
+
+/**
+ * Stato del carosello + superficie di swipe. Deve CONTENERE sia <FotoCard>
+ * sia il <Link> overlay della card: solo cosi i touch intercettati dal Link
+ * arrivano (in bubbling) ai gestori qui sotto. Il div non e posizionato ne
+ * stilizzato, quindi non altera layout, stacking o ancoraggio del Link.
+ */
+export function SwipeFoto({
+  nFoto,
+  children,
+}: {
+  /** Numero totale di foto del carosello. Almeno 2. */
+  nFoto: number;
+  children: React.ReactNode;
+}) {
+  const [idx, setIdx] = useState(0);
+  const [visti, setVisti] = useState<Set<number>>(() => new Set([0]));
+  const tocco = useRef<{ x: number; y: number } | null>(null);
+
+  function vai(delta: number) {
+    setIdx((corrente) => {
+      const prossimo = (corrente + delta + nFoto) % nFoto;
+      setVisti((v) => (v.has(prossimo) ? v : new Set(v).add(prossimo)));
+      return prossimo;
+    });
+  }
+
+  return (
+    <CaroselloContext.Provider value={{ idx, visti, vai }}>
+      <div
+        onTouchStart={(e) => {
+          tocco.current = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+          };
+        }}
+        onTouchEnd={(e) => {
+          const inizio = tocco.current;
+          tocco.current = null;
+          if (!inizio) return;
+          const dx = e.changedTouches[0].clientX - inizio.x;
+          const dy = e.changedTouches[0].clientY - inizio.y;
+          // Swipe orizzontale netto (non uno scroll di pagina): cambia foto.
+          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            // Il tocco e partito dal Link overlay: annulla il click sintetico
+            // che alcuni browser farebbero seguire, o lo swipe navigherebbe.
+            if (e.cancelable) e.preventDefault();
+            vai(dx < 0 ? 1 : -1);
+          }
+        }}
+      >
+        {children}
+      </div>
+    </CaroselloContext.Provider>
+  );
+}
 
 export default function FotoCard({
   urls,
@@ -23,39 +104,10 @@ export default function FotoCard({
   /** true per le card above-the-fold: prima foto eager (candidate LCP). */
   priorita: boolean;
 }) {
-  const [idx, setIdx] = useState(0);
-  const [visti, setVisti] = useState<Set<number>>(() => new Set([0]));
-  const tocco = useRef<{ x: number; y: number } | null>(null);
-
-  function vai(delta: number) {
-    setIdx((corrente) => {
-      const prossimo = (corrente + delta + urls.length) % urls.length;
-      setVisti((v) => (v.has(prossimo) ? v : new Set(v).add(prossimo)));
-      return prossimo;
-    });
-  }
+  const { idx, visti, vai } = useCarosello();
 
   return (
-    <div
-      className="absolute inset-0"
-      onTouchStart={(e) => {
-        tocco.current = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-        };
-      }}
-      onTouchEnd={(e) => {
-        const inizio = tocco.current;
-        tocco.current = null;
-        if (!inizio) return;
-        const dx = e.changedTouches[0].clientX - inizio.x;
-        const dy = e.changedTouches[0].clientY - inizio.y;
-        // Swipe orizzontale netto (non uno scroll di pagina): cambia foto.
-        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-          vai(dx < 0 ? 1 : -1);
-        }
-      }}
-    >
+    <div className="absolute inset-0">
       {/* Pila di foto: si monta solo cio che e stato visto, crossfade CSS. */}
       {urls.map((url, i) =>
         visti.has(i) ? (

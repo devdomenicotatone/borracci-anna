@@ -3,13 +3,14 @@
 // prezzo formattato e rimanda alla PDP /prodotti/[slug]. Sopra il link vivono
 // tre controlli client che NON navigano (fermano l'evento):
 //   - cuoricino preferiti (in alto a destra);
-//   - mini-carosello foto se il listino porta piu foto (frecce/swipe/pallini);
+//   - mini-carosello foto se il listino porta piu foto (frecce/pallini; lo
+//     swipe vive in <SwipeFoto>, che avvolge contenuto e link overlay);
 //   - quick add "+" con le taglie (solo vendita diretta con stock).
 
 import Image from "next/image";
 import Link from "next/link";
 
-import FotoCard from "@/components/card/FotoCard";
+import FotoCard, { SwipeFoto } from "@/components/card/FotoCard";
 import QuickAddTaglie from "@/components/card/QuickAddTaglie";
 import CuorePreferito from "@/components/preferiti/CuorePreferito";
 import type { Prodotto } from "@/lib/types";
@@ -63,18 +64,17 @@ export default function ProductCard({
     ...(cover ? [cover] : []),
     ...(prodotto.foto_urls ?? []).filter((u) => u && u !== cover),
   ];
+  const multifoto = fotoCarosello.length > 1;
 
   // Quick add solo in vendita diretta con stock: i "su richiesta" passano dal
   // contatto in scheda, gli esauriti non hanno nulla da aggiungere.
   const conQuickAdd =
     prodotto.disponibilita_su_richiesta === false && !esaurito;
 
-  return (
-    // La card NON e piu un <Link> che avvolge i bottoni (HTML non valido:
-    // contenuto interattivo dentro <a>). E un contenitore; il link e un overlay
-    // assoluto (sotto i controlli, vedi in fondo), cosi cuore/frecce/quick-add
-    // restano fratelli del link e pienamente azionabili dagli screen reader.
-    <div className="group relative isolate rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea">
+  // Contenuto della card (superficie foto + testo + link overlay), estratto in
+  // una variabile per poterlo avvolgere in <SwipeFoto> solo con il carosello.
+  const contenuto = (
+    <>
       <div className="relative aspect-[3/4] w-full">
         {/* Layer immagine: qui vive l'overflow-hidden (angoli tondi + zoom hover).
             I controlli e il pannello quick-add stanno FUORI da questo layer, cosi
@@ -84,8 +84,9 @@ export default function ProductCard({
             esaurito ? "opacity-75" : ""
           }`}
         >
-          {fotoCarosello.length > 1 ? (
-            // Piu foto dal listino: mini-carosello con frecce/swipe/pallini.
+          {multifoto ? (
+            // Piu foto dal listino: pila foto + frecce/pallini (lo swipe sta
+            // nel wrapper <SwipeFoto> che avvolge la card, vedi in fondo).
             <FotoCard
               urls={fotoCarosello}
               nome={prodotto.nome}
@@ -214,6 +215,25 @@ export default function ProductCard({
         aria-label={`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
         className="absolute inset-0 z-10 rounded-3xl"
       />
+    </>
+  );
+
+  return (
+    // La card NON e piu un <Link> che avvolge i bottoni (HTML non valido:
+    // contenuto interattivo dentro <a>). E un contenitore; il link e un overlay
+    // assoluto (sotto i controlli, vedi sopra), cosi cuore/frecce/quick-add
+    // restano fratelli del link e pienamente azionabili dagli screen reader.
+    <div className="group relative isolate rounded-3xl bg-white p-2.5 shadow-soft transition duration-200 hover:-translate-y-1.5 hover:shadow-sea">
+      {multifoto ? (
+        // SwipeFoto porta stato e gestori touch del carosello e deve CONTENERE
+        // anche il Link overlay: i tocchi che atterrano sul Link risalgono in
+        // bubbling fino ai suoi gestori, quindi lo swipe funziona anche su
+        // mobile, dove le frecce sono nascoste. Il suo div non e posizionato:
+        // il Link resta ancorato all'intera card.
+        <SwipeFoto nFoto={fotoCarosello.length}>{contenuto}</SwipeFoto>
+      ) : (
+        contenuto
+      )}
     </div>
   );
 }
