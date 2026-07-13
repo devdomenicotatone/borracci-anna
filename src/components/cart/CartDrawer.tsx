@@ -10,7 +10,8 @@
 // chiusura, Tab in trappola tra gli elementi focusabili del drawer.
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
 
 import CartItem, { CheckoutButton } from "@/components/CartItem";
 import FreeShippingBar from "@/components/cart/FreeShippingBar";
@@ -23,6 +24,71 @@ export default function CartDrawer() {
     useCarrello();
   const pannelloRef = useRef<HTMLDivElement>(null);
   const elementoPrecedenteRef = useRef<HTMLElement | null>(null);
+  const pathname = usePathname();
+
+  // true finche la entry fittizia spinta in cronologia all'apertura non e
+  // stata consumata (dal back dell'utente o dalla chiusura esplicita).
+  // Stesso schema di MenuMobile: il back di consumo avviene SOLO in modo
+  // sincrono nel handler di chiusura esplicita, mai nella cleanup dell'effect
+  // (in StrictMode la cleanup gira anche subito dopo il mount, e un back li
+  // dentro richiuderebbe il drawer appena aperto).
+  const entryDaConsumareRef = useRef(false);
+
+  // Chiusura esplicita (X, overlay, ESC, "Continua acquisti"): consuma con un
+  // back la entry fittizia, cosi il prossimo back del browser esce davvero
+  // dalla pagina.
+  const chiudi = useCallback(() => {
+    chiudiDrawer();
+    if (entryDaConsumareRef.current) {
+      entryDaConsumareRef.current = false;
+      window.history.back();
+    }
+  }, [chiudiDrawer]);
+
+  // Chiusura per navigazione (tap su un link del drawer): la nuova route
+  // finisce in cronologia SOPRA la entry fittizia, quindi qui niente back
+  // (annullerebbe la navigazione appena chiesta); la entry residua e una copia
+  // della pagina di partenza e un eventuale back la attraversa senza effetti
+  // visibili.
+  const chiudiPerNavigazione = useCallback(() => {
+    entryDaConsumareRef.current = false;
+    chiudiDrawer();
+  }, [chiudiDrawer]);
+
+  // Qualsiasi navigazione chiude il drawer: non deve restare aperto sopra la
+  // nuova pagina. Il flag della entry fittizia viene azzerato dalla cleanup
+  // dell'effect qui sotto (drawerAperto passa a false).
+  useEffect(() => {
+    chiudiDrawer();
+  }, [pathname, chiudiDrawer]);
+
+  // Entry fittizia in cronologia (stessa URL, quindi invisibile) finche il
+  // drawer e aperto: il back di Android / il gesto indietro chiude il drawer
+  // invece di lasciare la pagina.
+  useEffect(() => {
+    if (!drawerAperto) return;
+
+    window.history.pushState({ cartDrawer: true }, "");
+    entryDaConsumareRef.current = true;
+
+    function onPopState() {
+      // Il back ha gia consumato la entry: il flag evita che la chiusura
+      // esplicita ne faccia un secondo (= due pagine indietro).
+      entryDaConsumareRef.current = false;
+      chiudiDrawer();
+    }
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      // Drawer chiuso (o componente smontato): nessuna entry da tracciare.
+      // Copre la chiusura per cambio pathname (effect qui sopra), dove nessun
+      // handler azzera il flag. Niente back() qui: la chiusura esplicita lo fa
+      // gia in modo sincrono in chiudi(), e un back in cleanup andrebbe in
+      // race con la pushState della route chiesta dai link del drawer.
+      entryDaConsumareRef.current = false;
+    };
+  }, [drawerAperto, chiudiDrawer]);
 
   // Apertura/chiusura: scroll-lock, focus, ESC e focus-trap.
   useEffect(() => {
@@ -44,7 +110,7 @@ export default function CartDrawer() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        chiudiDrawer();
+        chiudi();
         return;
       }
       if (e.key === "Tab") {
@@ -69,7 +135,7 @@ export default function CartDrawer() {
       sbloccaScroll();
       elementoPrecedenteRef.current?.focus?.();
     };
-  }, [drawerAperto, chiudiDrawer]);
+  }, [drawerAperto, chiudi]);
 
   if (!drawerAperto) return null;
 
@@ -79,7 +145,7 @@ export default function CartDrawer() {
       <button
         type="button"
         aria-label="Chiudi il carrello"
-        onClick={chiudiDrawer}
+        onClick={chiudi}
         className="animate-fade-in absolute inset-0 cursor-default bg-foreground/40 backdrop-blur-[2px]"
       />
 
@@ -89,7 +155,7 @@ export default function CartDrawer() {
         role="dialog"
         aria-modal="true"
         aria-label="Il tuo carrello"
-        className="animate-drawer-in absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-background shadow-[0_0_60px_-15px_rgba(10,31,51,0.5)]"
+        className="animate-drawer-in absolute inset-y-0 right-0 flex w-[calc(100%-2.75rem)] max-w-md flex-col bg-background shadow-[0_0_60px_-15px_rgba(10,31,51,0.5)]"
       >
         {/* Intestazione */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -103,7 +169,7 @@ export default function CartDrawer() {
           </h2>
           <button
             type="button"
-            onClick={chiudiDrawer}
+            onClick={chiudi}
             aria-label="Chiudi"
             className="grid h-10 w-10 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-foreground"
           >
@@ -131,7 +197,7 @@ export default function CartDrawer() {
             </p>
             <button
               type="button"
-              onClick={chiudiDrawer}
+              onClick={chiudi}
               className="flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
             >
               Scopri i prodotti
@@ -140,7 +206,7 @@ export default function CartDrawer() {
         ) : (
           <>
             {/* Righe + free shipping */}
-            <div className="flex-1 overflow-y-auto px-5">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5">
               <div className="py-4">
                 <FreeShippingBar />
               </div>
@@ -169,7 +235,7 @@ export default function CartDrawer() {
                 {righe.some((r) => r.prodotto.disponibilita_su_richiesta) ? (
                   <Link
                     href="/carrello"
-                    onClick={chiudiDrawer}
+                    onClick={chiudiPerNavigazione}
                     className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
                   >
                     Procedi con la richiesta
@@ -182,14 +248,14 @@ export default function CartDrawer() {
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={chiudiDrawer}
+                  onClick={chiudi}
                   className="flex h-11 items-center justify-center rounded-full bg-white px-4 font-display text-sm font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface"
                 >
                   Continua acquisti
                 </button>
                 <Link
                   href="/carrello"
-                  onClick={chiudiDrawer}
+                  onClick={chiudiPerNavigazione}
                   className="flex h-11 items-center justify-center rounded-full bg-surface-2 px-4 font-display text-sm font-bold text-sea transition-colors hover:bg-line"
                 >
                   Vai al carrello
