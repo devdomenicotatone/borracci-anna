@@ -22,6 +22,7 @@ import { StyleSheetManager } from "styled-components";
 import isPropValid from "@emotion/is-prop-valid";
 
 import { generaBlurDataUrl } from "@/lib/blur";
+import { bloccaScrollBody } from "@/lib/scroll-lock";
 import { autoTrimmaImmagine } from "@/lib/trim";
 import {
   sostituisciFotoAction,
@@ -68,6 +69,14 @@ export default function EditorImmagine({
     },
     [],
   );
+
+  // L'editor e full-screen e viene montato solo quando e aperto (i chiamanti lo
+  // renderizzano condizionalmente): blocchiamo lo scroll del body al mount come
+  // le altre modali (useDialogModale), altrimenti su touch i gesti di pan/slider
+  // dentro Filerobot e il rubber-banding iOS fanno scorrere la pagina sotto e
+  // alla chiusura ci si ritrova in un punto diverso della scheda prodotto.
+  // bloccaScrollBody ritorna la funzione di sblocco: e direttamente il cleanup.
+  useEffect(() => bloccaScrollBody(), []);
 
   // Preview piu nitido su schermi retina; il salvataggio resta a pixelRatio 1.
   const previewRatio =
@@ -136,7 +145,7 @@ export default function EditorImmagine({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-foreground">
+    <div className="fixed inset-0 z-50 flex flex-col overscroll-none bg-foreground">
       <div className="flex shrink-0 items-center justify-between gap-3 bg-foreground px-4 py-2.5 text-white">
         <span className="font-display text-sm font-bold">Editor foto</span>
         <div className="flex items-center gap-2">
