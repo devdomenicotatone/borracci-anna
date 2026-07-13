@@ -38,7 +38,9 @@ export default function CarrelloContenuto({
     suRichiesta && righe.some((r) => !r.prodotto.disponibilita_su_richiesta);
 
   return (
-    <div className="mt-8">
+    // Il padding-bottom su mobile compensa la barra fissa del totale, cosi le
+    // ultime righe e il riepilogo non restano coperti.
+    <div className="mt-8 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pb-0">
       <ul className="divide-y divide-line">
         {righe.map((riga) => (
           <CartItem key={riga.id} riga={riga} />
@@ -121,7 +123,8 @@ export default function CarrelloContenuto({
                 .
               </p>
             )}
-            <div className="mt-5">
+            {/* scroll-mt: l'ancora #richiesta non deve finire sotto l'header sticky. */}
+            <div id="richiesta" className="mt-5 scroll-mt-24">
               <ModuloRichiesta prefill={prefill} />
             </div>
           </>
@@ -158,6 +161,35 @@ export default function CarrelloContenuto({
           >
             Continua lo shopping
           </Link>
+        </div>
+      </div>
+
+      {/* Barra fissa solo mobile: con 3+ righe totale e CTA finirebbero sotto
+          la piega, pattern noto di abbandono carrello. z-30 come le save-bar
+          del gestore: sotto i drawer (z-50) e i toast (z-60). Il riepilogo
+          esteso qui sopra resta per il dettaglio voci e per desktop. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:hidden">
+        <div className="flex items-center justify-between">
+          <span className="font-display text-sm font-bold text-foreground">
+            Totale stimato
+          </span>
+          <span className="font-display text-lg font-extrabold tabular-nums text-sea">
+            {formatPrezzo(subtotaleCents, valuta)}
+          </span>
+        </div>
+        <div className="mt-2">
+          {suRichiesta ? (
+            // Flusso richiesta: i campi del modulo sono obbligatori, quindi il
+            // CTA porta al modulo invece di inviare da qui.
+            <a
+              href="#richiesta"
+              className="flex h-12 w-full items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral"
+            >
+              Compila la richiesta
+            </a>
+          ) : (
+            <CheckoutButton />
+          )}
         </div>
       </div>
     </div>
