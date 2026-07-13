@@ -19,6 +19,7 @@
 
 import {
   Fragment,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -202,10 +203,20 @@ export default function ListaProdotti({
   const [selezionati, setSelezionati] = useState<ReadonlySet<string>>(new Set());
   const [selezionandoTutti, setSelezionandoTutti] = useState(false);
   const [bulkCategoria, setBulkCategoria] = useState("");
-  const [ancoraId, setAncoraId] = useState<string | null>(null);
-  const shiftRef = useRef(false);
+  // Ancora dello shift-click (ultima riga cliccata). Ref e non stato: nessun
+  // render la legge, e cosi selezionaClick resta stabile per le righe
+  // memoizzate. E un ID, non un indice: resta valida anche se i filtri cambiano.
+  const ancoraIdRef = useRef<string | null>(null);
   const [confermaElimina, setConfermaElimina] = useState(false);
   const [inCorso, startTransition] = useTransition();
+
+  // Specchio della lista in vista per selezionaClick: il callback (stabile)
+  // legge la lista del momento senza averla tra le dipendenze — altrimenti
+  // ogni append lo ricreerebbe vanificando il memo di TUTTE le righe.
+  const prodottiVisibiliRef = useRef(prodottiVisibili);
+  useEffect(() => {
+    prodottiVisibiliRef.current = prodottiVisibili;
+  }, [prodottiVisibili]);
 
   const gruppi = useMemo(() => gruppiCategorie(categorie), [categorie]);
   const conteggioCon = (ids: string[]) =>
@@ -217,37 +228,44 @@ export default function ListaProdotti({
     naviga({ q: "", stato: "tutti", categoria: "", ordina: "recenti" });
   }
 
-  function toggleSelezione(id: string) {
+  const toggleSelezione = useCallback((id: string) => {
     setSelezionati((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
-  // Click su una checkbox riga. Con Shift SELEZIONA l'intervallo tra l'ultima
-  // riga cliccata (ancora) e questa, nell'ordine visibile — come Gmail/Finder.
-  // Senza Shift: toggle singolo e nuova ancora. Il modificatore si legge
-  // nell'onClick (l'onChange non porta i tasti premuti) via shiftRef. L'ancora e
-  // un ID, non un indice: resta valida anche se i filtri cambiano.
-  function selezionaClick(id: string) {
-    if (shiftRef.current && ancoraId && ancoraId !== id) {
-      const a = prodottiVisibili.findIndex((p) => p.id === ancoraId);
-      const b = prodottiVisibili.findIndex((p) => p.id === id);
-      if (a !== -1 && b !== -1) {
-        const [da, fine] = a < b ? [a, b] : [b, a];
-        setSelezionati((prev) => {
-          const next = new Set(prev);
-          for (let i = da; i <= fine; i++) next.add(prodottiVisibili[i].id);
-          return next;
-        });
-        return; // ancora invariata: si puo continuare a estendere
+  // Click su una checkbox riga (arriva dalle righe memoizzate). Con Shift
+  // SELEZIONA l'intervallo tra l'ultima riga cliccata (ancora) e questa,
+  // nell'ordine visibile — come Gmail/Finder. Senza Shift: toggle singolo e
+  // nuova ancora. Il modificatore arriva come argomento (letto nell'onClick
+  // della riga: l'onChange non porta i tasti premuti); ancora e lista in vista
+  // si leggono dai ref, cosi il callback resta stabile e le righe non
+  // ridisegnano a ogni click o append.
+  const selezionaClick = useCallback(
+    (id: string, shift: boolean) => {
+      const visibili = prodottiVisibiliRef.current;
+      const ancora = ancoraIdRef.current;
+      if (shift && ancora && ancora !== id) {
+        const a = visibili.findIndex((p) => p.id === ancora);
+        const b = visibili.findIndex((p) => p.id === id);
+        if (a !== -1 && b !== -1) {
+          const [da, fine] = a < b ? [a, b] : [b, a];
+          setSelezionati((prev) => {
+            const next = new Set(prev);
+            for (let i = da; i <= fine; i++) next.add(visibili[i].id);
+            return next;
+          });
+          return; // ancora invariata: si puo continuare a estendere
+        }
       }
-    }
-    toggleSelezione(id);
-    setAncoraId(id);
-  }
+      toggleSelezione(id);
+      ancoraIdRef.current = id;
+    },
+    [toggleSelezione],
+  );
 
   const tuttiVisibiliSelezionati =
     prodottiVisibili.length > 0 &&
@@ -285,7 +303,7 @@ export default function ListaProdotti({
   function svuotaSelezione() {
     setSelezionati(new Set());
     setConfermaElimina(false);
-    setAncoraId(null);
+    ancoraIdRef.current = null;
   }
 
   function applicaBulk() {
@@ -301,7 +319,7 @@ export default function ListaProdotti({
         );
         setSelezionati(new Set());
         setBulkCategoria("");
-        setAncoraId(null);
+        ancoraIdRef.current = null;
         router.refresh();
       } else {
         mostra(esito.error ?? "Impossibile aggiornare la categoria.", "errore");
@@ -713,123 +731,15 @@ export default function ListaProdotti({
             <span className="text-right">In vendita</span>
           </div>
           <ul className="flex flex-col gap-2.5 lg:gap-0 lg:divide-y lg:divide-line">
-            {prodottiVisibili.map((p) => {
-              const selezionato = selezionati.has(p.id);
-              return (
-                <li
-                  key={p.id}
-                  className={[
-                    "flex items-center gap-3 rounded-2xl bg-white p-3 shadow-soft ring-1 transition-all lg:grid lg:grid-cols-[1.75rem_minmax(0,1fr)_9.5rem_6rem_9.5rem_7.5rem] lg:rounded-none lg:px-4 lg:py-2.5 lg:shadow-none lg:ring-0",
-                    selezionato
-                      ? "ring-sea lg:bg-sea/5"
-                      : "ring-line hover:-translate-y-0.5 hover:shadow-sea lg:hover:translate-y-0 lg:hover:bg-surface lg:hover:shadow-none",
-                  ].join(" ")}
-                >
-                  <input
-                    type="checkbox"
-                    aria-label={`Seleziona ${p.nome}`}
-                    checked={selezionato}
-                    onClick={(e) => {
-                      shiftRef.current = e.shiftKey;
-                    }}
-                    onChange={() => selezionaClick(p.id)}
-                    className="h-5 w-5 shrink-0 cursor-pointer rounded accent-sea"
-                  />
-                  <Link
-                    href={`/gestore/prodotti/${p.id}`}
-                    className="flex min-w-0 flex-1 items-center gap-3 lg:flex-none"
-                  >
-                    <Miniatura url={p.immagine_url} nome={p.nome} />
-                    <div className="min-w-0">
-                      <p className="truncate font-display text-sm font-bold text-foreground">
-                        {p.nome}
-                      </p>
-                      <p className="truncate font-mono text-xs text-muted">
-                        /{p.slug}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 lg:hidden">
-                        <span className="text-sm font-bold tabular-nums text-sea">
-                          {formatPrezzo(p.prezzo_cents, p.valuta)}
-                        </span>
-                        <BadgeCategoria
-                          categorie={categorie}
-                          categoriaId={p.categoriaId}
-                        />
-                        <BadgeStock
-                          stock={p.stockTotale}
-                          numVarianti={p.numVarianti}
-                          suRichiesta={p.suRichiesta}
-                        />
-                      </div>
-                    </div>
-                  </Link>
-                  {/* Celle categoria/prezzo/disponibilità: solo desktop. */}
-                  <div className="hidden min-w-0 lg:block">
-                    <BadgeCategoria
-                      categorie={categorie}
-                      categoriaId={p.categoriaId}
-                    />
-                  </div>
-                  <span className="hidden text-right text-sm font-bold tabular-nums text-sea lg:block">
-                    {formatPrezzo(p.prezzo_cents, p.valuta)}
-                  </span>
-                  <div className="hidden min-w-0 lg:flex">
-                    <BadgeStock
-                      stock={p.stockTotale}
-                      numVarianti={p.numVarianti}
-                      suRichiesta={p.suRichiesta}
-                    />
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    {/* Condivisione (QR/link) e download immagine social. Solo
-                        per gli attivi: la PDP e il poster leggono il catalogo
-                        attivo, quindi per un nascosto porterebbero a un 404. */}
-                    {p.attivo && (
-                      <>
-                        <CondividiProdotto
-                          slug={p.slug}
-                          nome={p.nome}
-                          immagine={p.immagine_url}
-                          prezzo={formatPrezzo(p.prezzo_cents, p.valuta)}
-                          variante="icona"
-                        />
-                        <a
-                          href={`/prodotti/${p.slug}/social`}
-                          download={`anna-shop-${p.slug}-storia.png`}
-                          title="Scarica immagine per social"
-                          aria-label={`Scarica immagine social di ${p.nome}`}
-                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted ring-1 ring-line transition-colors hover:text-sea hover:ring-sea"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4"
-                            aria-hidden="true"
-                          >
-                            <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                          </svg>
-                        </a>
-                      </>
-                    )}
-                    <div className="flex flex-col items-end gap-2">
-                      <span
-                        className={[
-                          "font-display text-xs font-bold lg:hidden",
-                          p.attivo ? "text-sea" : "text-muted",
-                        ].join(" ")}
-                      >
-                        {p.attivo ? "In vendita" : "Nascosto"}
-                      </span>
-                      <ToggleAttivo id={p.id} attivo={p.attivo} />
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
+            {prodottiVisibili.map((p) => (
+              <RigaProdottoLista
+                key={p.id}
+                prodotto={p}
+                selezionato={selezionati.has(p.id)}
+                categorie={categorie}
+                onSeleziona={selezionaClick}
+              />
+            ))}
           </ul>
         </div>
       )}
@@ -986,6 +896,146 @@ export default function ListaProdotti({
     </div>
   );
 }
+
+/**
+ * Riga della lista, memoizzata (pattern RigaProdottoPrezzi): con lo scroll ad
+ * append ogni blocco da 50 ri-esegue il .map sull'intero cumulato — senza memo
+ * TUTTE le righe gia montate (1000+ a pagina 20+) ridisegnavano per appenderne
+ * 50; ora ridisegnano solo le righe le cui props cambiano davvero. Props
+ * stabili: `prodotto` e l'oggetto riga del payload (l'append ne conserva
+ * l'identita), `selezionato` un boolean (non il Set), `categorie` il payload
+ * server, `onSeleziona` un callback stabile (ancora e lista in vista via ref).
+ */
+const RigaProdottoLista = memo(function RigaProdottoLista({
+  prodotto: p,
+  selezionato,
+  categorie,
+  onSeleziona,
+}: {
+  prodotto: ProdottoLista;
+  selezionato: boolean;
+  categorie: Categoria[];
+  /** Click sulla checkbox: id della riga + Shift premuto (per l'intervallo). */
+  onSeleziona: (id: string, shift: boolean) => void;
+}) {
+  // Il modificatore si legge nell'onClick (l'onChange non porta i tasti
+  // premuti) e arriva all'onChange dello stesso click via ref, come prima
+  // dell'estrazione — solo che ora il ref vive nella riga.
+  const shiftRef = useRef(false);
+  return (
+    <li
+      className={[
+        "flex items-center gap-3 rounded-2xl bg-white p-3 shadow-soft ring-1 transition-all lg:grid lg:grid-cols-[1.75rem_minmax(0,1fr)_9.5rem_6rem_9.5rem_7.5rem] lg:rounded-none lg:px-4 lg:py-2.5 lg:shadow-none lg:ring-0",
+        selezionato
+          ? "ring-sea lg:bg-sea/5"
+          : "ring-line hover:-translate-y-0.5 hover:shadow-sea lg:hover:translate-y-0 lg:hover:bg-surface lg:hover:shadow-none",
+      ].join(" ")}
+    >
+      <input
+        type="checkbox"
+        aria-label={`Seleziona ${p.nome}`}
+        checked={selezionato}
+        onClick={(e) => {
+          shiftRef.current = e.shiftKey;
+        }}
+        onChange={() => onSeleziona(p.id, shiftRef.current)}
+        className="h-5 w-5 shrink-0 cursor-pointer rounded accent-sea"
+      />
+      <Link
+        href={`/gestore/prodotti/${p.id}`}
+        className="flex min-w-0 flex-1 items-center gap-3 lg:flex-none"
+      >
+        <Miniatura url={p.immagine_url} nome={p.nome} />
+        <div className="min-w-0">
+          <p className="truncate font-display text-sm font-bold text-foreground">
+            {p.nome}
+          </p>
+          <p className="truncate font-mono text-xs text-muted">
+            /{p.slug}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 lg:hidden">
+            <span className="text-sm font-bold tabular-nums text-sea">
+              {formatPrezzo(p.prezzo_cents, p.valuta)}
+            </span>
+            <BadgeCategoria
+              categorie={categorie}
+              categoriaId={p.categoriaId}
+            />
+            <BadgeStock
+              stock={p.stockTotale}
+              numVarianti={p.numVarianti}
+              suRichiesta={p.suRichiesta}
+            />
+          </div>
+        </div>
+      </Link>
+      {/* Celle categoria/prezzo/disponibilità: solo desktop. */}
+      <div className="hidden min-w-0 lg:block">
+        <BadgeCategoria
+          categorie={categorie}
+          categoriaId={p.categoriaId}
+        />
+      </div>
+      <span className="hidden text-right text-sm font-bold tabular-nums text-sea lg:block">
+        {formatPrezzo(p.prezzo_cents, p.valuta)}
+      </span>
+      <div className="hidden min-w-0 lg:flex">
+        <BadgeStock
+          stock={p.stockTotale}
+          numVarianti={p.numVarianti}
+          suRichiesta={p.suRichiesta}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {/* Condivisione (QR/link) e download immagine social. Solo
+            per gli attivi: la PDP e il poster leggono il catalogo
+            attivo, quindi per un nascosto porterebbero a un 404. */}
+        {p.attivo && (
+          <>
+            <CondividiProdotto
+              slug={p.slug}
+              nome={p.nome}
+              immagine={p.immagine_url}
+              prezzo={formatPrezzo(p.prezzo_cents, p.valuta)}
+              variante="icona"
+            />
+            <a
+              href={`/prodotti/${p.slug}/social`}
+              download={`anna-shop-${p.slug}-storia.png`}
+              title="Scarica immagine per social"
+              aria-label={`Scarica immagine social di ${p.nome}`}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted ring-1 ring-line transition-colors hover:text-sea hover:ring-sea"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+            </a>
+          </>
+        )}
+        <div className="flex flex-col items-end gap-2">
+          <span
+            className={[
+              "font-display text-xs font-bold lg:hidden",
+              p.attivo ? "text-sea" : "text-muted",
+            ].join(" ")}
+          >
+            {p.attivo ? "In vendita" : "Nascosto"}
+          </span>
+          <ToggleAttivo id={p.id} attivo={p.attivo} />
+        </div>
+      </div>
+    </li>
+  );
+});
 
 function BadgeCategoria({
   categorie,
