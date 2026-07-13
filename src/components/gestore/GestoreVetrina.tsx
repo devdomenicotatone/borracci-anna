@@ -7,7 +7,7 @@
 // stesso pattern di GestoreCategorie (`applica`): su errore niente revert, il
 // prossimo canonico corregge.
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 
 import {
@@ -16,6 +16,7 @@ import {
   eliminaSezioneAction,
   toggleVisibileSezioneAction,
   riordinaSezioniAction,
+  cercaProdottiVetrinaAction,
   aggiungiProdottoSezioneAction,
   rimuoviProdottoSezioneAction,
   riordinaProdottiSezioneAction,
@@ -87,11 +88,9 @@ const TONI: { v: string; label: string }[] = [
 export default function GestoreVetrina({
   sezioniIniziali,
   categorie,
-  prodotti,
 }: {
   sezioniIniziali: VetrinaSezioneAdmin[];
   categorie: Categoria[];
-  prodotti: Prodotto[];
 }) {
   const { mostra } = useToast();
   const [sezioni, setSezioni] = useState<VetrinaSezioneAdmin[]>(sezioniIniziali);
@@ -209,7 +208,6 @@ export default function GestoreVetrina({
                     key={sezione.id}
                     sezione={sezione}
                     categorie={categorie}
-                    prodotti={prodotti}
                     occupato={occupato}
                     onSalva={(dati) =>
                       applica(
@@ -462,7 +460,6 @@ interface DatiSalva {
 function EditorSezione({
   sezione,
   categorie,
-  prodotti,
   occupato,
   onSalva,
   onAggiungiProdotto,
@@ -471,7 +468,6 @@ function EditorSezione({
 }: {
   sezione: VetrinaSezioneAdmin;
   categorie: Categoria[];
-  prodotti: Prodotto[];
   occupato: boolean;
   onSalva: (dati: DatiSalva) => void;
   onAggiungiProdotto: (prodottoId: string) => void;
@@ -705,7 +701,6 @@ function EditorSezione({
       {sezione.tipo === "prodotti_manuale" && (
         <EditorProdottiPinnati
           pinnati={sezione.prodotti}
-          catalogo={prodotti}
           occupato={occupato}
           onAggiungi={onAggiungiProdotto}
           onRimuovi={onRimuoviProdotto}
@@ -720,20 +715,70 @@ function EditorSezione({
 
 function EditorProdottiPinnati({
   pinnati,
-  catalogo,
   occupato,
   onAggiungi,
   onRimuovi,
   onRiordina,
 }: {
   pinnati: Prodotto[];
-  catalogo: Prodotto[];
   occupato: boolean;
   onAggiungi: (prodottoId: string) => void;
   onRimuovi: (prodottoId: string) => void;
   onRiordina: (ids: string[]) => void;
 }) {
   const [ricerca, setRicerca] = useState("");
+  // Esito dell'ultima ricerca, legato alla query che l'ha prodotto: se `q`
+  // corrente differisce la ricerca e in corso (debounce o rete) — lo stato di
+  // caricamento e DERIVATO, niente setState sincrono nell'effetto.
+  const [esitoRicerca, setEsitoRicerca] = useState<{
+    q: string;
+    prodotti: Prodotto[];
+    errore: boolean;
+  } | null>(null);
+  const q = ricerca.trim();
+  // Incrementato dal bottone Riprova: rientra nelle deps dell'effetto e fa
+  // ripartire la ricerca anche a query invariata (es. dopo un errore di rete).
+  const [tentativo, setTentativo] = useState(0);
+
+  // Chiave stabile (ordinamento incluso) degli id gia pinnati: passati alla
+  // action per escluderli A MONTE del limit — filtrarli dopo lascerebbe pochi
+  // o zero suggerimenti quando i primi match sono tutti gia in fascia.
+  const chiaveEsclusi = useMemo(
+    () =>
+      pinnati
+        .map((p) => p.id)
+        .sort()
+        .join(","),
+    [pinnati],
+  );
+
+  // Ricerca on-demand con debounce (~300ms, come il filtro di ListaProdotti):
+  // la pagina non serializza piu il catalogo intero, la Server Action torna al
+  // massimo una decina di match dal DB. Il flag `annullata` scarta le risposte
+  // arrivate dopo un nuovo input (mai risultati stantii sopra i freschi).
+  useEffect(() => {
+    if (q === "") return;
+    let annullata = false;
+    const esclusi = chiaveEsclusi === "" ? [] : chiaveEsclusi.split(",");
+    const timer = setTimeout(async () => {
+      try {
+        const esito = await cercaProdottiVetrinaAction(q, esclusi);
+        if (annullata) return;
+        setEsitoRicerca({
+          q,
+          prodotti: esito.ok ? (esito.prodotti ?? []) : [],
+          errore: !esito.ok,
+        });
+      } catch {
+        if (!annullata) setEsitoRicerca({ q, prodotti: [], errore: true });
+      }
+    }, 300);
+    return () => {
+      annullata = true;
+      clearTimeout(timer);
+    };
+  }, [q, chiaveEsclusi, tentativo]);
+
   const idsPinnati = useMemo(
     () => new Set(pinnati.map((p) => p.id)),
     [pinnati],
@@ -745,13 +790,13 @@ function EditorProdottiPinnati({
     occupato,
   );
 
-  const risultati = useMemo(() => {
-    const q = ricerca.trim().toLowerCase();
-    return catalogo
-      .filter((p) => !idsPinnati.has(p.id))
-      .filter((p) => (q ? p.nome.toLowerCase().includes(q) : true))
-      .slice(0, 8);
-  }, [catalogo, idsPinnati, ricerca]);
+  // I gia pinnati spariscono dai risultati (e ricompaiono appena rimossi).
+  const risultati = useMemo(
+    () => (esitoRicerca?.prodotti ?? []).filter((p) => !idsPinnati.has(p.id)),
+    [esitoRicerca, idsPinnati],
+  );
+
+  const inCaricamento = q !== "" && esitoRicerca?.q !== q;
 
   return (
     <div className="mt-4 rounded-2xl bg-white p-3 ring-1 ring-line">
@@ -825,9 +870,29 @@ function EditorProdottiPinnati({
           placeholder="Cerca un prodotto da aggiungere…"
           className={`${inputCls} h-10`}
         />
-        {ricerca.trim() !== "" && (
+        {q !== "" && (
           <ul className="mt-1.5 flex flex-col gap-1">
-            {risultati.length === 0 ? (
+            {inCaricamento ? (
+              <li className="px-2 py-1.5 text-xs text-muted">
+                Cerco nel catalogo…
+              </li>
+            ) : esitoRicerca?.errore ? (
+              <li className="flex items-center gap-2 px-2 py-1.5 text-xs text-coral">
+                Ricerca non riuscita.
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Azzera l'esito cosi lo stato torna "in caricamento" e
+                    // riparte la ricerca con la stessa query.
+                    setEsitoRicerca(null);
+                    setTentativo((t) => t + 1);
+                  }}
+                  className="inline-flex min-h-8 items-center rounded-full px-2 font-bold text-sea underline underline-offset-2 active:scale-95"
+                >
+                  Riprova
+                </button>
+              </li>
+            ) : risultati.length === 0 ? (
               <li className="px-2 py-1.5 text-xs text-muted">
                 Nessun prodotto trovato.
               </li>

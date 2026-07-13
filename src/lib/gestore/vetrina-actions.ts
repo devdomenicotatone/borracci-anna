@@ -15,6 +15,7 @@ import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
 import {
   TIPI_SEZIONE_VETRINA,
   type ConfigVetrina,
+  type Prodotto,
   type RegolaProdottiAuto,
   type TipoSezioneVetrina,
 } from "@/lib/types";
@@ -25,6 +26,8 @@ const ERRORE_RETE: EsitoVetrina = { ok: false, error: "Errore di rete. Riprova."
 const REGOLE: readonly RegolaProdottiAuto[] = ["novita", "categoria", "solo_online"];
 const LIMITE_MIN = 1;
 const LIMITE_MAX = 24;
+/** Quanti match ritorna la ricerca del selettore "aggiungi prodotto". */
+const RISULTATI_RICERCA = 10;
 
 /** Tipo del client Supabase di sessione (come in categorie-actions). */
 type SupabaseGestore = Awaited<ReturnType<typeof verifySession>> extends infer S
@@ -340,6 +343,67 @@ export async function riordinaSezioniAction(
     return { ok: true, sezioni };
   } catch {
     return ERRORE_RETE;
+  }
+}
+
+/**
+ * Ricerca on-demand per il selettore "aggiungi prodotto" delle fasce a mano:
+ * match ilike su nome/codice lato DB, al massimo RISULTATI_RICERCA righe.
+ * Sostituisce il catalogo completo che la pagina serializzava nel payload
+ * (~1840 prodotti) solo per filtrarne 8 in locale. Anche i non attivi: il
+ * gestore pinna pure le bozze. Sola lettura: niente revalida.
+ */
+export async function cercaProdottiVetrinaAction(
+  q: string,
+  // Id dei prodotti gia pinnati nella fascia: esclusi A MONTE del limit,
+  // altrimenti una fascia con molti pinnati tra i primi match mostrerebbe
+  // pochi o zero suggerimenti pur esistendo altri risultati oltre il decimo.
+  escludiIds: string[] = [],
+): Promise<{ ok: boolean; prodotti?: Prodotto[]; error?: string }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+  const { supabase } = sessione;
+
+  // Come patternRicerca in lib/vetrina: virgole/parentesi sono sintassi
+  // dell'`or=(...)` PostgREST e %/_ sono jolly ilike — si neutralizza tutto,
+  // la ricerca resta letterale. Token in AND (or nome/codice per token).
+  const token = (typeof q === "string" ? q : "")
+    .replace(/[,()%_\\]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6);
+  if (token.length === 0) return { ok: true, prodotti: [] };
+
+  // Input non fidato: solo id sensati, cappati (una fascia pinnata ne ha
+  // al massimo qualche decina).
+  const esclusi = (Array.isArray(escludiIds) ? escludiIds : [])
+    .filter((id) => typeof id === "string" && /^[\w-]{1,64}$/.test(id))
+    .slice(0, 100);
+
+  try {
+    let query = supabase
+      .from("prodotti")
+      .select(
+        "id, slug, nome, codice, prezzo_cents, valuta, immagine_url, attivo",
+      )
+      .order("nome", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(RISULTATI_RICERCA);
+    if (esclusi.length > 0) {
+      query = query.not("id", "in", `(${esclusi.join(",")})`);
+    }
+    for (const t of token) {
+      query = query.or(`nome.ilike.%${t}%,codice.ilike.%${t}%`);
+    }
+    const { data, error } = await query;
+    if (error) return { ok: false, error: error.message };
+    return {
+      ok: true,
+      prodotti: (data as unknown as Prodotto[] | null) ?? [],
+    };
+  } catch {
+    return { ok: false, error: "Errore di rete. Riprova." };
   }
 }
 
