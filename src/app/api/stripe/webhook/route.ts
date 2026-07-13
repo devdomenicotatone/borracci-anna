@@ -49,6 +49,10 @@ const EVENTI_PAGAMENTO_FALLITO = new Set<Stripe.Event["type"]>([
  */
 interface LineaSessione {
   sku: string;
+  /** Id immutabile della variante (dai metadata Stripe): chiave robusta al
+   *  rename dello SKU per la ricostruzione righe del direct-buy. null per le
+   *  sessioni vecchie senza questo metadata -> la RPC ripiega sullo SKU. */
+  varianteId: string | null;
   qta: number;
   nome: string;
   importoCents: number;
@@ -73,18 +77,26 @@ async function righeDaSessione(sessionId: string): Promise<LineaSessione[]> {
     if (qta <= 0) continue;
 
     const prodotto = item.price?.product;
-    const sku =
-      prodotto && typeof prodotto !== "string" && "metadata" in prodotto
-        ? (prodotto.metadata?.sku ?? null)
-        : null;
+    const haMetadata =
+      prodotto && typeof prodotto !== "string" && "metadata" in prodotto;
+    const sku = haMetadata ? (prodotto.metadata?.sku ?? null) : null;
     if (!sku) continue;
+    const varianteId = haMetadata
+      ? (prodotto.metadata?.variante_id ?? null)
+      : null;
 
     const nome =
       prodotto && typeof prodotto !== "string" && "name" in prodotto
         ? (prodotto.name ?? item.description ?? sku)
         : (item.description ?? sku);
 
-    righe.push({ sku, qta, nome, importoCents: item.amount_total ?? 0 });
+    righe.push({
+      sku,
+      varianteId,
+      qta,
+      nome,
+      importoCents: item.amount_total ?? 0,
+    });
   }
   return righe;
 }
@@ -135,6 +147,10 @@ async function finalizzaOrdine(
     // Le versioni precedenti della RPC ignorano le chiavi extra.
     p_righe: righe.map((r) => ({
       sku: r.sku,
+      // variante_id: chiave immutabile per la ricostruzione (robusta al rename
+      // dello SKU); la RPC ripiega sullo SKU se assente. Le RPC vecchie ignorano
+      // la chiave extra (join per SKU = comportamento precedente).
+      variante_id: r.varianteId,
       qta: r.qta,
       nome: r.nome,
       prezzo_cents: r.qta > 0 ? Math.round(r.importoCents / r.qta) : 0,

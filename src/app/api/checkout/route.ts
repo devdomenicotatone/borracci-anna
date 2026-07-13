@@ -110,9 +110,12 @@ export async function POST(): Promise<Response> {
       unit_amount: riga.prodotto.prezzo_cents,
       product_data: {
         name: etichettaRiga(riga),
-        // Lo SKU della variante viaggia nei metadata del product Stripe:
-        // il webhook lo rilegge per decrementare lo stock giusto.
-        metadata: { sku: riga.variante.sku },
+        // SKU + variante_id (IMMUTABILE) nei metadata del product Stripe: il
+        // webhook li rilegge per ricostruire le righe del direct-buy (l'ordine
+        // non e pre-salvato). Il variante_id e la chiave robusta al rename dello
+        // SKU tra creazione sessione e pagamento (finding I1); lo SKU resta come
+        // fallback per le sessioni vecchie.
+        metadata: { sku: riga.variante.sku, variante_id: riga.variante.id },
         ...(riga.prodotto.descrizione
           ? { description: riga.prodotto.descrizione }
           : {}),
