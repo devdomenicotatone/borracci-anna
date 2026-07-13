@@ -1,13 +1,18 @@
 "use client";
 
 // Menu di navigazione mobile (hamburger nell'header): drawer da sinistra con
-// le pagine principali e l'albero categorie (macro + figlie e nipoti indentate).
+// la ricerca del catalogo, le pagine principali e l'albero categorie (macro +
+// figlie e nipoti indentate).
 // Stessa accessibilita dei drawer esistenti: dialog modale, ESC, overlay,
-// scroll-lock, focus trap, focus ripristinato. Si chiude a ogni navigazione.
+// scroll-lock, focus trap, focus ripristinato. Si chiude a ogni navigazione,
+// anche quella esterna del back/forward del browser (usePathname); il tasto
+// back col drawer aperto lo chiude invece di lasciare la pagina (entry
+// fittizia in cronologia + popstate).
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePathname, useRouter } from "next/navigation";
 
 import type { GruppoCategorie } from "@/lib/categorie-albero";
 import { bloccaScrollBody } from "@/lib/scroll-lock";
@@ -23,8 +28,75 @@ export default function MenuMobile({
   cliente: ClienteHeader | null;
 }) {
   const [aperto, setAperto] = useState(false);
+  const [ricerca, setRicerca] = useState("");
   const pannelloRef = useRef<HTMLDivElement>(null);
   const elementoPrecedenteRef = useRef<HTMLElement | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // true finche la entry fittizia spinta in cronologia all'apertura non e
+  // stata consumata (dal back dell'utente o dalla chiusura esplicita).
+  const entryDaConsumareRef = useRef(false);
+
+  // Chiusura esplicita (X, overlay, ESC): consuma con un back la entry
+  // fittizia, cosi il prossimo back del browser esce davvero dalla pagina.
+  const chiudi = useCallback(() => {
+    setAperto(false);
+    if (entryDaConsumareRef.current) {
+      entryDaConsumareRef.current = false;
+      window.history.back();
+    }
+  }, []);
+
+  // Chiusura per navigazione (tap su un link o submit della ricerca): la
+  // nuova route finisce in cronologia SOPRA la entry fittizia, quindi qui
+  // niente back (annullerebbe la navigazione appena chiesta); la entry
+  // residua e una copia della pagina di partenza e un eventuale back la
+  // attraversa senza effetti visibili.
+  const chiudiPerNavigazione = useCallback(() => {
+    entryDaConsumareRef.current = false;
+    setAperto(false);
+  }, []);
+
+  // Route cambiata per cause esterne (back/forward del browser, redirect):
+  // il drawer non deve restare aperto sulla pagina nuova. Aggiustamento di
+  // stato durante il render (pattern React "adjusting state when props
+  // change") invece di un effect: niente setState sincrono post-commit, la
+  // pagina nuova non vede mai il drawer aperto. Il flag della entry fittizia
+  // viene azzerato dalla cleanup dell'effect qui sotto.
+  const [pathnamePrecedente, setPathnamePrecedente] = useState(pathname);
+  if (pathname !== pathnamePrecedente) {
+    setPathnamePrecedente(pathname);
+    setAperto(false);
+  }
+
+  // Entry fittizia in cronologia finche il drawer e aperto: il tasto back
+  // (fisico o gesture) chiude il menu invece di lasciare la pagina. Next
+  // integra pushState/popstate nativi nel router e l'URL resta invariato,
+  // quindi nessuna navigazione reale.
+  useEffect(() => {
+    if (!aperto) return;
+
+    window.history.pushState({ menuMobile: true }, "");
+    entryDaConsumareRef.current = true;
+
+    function onPopstate() {
+      // Il back ha gia consumato la entry: il flag evita che la chiusura
+      // esplicita ne faccia un secondo (= due pagine indietro).
+      entryDaConsumareRef.current = false;
+      setAperto(false);
+    }
+
+    window.addEventListener("popstate", onPopstate);
+    return () => {
+      window.removeEventListener("popstate", onPopstate);
+      // Drawer chiuso (o componente smontato): nessuna entry da tracciare.
+      // Copre la chiusura per navigazione esterna (usePathname qui sopra),
+      // dove nessun handler azzera il flag. La chiusura esplicita non ne
+      // risente: chiudi() legge il flag in modo sincrono, prima del commit.
+      entryDaConsumareRef.current = false;
+    };
+  }, [aperto]);
 
   useEffect(() => {
     if (!aperto) return;
@@ -36,7 +108,7 @@ export default function MenuMobile({
     const focusabili = () =>
       Array.from(
         pannello?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
     focusabili()[0]?.focus();
@@ -44,7 +116,7 @@ export default function MenuMobile({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        setAperto(false);
+        chiudi();
         return;
       }
       if (e.key === "Tab") {
@@ -69,9 +141,7 @@ export default function MenuMobile({
       sbloccaScroll();
       elementoPrecedenteRef.current?.focus?.();
     };
-  }, [aperto]);
-
-  const chiudi = () => setAperto(false);
+  }, [aperto, chiudi]);
 
   return (
     <>
@@ -81,7 +151,7 @@ export default function MenuMobile({
         aria-label="Apri il menu"
         aria-haspopup="dialog"
         aria-expanded={aperto}
-        className="grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 lg:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11 lg:hidden"
       >
         <svg
           viewBox="0 0 24 24"
@@ -144,15 +214,62 @@ export default function MenuMobile({
 
               <nav
                 aria-label="Navigazione principale"
-                className="flex-1 overflow-y-auto px-3 py-4"
+                className="flex-1 overflow-y-auto overscroll-contain px-3 py-4"
               >
-                {/* Account in testa: card del cliente loggato, o CTA di
+                {/* Ricerca in testa: e l'unico accesso alla ricerca da tutte
+                    le pagine (la toolbar vive solo nel catalogo); il submit
+                    porta a /prodotti?q=. text-base (16px): sotto, iOS zooma
+                    la pagina al focus del campo. */}
+                <form
+                  role="search"
+                  className="mb-3 px-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const testo = ricerca.trim();
+                    router.push(
+                      testo
+                        ? `/prodotti?q=${encodeURIComponent(testo)}`
+                        : "/prodotti",
+                    );
+                    chiudiPerNavigazione();
+                  }}
+                >
+                  <label className="relative block">
+                    <span className="sr-only">Cerca nel catalogo</span>
+                    <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-5 w-5"
+                        aria-hidden="true"
+                      >
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m21 21-4.3-4.3" />
+                      </svg>
+                    </span>
+                    <input
+                      type="search"
+                      value={ricerca}
+                      onChange={(e) => setRicerca(e.target.value)}
+                      enterKeyHint="search"
+                      placeholder="Cerca un prodotto…"
+                      aria-label="Cerca nel catalogo"
+                      className="h-12 w-full rounded-full bg-white pl-12 pr-4 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 focus:ring-2 focus:ring-sea"
+                    />
+                  </label>
+                </form>
+
+                {/* Account: card del cliente loggato, o CTA di
                     accesso/registrazione per l'ospite. */}
                 {cliente ? (
                   <div className="mb-3">
                     <Link
                       href="/account"
-                      onClick={chiudi}
+                      onClick={chiudiPerNavigazione}
                       className="flex items-center gap-3 rounded-2xl bg-surface p-4 transition-colors hover:bg-surface-2"
                     >
                       <AvatarCliente
@@ -184,14 +301,14 @@ export default function MenuMobile({
                     <div className="mt-1 flex gap-1">
                       <Link
                         href="/account/ordini"
-                        onClick={chiudi}
+                        onClick={chiudiPerNavigazione}
                         className="flex-1 rounded-xl px-4 py-2.5 text-center text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
                       >
                         I miei ordini
                       </Link>
                       <Link
                         href="/account/indirizzi"
-                        onClick={chiudi}
+                        onClick={chiudiPerNavigazione}
                         className="flex-1 rounded-xl px-4 py-2.5 text-center text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
                       >
                         I miei indirizzi
@@ -202,14 +319,14 @@ export default function MenuMobile({
                   <div className="mb-3 grid grid-cols-2 gap-2 px-1">
                     <Link
                       href="/accedi"
-                      onClick={chiudi}
+                      onClick={chiudiPerNavigazione}
                       className="flex h-11 items-center justify-center rounded-full bg-sea font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
                     >
                       Accedi
                     </Link>
                     <Link
                       href="/registrati"
-                      onClick={chiudi}
+                      onClick={chiudiPerNavigazione}
                       className="flex h-11 items-center justify-center rounded-full font-display text-sm font-bold text-sea ring-2 ring-sea transition-colors hover:bg-sea/5"
                     >
                       Registrati
@@ -219,17 +336,25 @@ export default function MenuMobile({
 
                 <Link
                   href="/"
-                  onClick={chiudi}
+                  onClick={chiudiPerNavigazione}
                   className="block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
                 >
                   Vetrina
+                </Link>
+
+                <Link
+                  href="/prodotti"
+                  onClick={chiudiPerNavigazione}
+                  className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
+                >
+                  Tutti i prodotti
                 </Link>
 
                 {gruppi.map(({ radice, figlie }) => (
                   <div key={radice.id} className="mt-1">
                     <Link
                       href={`/categoria/${radice.slug}`}
-                      onClick={chiudi}
+                      onClick={chiudiPerNavigazione}
                       className="block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
                     >
                       {radice.nome}
@@ -240,7 +365,7 @@ export default function MenuMobile({
                           <div key={figlia.id}>
                             <Link
                               href={`/categoria/${figlia.slug}`}
-                              onClick={chiudi}
+                              onClick={chiudiPerNavigazione}
                               className="block rounded-xl px-4 py-2.5 text-[15px] font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
                             >
                               {figlia.nome}
@@ -251,7 +376,7 @@ export default function MenuMobile({
                                   <Link
                                     key={n.id}
                                     href={`/categoria/${n.slug}`}
-                                    onClick={chiudi}
+                                    onClick={chiudiPerNavigazione}
                                     className="block rounded-xl px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-foreground"
                                   >
                                     {n.nome}
@@ -268,7 +393,7 @@ export default function MenuMobile({
 
                 <Link
                   href="/preferiti"
-                  onClick={chiudi}
+                  onClick={chiudiPerNavigazione}
                   className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
                 >
                   I tuoi preferiti
@@ -276,7 +401,7 @@ export default function MenuMobile({
 
                 <Link
                   href="/vieni-a-trovarci"
-                  onClick={chiudi}
+                  onClick={chiudiPerNavigazione}
                   className="mt-1 block rounded-2xl px-4 py-3 font-display text-base font-bold text-foreground transition-colors hover:bg-surface"
                 >
                   Vieni a trovarci
@@ -286,7 +411,7 @@ export default function MenuMobile({
               <div className="border-t border-line bg-surface px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
                 <Link
                   href="/carrello"
-                  onClick={chiudi}
+                  onClick={chiudiPerNavigazione}
                   className="flex h-12 items-center justify-center rounded-full bg-sea font-display text-sm font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5"
                 >
                   Vai al carrello

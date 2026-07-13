@@ -33,15 +33,20 @@ export default function Header({
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-5 sm:gap-4">
-        <div className="flex items-center gap-2">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-5">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Hamburger: solo mobile, prima del wordmark. */}
           <MenuMobile gruppi={gruppi} cliente={cliente} />
 
           {/* Wordmark "Onda Sole": sigillo + "Anna" corallo / "Shop" blu.
-              Il sole "sorge" all'hover grazie a .group su questo Link. */}
+              Il sole "sorge" all'hover grazie a .group su questo Link.
+              Dimensione a scalini: sotto i 360px hamburger + lockup + 3 icone
+              entrano solo a 16px, tra 360 e 640 a 18px. flex-nowrap col ! per
+              vincere sul flex-wrap:wrap di .wordmark (globals.css e fuori dai
+              layer, quindi batte le utility normali): senza, su schermi
+              stretti "Anna Shop" andava a capo sotto il sigillo. */}
           <Link href="/" aria-label="Anna Shop — vai alla home" className="group">
-            <Wordmark className="text-2xl" />
+            <Wordmark className="flex-nowrap! text-base min-[360px]:text-lg sm:text-2xl" />
           </Link>
         </div>
 
@@ -54,6 +59,15 @@ export default function Header({
             className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea lg:inline-flex"
           >
             Vetrina
+          </Link>
+
+          {/* Catalogo completo: unico punto della nav che porta a /prodotti
+              (dove vive anche la ricerca della toolbar). */}
+          <Link
+            href="/prodotti"
+            className="hidden rounded-full px-3 py-2 font-display text-base font-semibold text-foreground transition-colors hover:text-sea lg:inline-flex"
+          >
+            Tutti i prodotti
           </Link>
 
           {/* Menu categorie: inline solo da lg in su. Sotto lg le categorie
@@ -140,7 +154,7 @@ export default function Header({
               <Link
                 href="/account"
                 aria-label="Il tuo account"
-                className="grid h-11 w-11 place-items-center rounded-full bg-surface transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
               >
                 <AvatarCliente
                   nome={cliente.nome}
@@ -189,7 +203,7 @@ export default function Header({
             <Link
               href="/accedi"
               aria-label="Accedi o registrati"
-              className="grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
             >
               <svg
                 width="22"
@@ -212,7 +226,7 @@ export default function Header({
           <Link
             href="/preferiti"
             aria-label="I tuoi preferiti"
-            className="relative grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
           >
             <svg
               width="22"
@@ -230,11 +244,13 @@ export default function Header({
             <PreferitiBadge />
           </Link>
 
-          {/* Carrello: icon-btn tondo (tap target 44px) con badge corallo. */}
+          {/* Carrello: icon-btn tondo (tap target 40px, 44 da sm) con badge
+              corallo. shrink-0 su tutti i tondi: senza, su schermi stretti il
+              flex li schiacciava a ovali. */}
           <Link
             href="/carrello"
             aria-label="Carrello"
-            className="relative grid h-11 w-11 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2"
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-foreground transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2 sm:h-11 sm:w-11"
           >
             <svg
               width="22"
