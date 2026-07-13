@@ -15,6 +15,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { leggiCarrello } from "@/lib/cart";
 import { verificaSessioneCliente } from "@/lib/account/auth";
+import { consentiPerIp } from "@/lib/rate-limit-ip";
 import {
   ambienteStripe,
   assicuraStripeCustomer,
@@ -69,6 +70,14 @@ export async function inviaRichiestaAction(
   const righe = await leggiCarrello();
   if (righe.length === 0) return { error: "Il carrello è vuoto." };
 
+  // Rate limit per-IP (freno anti-flood reale): l'email e un campo libero, quindi
+  // il cap per-email piu sotto si aggira variandola; il per-IP no. Fail-open.
+  if (!(await consentiPerIp("richiesta_ordine"))) {
+    return {
+      error: "Hai inviato troppe richieste di recente. Riprova tra qualche minuto.",
+    };
+  }
+
   // Cliente loggato: l'ordine nasce gia collegato al suo account, anche se
   // l'email di contatto e diversa (e lui a inviare la richiesta). Per gli
   // OSPITI ci pensa il trigger DB sull'email verificata: qui nulla cambia.
@@ -83,15 +92,16 @@ export async function inviaRichiestaAction(
   try {
     const admin = createAdminSupabase();
 
-    // Rate limit best-effort (DB-backed, quindi condiviso tra istanze): frena
-    // flood e doppi invii. Due limiti nella finestra di 60s:
-    //   1) per-email: max 3 (blocca il singolo cliente che spamma).
-    //   2) globale: max 25 richieste in_attesa a prescindere dall'email
-    //      (tetto anti-flood: l'email e un campo libero e variandola il cap
-    //      per-email si aggira, questo no).
-    // TODO: cap per-IP DB-backed per una difesa piu granulare — richiede una
-    // colonna `ip` sulla tabella ordini (migration da fare in futuro).
+    // Rate limit best-effort (DB-backed, condiviso tra istanze). Il freno
+    // anti-flood principale e ora il cap PER-IP (consentiPerIp sopra). Qui
+    // restano, letti dalla tabella `ordini` sulla finestra di 60s:
+    //   1) per-email: max 3 (blocca il singolo indirizzo che spamma);
+    //   2) globale: solo SEGNALE DI ALLARME (log), NON piu un hard-block —
+    //      negare il servizio a TUTTI quando il volume saliva era un DoS sui
+    //      clienti legittimi; il per-IP copre gia il flood da un singolo attore.
     const daPocoIso = new Date(Date.now() - 60_000).toISOString();
+    // Soglia del volume globale oltre cui logghiamo un allarme (nessun blocco).
+    const SOGLIA_ALLARME_GLOBALE = 50;
 
     // Log dell'IP (x-forwarded-for) per tracciabilita del flood; headers() e
     // async in Next 16.
@@ -119,10 +129,12 @@ export async function inviaRichiestaAction(
       .select("id", { count: "exact", head: true })
       .eq("stato", "in_attesa")
       .gte("creato_il", daPocoIso);
-    if ((recentiGlobali ?? 0) >= 25) {
-      return {
-        error: "Servizio momentaneamente occupato. Riprova tra qualche minuto.",
-      };
+    // Solo osservabilita: NON blocchiamo piu il servizio a tutti (era un DoS sui
+    // clienti legittimi). Il flood da un singolo attore lo ferma gia il per-IP.
+    if ((recentiGlobali ?? 0) >= SOGLIA_ALLARME_GLOBALE) {
+      console.warn(
+        `[ordini] volume richieste elevato: ${recentiGlobali} in_attesa/60s`,
+      );
     }
 
     const { data: ordine, error } = await admin

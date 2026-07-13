@@ -17,6 +17,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { embeddingOpenAI } from "@/lib/embeddings";
 import { VERSIONE_MODELLO_EMBEDDING } from "@/lib/embedding-testo";
+import { consentiPerIp } from "@/lib/rate-limit-ip";
 
 type Supabase = SupabaseClient<Database>;
 
@@ -88,6 +89,12 @@ export async function cercaIdSemantici(
   if (!process.env.OPENAI_API_KEY) return null;
   const testo = normalizzaQuery(q);
   if (testo.length < MIN_CHAR_SEMANTICA) return null;
+
+  // Rate limit per-IP: questo percorso e PUBBLICO e anonimo, e ogni cache-miss
+  // costa un embedding OpenAI (awaited, fino a 2.5s) + una scansione pgvector.
+  // Oltre il tetto per-IP si degrada al solo letterale (null), senza pagare il
+  // giro OpenAI ne trattenere la funzione serverless.
+  if (!(await consentiPerIp("ricerca_semantica"))) return null;
 
   try {
     const embedding = await embeddingQueryCached(testo);

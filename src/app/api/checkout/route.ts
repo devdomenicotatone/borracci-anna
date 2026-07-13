@@ -10,6 +10,7 @@ import { getStripe } from "@/lib/stripe";
 import { leggiCarrello, riconciliaCarrello } from "@/lib/cart";
 import { verificaSessioneCliente } from "@/lib/account/auth";
 import { assicuraStripeCustomer } from "@/lib/account/stripe-cliente";
+import { consentiPerIp } from "@/lib/rate-limit-ip";
 import {
   CONSEGNA_MAX_GG,
   CONSEGNA_MIN_GG,
@@ -54,6 +55,14 @@ export async function POST(): Promise<Response> {
       "Configurazione mancante: imposta NEXT_PUBLIC_SITE_URL.",
       501,
     );
+  }
+
+  // Rate limit per-IP: endpoint pubblico (ospite ammesso), nessuna auth. Ogni
+  // chiamata crea una Stripe Checkout Session; senza tetto un anonimo puo
+  // generarne a raffica (rumore in dashboard, erosione del rate limit account
+  // Stripe condiviso, carico DB dalle letture di riconciliazione). Fail-open.
+  if (!(await consentiPerIp("checkout"))) {
+    return erroreJson("Troppe richieste. Riprova tra qualche minuto.", 429);
   }
 
   // 2) Legge il carrello (degrada a [] se Supabase non e configurato).
