@@ -3,13 +3,14 @@
 // Area interattiva della pagina prodotto (PDP): galleria a sinistra + dettagli
 // e acquisto a destra. Selezione a DUE dimensioni: COLORE (campioni) e TAGLIA
 // (chip S–6XL). Scegliere un colore cambia la foto; cliccare una foto seleziona
-// il colore. In modalita "su richiesta" il blocco acquisto diventa un contatto
-// ("Scrivici per la disponibilita"); altrimenti carrello con giacenze.
+// il colore. In modalita "su richiesta" lo STESSO blocco acquisto aggiunge alla
+// richiesta senza vincolo di giacenza (contatti in secondo piano); altrimenti
+// carrello con giacenze.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import BarraAcquistoMobile from "@/components/prodotto/BarraAcquistoMobile";
 import BloccoAcquisto from "@/components/prodotto/BloccoAcquisto";
-import BloccoRichiesta from "@/components/prodotto/BloccoRichiesta";
 import CondividiProdotto from "@/components/prodotto/CondividiProdotto";
 import CuorePreferito from "@/components/preferiti/CuorePreferito";
 import GalleriaProdotto, {
@@ -172,6 +173,44 @@ export default function ProdottoDettaglio({
   const senzaVarianti = varianti.length === 0;
   const esaurito = !senzaVarianti && varianti.every((v) => v.stock <= 0);
 
+  // Quantita scelta dall'utente: vive qui (non nel BloccoAcquisto) perche e
+  // condivisa con la barra mobile, in ENTRAMBI i flussi: le due CTA aggiungono
+  // sempre la stessa quantita. La quantita EFFETTIVA e derivata al render
+  // (niente effetti): in vendita diretta e la scelta cappata allo stock della
+  // variante corrente (al cambio taglia/colore resta cosi sempre un valore
+  // acquistabile); su richiesta lo stock non vincola (spesso e proprio 0).
+  const [quantitaScelta, setQuantitaScelta] = useState(1);
+  const quantita = suRichiesta
+    ? Math.max(1, quantitaScelta)
+    : Math.min(Math.max(1, quantitaScelta), (varianteScelta?.stock ?? 0) || 1);
+
+  // Richiamo dei selettori dalla barra mobile: senza una variante acquistabile
+  // il tap scorre fin qui e accende per qualche istante un anello sul
+  // selettore taglie (o su quello colori, se il prodotto non ha taglie),
+  // invece di aggiungere a vuoto.
+  const taglieRef = useRef<HTMLFieldSetElement | null>(null);
+  const coloriRef = useRef<HTMLFieldSetElement | null>(null);
+  const [selettoriEvidenziati, setSelettoriEvidenziati] = useState(false);
+  const timerEvidenzia = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timerEvidenzia.current) clearTimeout(timerEvidenzia.current);
+    },
+    [],
+  );
+
+  function richiamaSelettori() {
+    const destinazione = taglieRef.current ?? coloriRef.current;
+    destinazione?.scrollIntoView({ behavior: "smooth", block: "center" });
+    destinazione?.focus({ preventScroll: true });
+    setSelettoriEvidenziati(true);
+    if (timerEvidenzia.current) clearTimeout(timerEvidenzia.current);
+    timerEvidenzia.current = setTimeout(
+      () => setSelettoriEvidenziati(false),
+      1600,
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-[1.15fr_1fr]">
       {/* Galleria */}
@@ -265,9 +304,18 @@ export default function ProdottoDettaglio({
           </p>
         )}
 
-        {/* Selettore COLORE */}
+        {/* Selettore COLORE (evidenziato dalla barra mobile solo se il
+            prodotto non ha taglie: altrimenti la destinazione e la taglia) */}
         {colori.length > 0 && (
-          <fieldset className="mt-8">
+          <fieldset
+            ref={coloriRef}
+            tabIndex={-1}
+            className={`mt-8 rounded-2xl outline-none transition-shadow ${
+              selettoriEvidenziati && taglie.length === 0
+                ? "ring-2 ring-coral ring-offset-4 ring-offset-background"
+                : ""
+            }`}
+          >
             <legend className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-muted">
               Colore
               {coloreSel && (
@@ -329,7 +377,15 @@ export default function ProdottoDettaglio({
 
         {/* Selettore TAGLIA */}
         {taglie.length > 0 && (
-          <fieldset className="mt-6">
+          <fieldset
+            ref={taglieRef}
+            tabIndex={-1}
+            className={`mt-6 rounded-2xl outline-none transition-shadow ${
+              selettoriEvidenziati
+                ? "ring-2 ring-coral ring-offset-4 ring-offset-background"
+                : ""
+            }`}
+          >
             <legend className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-muted">
               Taglia
               {tagliaSel && (
@@ -367,12 +423,17 @@ export default function ProdottoDettaglio({
           </fieldset>
         )}
 
-        {/* Blocco acquisto / contatto */}
+        {/* Blocco acquisto / richiesta: stesso componente e stessa quantita
+            condivisa con la barra mobile in entrambe le modalita (su richiesta
+            cambiano solo vincolo di stock, CTA e contatti). */}
         <div className="mt-8">
           {suRichiesta ? (
-            <BloccoRichiesta
+            <BloccoAcquisto
               prodotto={prodotto}
               variante={varianteScelta}
+              quantita={quantita}
+              onQuantita={setQuantitaScelta}
+              suRichiesta
               colore={coloreSel}
               taglia={tagliaSel}
             />
@@ -385,7 +446,12 @@ export default function ProdottoDettaglio({
               Prodotto esaurito.
             </p>
           ) : (
-            <BloccoAcquisto prodotto={prodotto} variante={varianteScelta} />
+            <BloccoAcquisto
+              prodotto={prodotto}
+              variante={varianteScelta}
+              quantita={quantita}
+              onQuantita={setQuantitaScelta}
+            />
           )}
         </div>
 
@@ -393,6 +459,21 @@ export default function ProdottoDettaglio({
           SKU prodotto: {prodotto.codice ?? prodotto.slug}
         </p>
       </div>
+
+      {/* Barra d'acquisto fissa in basso, solo mobile: su schermi stretti il
+          blocco acquisto arriva dopo tutta la colonna dettagli e chi scorre i
+          correlati perderebbe la CTA. E fixed: non partecipa alla griglia. */}
+      <BarraAcquistoMobile
+        prodotto={prodotto}
+        variante={varianteScelta}
+        quantita={quantita}
+        colore={coloreSel}
+        taglia={tagliaSel}
+        suRichiesta={suRichiesta}
+        senzaVarianti={senzaVarianti}
+        esaurito={esaurito}
+        onSelezioneMancante={richiamaSelettori}
+      />
     </div>
   );
 }

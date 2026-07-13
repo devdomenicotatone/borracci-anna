@@ -1,41 +1,85 @@
 "use client";
 
-// Blocco acquisto (modalita vendita diretta): selettore quantita + bottone
-// "Aggiungi al carrello". La scelta di colore/taglia avviene a monte
-// (ProdottoDettaglio); qui arriva gia la variante risolta. Delega al
-// CartProvider (badge ottimistico, mini-cart, toast gestiti li).
+// Blocco acquisto della PDP, in DUE modalita che condividono selettore
+// quantita e bottone (la scelta di colore/taglia avviene a monte, in
+// ProdottoDettaglio: qui arriva gia la variante risolta):
+// - vendita diretta: quantita cappata allo stock + "Aggiungi al carrello";
+// - su richiesta:    nessun vincolo di giacenza + "Aggiungi alla richiesta"
+//   (dal carrello si invia la richiesta, il negozio conferma la disponibilita
+//   e solo dopo si paga), col contatto rapido ("Scrivici") in secondo piano.
+// Anche la quantita vive a monte, perche e condivisa con la barra mobile: le
+// due CTA aggiungono cosi SEMPRE la stessa quantita, in entrambi i flussi.
+// Delega al CartProvider (badge ottimistico, mini-cart, toast gestiti li).
 
 import { useState, useTransition } from "react";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import { NEGOZIO } from "@/lib/negozio";
 import type { Prodotto, Variante } from "@/lib/types";
 
 export default function BloccoAcquisto({
   prodotto,
   variante,
+  quantita,
+  onQuantita,
+  suRichiesta = false,
+  colore = null,
+  taglia = null,
 }: {
   prodotto: Prodotto;
   variante: Variante | null;
+  /** Quantita effettiva (in vendita diretta gia cappata allo stock a monte). */
+  quantita: number;
+  onQuantita: (n: number) => void;
+  /** Modalita "su richiesta": lo stock non vincola, si aggiunge alla richiesta. */
+  suRichiesta?: boolean;
+  /** Selezione corrente, per errori e contatto rapido (solo su richiesta). */
+  colore?: string | null;
+  taglia?: string | null;
 }) {
   const { aggiungi } = useCarrello();
-  const [quantitaScelta, setQuantitaScelta] = useState<number>(1);
   const [errore, setErrore] = useState<string | null>(null);
   const [inCorso, startTransition] = useTransition();
 
   const stockMax = variante?.stock ?? 0;
-  const stockBasso = stockMax > 0 && stockMax <= 3;
+  const stockBasso = !suRichiesta && stockMax > 0 && stockMax <= 3;
+  // Tetto della quantita: lo stock in vendita diretta, NESSUNO su richiesta
+  // (la disponibilita la conferma il negozio dopo l'invio della richiesta).
+  const quantitaMax = suRichiesta ? Number.POSITIVE_INFINITY : stockMax || 1;
 
-  // Quantita EFFETTIVA: la scelta dell'utente cappata allo stock della variante
-  // corrente, derivata al render (niente effetti). Al cambio taglia/colore
-  // l'input mostra cosi SEMPRE un valore acquistabile: prima continuava a
-  // mostrare la quantita della variante precedente (es. 5) mentre al click ne
-  // venivano aggiunte meno (stock 2), in silenzio.
-  const quantita = Math.min(Math.max(1, quantitaScelta), stockMax || 1);
-  const puoAggiungere = !!variante && stockMax > 0 && quantita >= 1;
+  // Aggiungibile ADESSO: in vendita serve stock, su richiesta basta la variante.
+  const puoAggiungere = suRichiesta
+    ? !!variante
+    : !!variante && stockMax > 0 && quantita >= 1;
+
+  // Contatto rapido in secondo piano (solo su richiesta): email/WhatsApp/
+  // telefono precompilati con prodotto e selezione corrente.
+  const dettagli = [colore, taglia ? `Taglia ${taglia}` : null].filter(Boolean);
+  const testo =
+    `Ciao! Vorrei sapere la disponibilità di "${prodotto.nome}"` +
+    (dettagli.length ? ` (${dettagli.join(", ")})` : "") +
+    `. Grazie!`;
+  const mailto =
+    `mailto:${NEGOZIO.email}` +
+    `?subject=${encodeURIComponent(`Disponibilità: ${prodotto.nome}`)}` +
+    `&body=${encodeURIComponent(testo)}`;
+  const whatsapp = NEGOZIO.whatsapp
+    ? `https://wa.me/${NEGOZIO.whatsapp}?text=${encodeURIComponent(testo)}`
+    : null;
+  const tel = NEGOZIO.telefono
+    ? `tel:${NEGOZIO.telefono.replace(/[^\d+]/g, "")}`
+    : null;
 
   function handleAggiungi() {
     if (!variante) {
-      setErrore("Seleziona colore e taglia.");
+      // Su richiesta con colore E taglia scelti: la variante mancante e una
+      // combinazione che non esiste (matrice colore/taglia sparsa), non una
+      // selezione incompleta.
+      setErrore(
+        suRichiesta && colore && taglia
+          ? "Questa combinazione di colore e taglia non è disponibile: scegline un'altra."
+          : "Seleziona colore e taglia.",
+      );
       return;
     }
     setErrore(null);
@@ -59,7 +103,7 @@ export default function BloccoAcquisto({
             type="button"
             aria-label="Diminuisci quantita"
             disabled={quantita <= 1}
-            onClick={() => setQuantitaScelta(Math.max(1, quantita - 1))}
+            onClick={() => onQuantita(Math.max(1, quantita - 1))}
             className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
           >
             -
@@ -68,29 +112,29 @@ export default function BloccoAcquisto({
             id="quantita"
             type="number"
             min={1}
-            max={stockMax || 1}
+            max={Number.isFinite(quantitaMax) ? quantitaMax : undefined}
             value={quantita}
             onChange={(e) => {
               const n = Number.parseInt(e.target.value, 10);
               if (Number.isNaN(n)) {
-                setQuantitaScelta(1);
+                onQuantita(1);
                 return;
               }
-              setQuantitaScelta(Math.min(Math.max(1, n), stockMax || 1));
+              onQuantita(Math.min(Math.max(1, n), quantitaMax));
             }}
             className="w-12 bg-transparent text-center font-display text-lg font-bold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           <button
             type="button"
             aria-label="Aumenta quantita"
-            disabled={quantita >= stockMax}
-            onClick={() => setQuantitaScelta(Math.min(stockMax || 1, quantita + 1))}
+            disabled={quantita >= quantitaMax}
+            onClick={() => onQuantita(Math.min(quantitaMax, quantita + 1))}
             className="grid h-11 w-11 place-items-center rounded-full text-xl font-bold leading-none text-sea transition-colors hover:bg-surface disabled:opacity-40"
           >
             +
           </button>
         </div>
-        {variante && (
+        {!suRichiesta && variante && (
           <p
             className={`mt-2 text-xs ${stockBasso ? "font-semibold text-coral-ink" : "text-muted"}`}
           >
@@ -99,12 +143,15 @@ export default function BloccoAcquisto({
         )}
       </div>
 
-      {/* Azione */}
+      {/* Azione. Su richiesta il bottone NON e disabilitato quando manca la
+          variante: cliccandolo mostra il motivo (selezione incompleta o
+          combinazione inesistente) invece di restare inerte e muto. */}
       <button
         type="button"
         onClick={handleAggiungi}
-        disabled={!puoAggiungere || inCorso}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 sm:w-auto"
+        disabled={suRichiesta ? inCorso : !puoAggiungere || inCorso}
+        aria-disabled={suRichiesta ? !puoAggiungere : undefined}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
       >
         <svg
           className="h-5 w-5"
@@ -120,13 +167,57 @@ export default function BloccoAcquisto({
           <circle cx="18" cy="20" r="1.4" />
           <path d="M2.5 3h2l2.3 12.2a1.6 1.6 0 0 0 1.6 1.3h8.5a1.6 1.6 0 0 0 1.6-1.3L21 7H6" />
         </svg>
-        {inCorso ? "Aggiunta in corso..." : "Aggiungi al carrello"}
+        {inCorso
+          ? "Aggiunta in corso..."
+          : suRichiesta
+            ? "Aggiungi alla richiesta"
+            : "Aggiungi al carrello"}
       </button>
 
       {errore && (
         <p role="alert" className="text-sm font-semibold text-coral-ink">
           {errore}
         </p>
+      )}
+
+      {suRichiesta && (
+        <>
+          <p className="max-w-prose text-xs text-muted">
+            <span className="font-semibold text-foreground">
+              Nessun pagamento ora.
+            </span>{" "}
+            Dal carrello invii la richiesta: confermiamo la disponibilità e solo
+            dopo paghi.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-4 text-sm">
+            <span className="text-muted">Preferisci chiedere prima?</span>
+            <a
+              href={mailto}
+              className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+            >
+              Scrivici via email
+            </a>
+            {whatsapp && (
+              <a
+                href={whatsapp}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+              >
+                WhatsApp
+              </a>
+            )}
+            {tel && (
+              <a
+                href={tel}
+                className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+              >
+                Chiamaci
+              </a>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
