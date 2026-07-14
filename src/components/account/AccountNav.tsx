@@ -115,7 +115,12 @@ export default function AccountNav() {
   });
 
   return (
-    <nav aria-label="Il tuo account">
+    // min-w-0: da item della griglia del layout account, senza questo la nav
+    // impone come larghezza minima la riga intera di pill (che non va a capo)
+    // e su mobile allarga il layout viewport oltre lo schermo, rompendo
+    // l'intera pagina. Col minimo azzerato le pill scorrono nel proprio
+    // overflow-x-auto come previsto.
+    <nav aria-label="Il tuo account" className="min-w-0">
       {/* Mobile: pill orizzontali scrollabili */}
       <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 lg:hidden">
         {voci}
