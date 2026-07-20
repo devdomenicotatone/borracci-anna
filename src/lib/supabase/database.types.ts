@@ -176,6 +176,7 @@ export interface Database {
           confermato_il: string | null;
           stripe_session_id: string | null;
           stock_scalato: boolean;
+          stock_mancante: Json | null;
           costo_spedizione_cents: number | null;
           spedizione_indirizzo: Json | null;
           user_id: string | null;
@@ -194,6 +195,7 @@ export interface Database {
           confermato_il?: string | null;
           stripe_session_id?: string | null;
           stock_scalato?: boolean;
+          stock_mancante?: Json | null;
           costo_spedizione_cents?: number | null;
           spedizione_indirizzo?: Json | null;
           user_id?: string | null;
@@ -212,6 +214,7 @@ export interface Database {
           confermato_il?: string | null;
           stripe_session_id?: string | null;
           stock_scalato?: boolean;
+          stock_mancante?: Json | null;
           costo_spedizione_cents?: number | null;
           spedizione_indirizzo?: Json | null;
           user_id?: string | null;

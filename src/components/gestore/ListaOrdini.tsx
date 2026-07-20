@@ -12,6 +12,7 @@ import {
   annullaOrdineAction,
   segnaPagatoOrdineAction,
   type EsitoOrdine,
+  type VoceStockMancante,
 } from "@/lib/gestore/ordini-actions";
 import ConfermaDialog from "@/components/gestore/ConfermaDialog";
 import { useToast } from "@/components/gestore/Toaster";
@@ -43,7 +44,13 @@ export interface OrdineGestore {
   token: string | null;
   confermato_il: string | null;
   creato_il: string;
+  stock_mancante: VoceStockMancante[] | null;
   ordine_righe: RigaOrdine[] | null;
+}
+
+/** Voci di deficit dell'ordine, con guardia sul jsonb (mai fidarsi del cast). */
+function vociStockMancante(o: OrdineGestore): VoceStockMancante[] {
+  return Array.isArray(o.stock_mancante) ? o.stock_mancante : [];
 }
 
 /** Converte un importo in euro digitato (es. "5,90" o "5.90") in centesimi. */
@@ -156,7 +163,17 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
         return;
       }
       setLista((l) =>
-        l.map((o) => (o.id === id ? { ...o, stato: nuovoStato } : o)),
+        l.map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                stato: nuovoStato,
+                // Deficit registrato dal pagamento manuale: fuso subito nello
+                // stato locale, cosi badge e dettaglio compaiono senza reload.
+                stock_mancante: esito.stockMancante ?? o.stock_mancante,
+              }
+            : o,
+        ),
       );
       // Avviso collaterale (es. email al cliente non partita): stile errore
       // perche richiede un'azione della titolare, anche se l'operazione e ok.
@@ -352,6 +369,10 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
           {visibili.map((o) => {
             const righe = o.ordine_righe ?? [];
             const chip = CHIP[o.stato];
+            // Deficit di giacenza all'incasso (ordini.stock_mancante): badge +
+            // dettaglio, cosi la titolare lo vede nel pannello e non solo
+            // nell'email di avviso del webhook.
+            const stockMancante = vociStockMancante(o);
             // Bozze di rimozione (solo per ordini in attesa) e totale live.
             const bozze = o.stato === "in_attesa" ? (rimozioni[o.id] ?? {}) : {};
             const numRimosse = righe.filter((r) => bozze[r.id]).length;
@@ -384,12 +405,19 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                       </p>
                       <p className="text-xs text-muted">{dataIt(o.creato_il)}</p>
                     </div>
-                    {/* Chip duplicato: qui sotto lg, nel rail a destra da lg in su */}
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold lg:hidden ${chip.cls}`}
-                    >
-                      {chip.label}
-                    </span>
+                    {/* Chip duplicati: qui sotto lg, nel rail a destra da lg in su */}
+                    <div className="flex flex-wrap justify-end gap-1.5 lg:hidden">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${chip.cls}`}
+                      >
+                        {chip.label}
+                      </span>
+                      {stockMancante.length > 0 && (
+                        <span className="rounded-full bg-coral/15 px-2.5 py-1 text-xs font-bold text-coral-ink">
+                          Stock insufficiente
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <ul className="mt-3 space-y-2 border-t border-line pt-3">
@@ -501,6 +529,29 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                     })}
                   </ul>
 
+                  {/* Dettaglio del deficit: stesso contenuto dell'email di
+                      avviso, per decidere (riassortimento, attesa o rimborso)
+                      senza andare a ripescare l'email. */}
+                  {stockMancante.length > 0 && (
+                    <div className="mt-2 rounded-xl bg-coral/10 px-3 py-2 text-xs text-coral-ink">
+                      <p className="font-bold">
+                        Giacenza insufficiente al momento dell&rsquo;incasso
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {stockMancante.map((v, i) => (
+                          <li key={`${v.sku ?? "sku"}-${i}`} className="tabular-nums">
+                            SKU {v.sku ?? "?"}: ordinati {v.richiesti},
+                            disponibili {v.disponibili}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1">
+                        Verifica in negozio e, se la merce manca davvero,
+                        contatta il cliente.
+                      </p>
+                    </div>
+                  )}
+
                   {o.note && (
                     <p className="mt-2 rounded-xl bg-surface px-3 py-2 text-xs text-muted">
                       Nota: {o.note}
@@ -515,6 +566,11 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                   >
                     {chip.label}
                   </span>
+                  {stockMancante.length > 0 && (
+                    <span className="hidden rounded-full bg-coral/15 px-2.5 py-1 text-xs font-bold text-coral-ink lg:inline-flex">
+                      Stock insufficiente
+                    </span>
+                  )}
 
                   <div className="flex flex-col lg:items-end lg:text-right">
                     <span className="font-display text-sm font-bold tabular-nums text-sea">

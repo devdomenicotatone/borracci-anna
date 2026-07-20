@@ -59,12 +59,26 @@ export interface RimozioneRiga {
   motivo: string;
 }
 
+/**
+ * Voce del deficit di giacenza fotografato dalla RPC alla finalizzazione
+ * (ordini.stock_mancante, jsonb; NULL = tutto ok). Stesso contratto del
+ * webhook Stripe (migration 20260720170000).
+ */
+export interface VoceStockMancante {
+  sku: string | null;
+  richiesti: number;
+  disponibili: number;
+}
+
 export interface EsitoOrdine {
   ok: boolean;
   error?: string;
   /** Operazione riuscita MA con un problema collaterale da segnalare alla
    *  titolare (es. email al cliente non partita): il pannello lo mostra. */
   avviso?: string;
+  /** Deficit di giacenza registrato dalla RPC del pagamento manuale: il
+   *  pannello lo fonde nello stato locale per mostrare subito il badge. */
+  stockMancante?: VoceStockMancante[];
 }
 
 /**
@@ -423,7 +437,35 @@ export async function segnaPagatoOrdineAction(id: string): Promise<EsitoOrdine> 
     // cliente non completa anche il pagamento online (doppio incasso).
     await scadiSessioneOrdine(id);
 
+    // Deficit fotografato dalla RPC nella stessa transazione del decremento:
+    // a differenza del percorso Stripe qui NESSUNA email di avviso parte
+    // (l'email oversell vive solo nel webhook), quindi il pannello e' l'unico
+    // posto dove la titolare puo' accorgersene. Rilettura best effort: se
+    // fallisce il pagato resta valido, solo senza avviso immediato.
+    let stockMancante: VoceStockMancante[] | undefined;
+    try {
+      const { data } = await admin
+        .from("ordini")
+        .select("stock_mancante")
+        .eq("id", id)
+        .maybeSingle();
+      const grezzo = data?.stock_mancante;
+      if (Array.isArray(grezzo) && grezzo.length > 0) {
+        stockMancante = grezzo as unknown as VoceStockMancante[];
+      }
+    } catch {
+      // Best effort: il badge comparira' comunque alla prossima apertura.
+    }
+
     revalidatePath("/gestore/ordini");
+    if (stockMancante) {
+      return {
+        ok: true,
+        stockMancante,
+        avviso:
+          "Segnato pagato, ma la giacenza non copre l'ordine: vedi il dettaglio in rosso sulla card e verifica in negozio.",
+      };
+    }
     return { ok: true };
   } catch {
     return { ok: false, error: "Errore di rete. Riprova." };
