@@ -505,6 +505,73 @@ export async function svuotaCarrello(): Promise<EsitoCarrello> {
   }
 }
 
+/**
+ * Sottoinsieme del carrello su cui operare nei flussi separati del carrello
+ * misto: righe in pronta consegna ("disponibili") o su richiesta ("su_richiesta").
+ */
+export type SottoinsiemeCarrello = "disponibili" | "su_richiesta";
+
+/**
+ * Rimuove dal carrello SOLO le righe del sottoinsieme indicato, lasciando le
+ * altre. Serve ai flussi separati del carrello misto: dopo il pagamento diretto
+ * restano le righe su richiesta, dopo l'invio della richiesta restano quelle in
+ * pronta consegna. Il cookie NON viene azzerato: il carrello resta vivo per il
+ * flusso rimanente. Ritorna lo stato aggiornato.
+ */
+export async function svuotaCarrelloParziale(
+  quali: SottoinsiemeCarrello,
+): Promise<EsitoCarrello> {
+  try {
+    const supabase = creaAdminCarrello();
+    if (!supabase) {
+      return esitoVuoto(false, "non_configurato");
+    }
+    const cartId = await leggiCartId();
+    if (!cartId) {
+      return esitoVuoto(true);
+    }
+
+    const { data, error } = await supabase
+      .from("carrello_righe")
+      .select("id, prodotto:prodotti (disponibilita_su_richiesta)")
+      .eq("carrello_id", cartId);
+    if (error || !data) {
+      return esitoCorrente(false, "errore");
+    }
+
+    // Righe orfane (prodotto non piu leggibile): flag assente -> contano come
+    // "disponibili". Sono invisibili all'utente e non pagabili: toglierle nel
+    // passaggio post-pagamento e solo pulizia, mai una perdita.
+    const bersaglio = quali === "su_richiesta";
+    const ids = (
+      data as unknown as {
+        id: string;
+        prodotto:
+          | { disponibilita_su_richiesta: boolean }
+          | { disponibilita_su_richiesta: boolean }[]
+          | null;
+      }[]
+    )
+      .filter(
+        (r) => !!primo(r.prodotto)?.disponibilita_su_richiesta === bersaglio,
+      )
+      .map((r) => r.id);
+
+    if (ids.length > 0) {
+      const { error: errDel } = await supabase
+        .from("carrello_righe")
+        .delete()
+        .in("id", ids)
+        .eq("carrello_id", cartId);
+      if (errDel) return esitoCorrente(false, "errore");
+      revalidatePath("/carrello");
+    }
+    return esitoCorrente(true);
+  } catch {
+    return esitoCorrente(false, "errore");
+  }
+}
+
 /** Forma grezza della riga per la riconciliazione (stock + flag prodotto). */
 interface RigaRiconc {
   id: string;

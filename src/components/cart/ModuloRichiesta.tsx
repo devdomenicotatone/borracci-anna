@@ -22,11 +22,21 @@ export interface PrefillRichiesta {
 
 export default function ModuloRichiesta({
   prefill,
+  misto = false,
+  onInviata,
 }: {
   prefill?: PrefillRichiesta | null;
+  /**
+   * Carrello MISTO (ci sono anche righe in pronta consegna): la richiesta copre
+   * solo gli articoli su richiesta; a invio riuscito si tolgono SOLO quelle
+   * righe e si resta sul carrello (via onInviata), niente redirect.
+   */
+  misto?: boolean;
+  /** Notifica l'invio riuscito col token dell'ordine (solo carrello misto). */
+  onInviata?: (token: string) => void;
 }) {
   const router = useRouter();
-  const { svuota, attendiSincronizzazioni } = useCarrello();
+  const { svuota, svuotaParziale, attendiSincronizzazioni } = useCarrello();
   const [stato, setStato] = useState<StatoRichiesta>({});
   const [pending, startTransition] = useTransition();
 
@@ -45,6 +55,19 @@ export default function ModuloRichiesta({
         await conTimeout(attendiSincronizzazioni(), 5000).catch(() => {});
         const esito = await conTimeout(inviaRichiestaAction({}, formData), 15000);
         if (esito.token) {
+          if (misto && onInviata) {
+            // Carrello misto: se ne vanno SOLO le righe su richiesta appena
+            // ordinate; quelle in pronta consegna restano da pagare. Niente
+            // redirect: il banner del carrello conferma l'invio e l'utente
+            // completa il pagamento del resto.
+            try {
+              await svuotaParziale("su_richiesta");
+            } catch {
+              // ignorato: l'ordine esiste già, il carrello si riallinea poi.
+            }
+            onInviata(esito.token);
+            return;
+          }
           // Ordine creato: svuota il carrello (client + server) e vai allo
           // stato. Se lo svuotamento fallisce (rete), non bloccare: l'ordine
           // esiste già e /ordine/[token] è comunque la destinazione giusta.

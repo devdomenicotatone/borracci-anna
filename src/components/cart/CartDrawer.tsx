@@ -139,6 +139,14 @@ export default function CartDrawer() {
 
   if (!drawerAperto) return null;
 
+  // Composizione del carrello: guida il CTA del footer. Misto = entrambe le
+  // nature presenti -> i due flussi (pagamento / richiesta) si completano
+  // dalla pagina carrello, in sezioni separate.
+  const nRichiesta = righe.filter(
+    (r) => r.prodotto.disponibilita_su_richiesta,
+  ).length;
+  const misto = nRichiesta > 0 && nRichiesta < righe.length;
+
   return (
     <div className="fixed inset-0 z-50" aria-hidden={false}>
       {/* Overlay */}
@@ -230,9 +238,34 @@ export default function CartDrawer() {
               </p>
 
               <div className="mt-4">
-                {/* Carrello con articoli su richiesta: niente pagamento diretto,
-                    si passa dal flusso richiesta (coerente con /carrello). */}
-                {righe.some((r) => r.prodotto.disponibilita_su_richiesta) ? (
+                {/* CTA per natura del carrello: solo pronta consegna -> paga
+                    subito; solo su richiesta -> flusso richiesta; MISTO -> i
+                    due flussi sono separati e si completano dalla pagina
+                    carrello (il drawer non li replica in miniatura). */}
+                {nRichiesta === 0 ? (
+                  <CheckoutButton />
+                ) : misto ? (
+                  <>
+                    <p className="mb-3 text-xs text-muted">
+                      Hai articoli{" "}
+                      <span className="font-semibold text-foreground">
+                        disponibili subito
+                      </span>{" "}
+                      e{" "}
+                      <span className="font-semibold text-foreground">
+                        su richiesta
+                      </span>
+                      : dal carrello li completi in due passaggi separati.
+                    </p>
+                    <Link
+                      href="/carrello"
+                      onClick={chiudiPerNavigazione}
+                      className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-[.98]"
+                    >
+                      Vai al carrello
+                    </Link>
+                  </>
+                ) : (
                   <Link
                     href="/carrello"
                     onClick={chiudiPerNavigazione}
@@ -240,12 +273,14 @@ export default function CartDrawer() {
                   >
                     Procedi con la richiesta
                   </Link>
-                ) : (
-                  <CheckoutButton />
                 )}
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              {/* Nel misto il primario e gia "Vai al carrello": doppiarlo qui
+                  sotto sarebbe rumore, resta il solo "Continua acquisti". */}
+              <div
+                className={`mt-3 grid gap-3 ${misto ? "grid-cols-1" : "grid-cols-2"}`}
+              >
                 <button
                   type="button"
                   onClick={chiudi}
@@ -253,13 +288,15 @@ export default function CartDrawer() {
                 >
                   Continua acquisti
                 </button>
-                <Link
-                  href="/carrello"
-                  onClick={chiudiPerNavigazione}
-                  className="flex h-11 items-center justify-center rounded-full bg-surface-2 px-4 font-display text-sm font-bold text-sea transition hover:bg-line active:scale-[.98]"
-                >
-                  Vai al carrello
-                </Link>
+                {!misto && (
+                  <Link
+                    href="/carrello"
+                    onClick={chiudiPerNavigazione}
+                    className="flex h-11 items-center justify-center rounded-full bg-surface-2 px-4 font-display text-sm font-bold text-sea transition hover:bg-line active:scale-[.98]"
+                  >
+                    Vai al carrello
+                  </Link>
+                )}
               </div>
             </div>
           </>

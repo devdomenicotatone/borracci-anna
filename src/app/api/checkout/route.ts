@@ -71,12 +71,17 @@ export async function POST(): Promise<Response> {
     return erroreJson("Il carrello è vuoto.", 400);
   }
 
-  // Articoli "su richiesta": niente pagamento diretto. Devono passare dal flusso
-  // richiesta -> conferma del gestore. Difesa lato server contro un checkout che
-  // aggirerebbe la conferma di disponibilita.
-  if (righe.some((riga) => riga.prodotto.disponibilita_su_richiesta)) {
+  // Sezioni separate: il pagamento diretto copre SOLO le righe in pronta
+  // consegna. Gli articoli "su richiesta" non entrano mai nella sessione (la
+  // conferma di disponibilita resta al gestore, via flusso richiesta) e restano
+  // nel carrello dopo il pagamento (li rimuove la success page, parzialmente).
+  // Prima un carrello misto veniva respinto in blocco con 409.
+  const righeDirette = righe.filter(
+    (riga) => !riga.prodotto.disponibilita_su_richiesta,
+  );
+  if (righeDirette.length === 0) {
     return erroreJson(
-      "Alcuni articoli sono disponibili su richiesta: invia prima la richiesta dal carrello.",
+      "Gli articoli nel carrello sono su richiesta: invia la richiesta dal carrello.",
       409,
     );
   }
@@ -103,7 +108,7 @@ export async function POST(): Promise<Response> {
   }
 
   // 3) Prepara i line items dai prezzi in centesimi (currency eur).
-  const lineItems = righe.map((riga) => ({
+  const lineItems = righeDirette.map((riga) => ({
     quantity: riga.quantita,
     price_data: {
       currency: "eur",
@@ -126,7 +131,7 @@ export async function POST(): Promise<Response> {
     },
   }));
 
-  const totaleCents = righe.reduce(
+  const totaleCents = righeDirette.reduce(
     (acc, riga) => acc + riga.prodotto.prezzo_cents * riga.quantita,
     0,
   );

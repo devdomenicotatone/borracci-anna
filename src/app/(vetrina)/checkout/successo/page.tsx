@@ -8,6 +8,7 @@ import Link from "next/link";
 
 import SvuotaCarrelloAlSuccesso from "@/components/cart/SvuotaCarrelloAlSuccesso";
 import { verificaSessioneCliente } from "@/lib/account/auth";
+import { leggiCarrello } from "@/lib/cart";
 import { CONSEGNA_MAX_GG, CONSEGNA_MIN_GG } from "@/lib/spedizione";
 import { getStripe } from "@/lib/stripe";
 
@@ -90,6 +91,18 @@ export default async function CheckoutSuccessoPage({
 
   const inAttesa = esito === "in_attesa";
 
+  // Carrello misto: il pagamento ha coperto solo la parte in pronta consegna.
+  // Se restano articoli su richiesta, il secondo flusso e ancora da completare:
+  // va detto QUI, o l'utente crede di aver finito. (Il conteggio non risente
+  // dello svuotamento parziale client-side: quello toglie solo le righe pagate.)
+  let richiestaResidua = 0;
+  if (!inAttesa) {
+    const righeCarrello = await leggiCarrello();
+    richiestaResidua = righeCarrello
+      .filter((r) => r.prodotto.disponibilita_su_richiesta)
+      .reduce((a, r) => a + r.quantita, 0);
+  }
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
       {/* Svuotiamo il carrello SOLO a pagamento verificato: se il pagamento e
@@ -120,6 +133,30 @@ export default async function CheckoutSuccessoPage({
             ? "Stiamo registrando il pagamento: appena confermato riceverai una email con il riepilogo dell'ordine."
             : "Il pagamento è andato a buon fine. Riceverai a breve una email di conferma con il riepilogo dell'ordine."}
         </p>
+
+        {/* Carrello misto: promemoria del flusso richiesta ancora aperto. */}
+        {richiestaResidua > 0 && (
+          <div className="mt-6 rounded-2xl bg-surface-2 p-4 text-left">
+            <p className="text-sm text-muted">
+              <span className="font-bold text-foreground">
+                Nel carrello hai ancora {richiestaResidua}{" "}
+                {richiestaResidua === 1
+                  ? "articolo su richiesta"
+                  : "articoli su richiesta"}
+                .
+              </span>{" "}
+              {richiestaResidua === 1
+                ? "Non fa parte di questo pagamento: invia la richiesta e lo paghi solo dopo la nostra conferma di disponibilità."
+                : "Non fanno parte di questo pagamento: invia la richiesta e li paghi solo dopo la nostra conferma di disponibilità."}
+            </p>
+            <Link
+              href="/carrello#richiesta"
+              className="mt-3 inline-flex h-11 items-center justify-center rounded-full bg-coral px-5 font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+            >
+              Invia la richiesta
+            </Link>
+          </div>
+        )}
 
         {/* Prossimi passi */}
         <ul className="mt-6 space-y-2 text-left text-sm text-muted">

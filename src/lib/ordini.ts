@@ -67,8 +67,20 @@ export async function inviaRichiestaAction(
   if (!email || !emailValida(email)) errors.email = "Inserisci un'email valida.";
   if (Object.keys(errors).length > 0) return { errors };
 
-  const righe = await leggiCarrello();
-  if (righe.length === 0) return { error: "Il carrello è vuoto." };
+  const carrello = await leggiCarrello();
+  if (carrello.length === 0) return { error: "Il carrello è vuoto." };
+
+  // Sezioni separate del carrello misto: la richiesta copre SOLO gli articoli
+  // su richiesta. Quelli in pronta consegna si pagano subito con il checkout
+  // diretto e NON entrano nell'ordine differito (prima un carrello misto veniva
+  // fuso in un'unica richiesta). Restano nel carrello dopo l'invio.
+  const righe = carrello.filter((r) => r.prodotto.disponibilita_su_richiesta);
+  if (righe.length === 0) {
+    return {
+      error:
+        'Gli articoli nel carrello sono disponibili subito: completa l’acquisto con "Vai al pagamento".',
+    };
+  }
 
   // Rate limit per-IP (freno anti-flood reale): l'email e un campo libero, quindi
   // il cap per-email piu sotto si aggira variandola; il per-IP no. Fail-open.

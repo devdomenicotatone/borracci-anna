@@ -1,30 +1,34 @@
 "use client";
 
 // Barra di avanzamento verso la spedizione gratuita.
-// Legge il subtotale dal CartProvider, quindi si aggiorna in modo ottimistico
+// Legge le righe dal CartProvider, quindi si aggiorna in modo ottimistico
 // a ogni cambio quantita. Soglia configurata in lib/spedizione.ts.
 // Leva AOV: incoraggia ad aggiungere qualcosa per superare la soglia.
-// Nascosta nel flusso "su richiesta": li la spedizione e "da concordare",
-// quindi non esiste una soglia da sbloccare e la barra sarebbe fuorviante.
+// La barra parla del PAGAMENTO DIRETTO: conta solo le righe in pronta
+// consegna. Gli articoli "su richiesta" hanno spedizione "da concordare" e non
+// concorrono alla soglia; se non c'e nulla di pagabile subito la barra sparisce
+// (promettere la gratuita li sarebbe disonesto). La guardia sta QUI (non nei
+// consumatori) cosi vale per pagina carrello e mini-cart, stessa fonte di verita.
 
 import { useCarrello } from "@/components/cart/CartProvider";
 import { formatPrezzo } from "@/lib/format";
 import { statoSpedizione } from "@/lib/spedizione";
 
 export default function FreeShippingBar() {
-  const { righe, subtotaleCents, valuta, count } = useCarrello();
+  const { righe, valuta, count } = useCarrello();
 
   // Niente barra a carrello vuoto.
   if (count === 0) return null;
 
-  // Con un articolo "su richiesta" l'intero ordine passa dal flusso richiesta
-  // e la spedizione va concordata: promettere la "spedizione gratuita" qui
-  // sarebbe disonesto. La guardia sta QUI (non nei consumatori) cosi vale per
-  // tutti: pagina carrello e mini-cart, stessa fonte di verita.
-  if (righe.some((r) => r.prodotto.disponibilita_su_richiesta)) return null;
+  const dirette = righe.filter((r) => !r.prodotto.disponibilita_su_richiesta);
+  if (dirette.length === 0) return null;
 
+  const subtotaleDiretto = dirette.reduce(
+    (acc, r) => acc + r.prodotto.prezzo_cents * r.quantita,
+    0,
+  );
   const { mancanteCents, raggiunta, percentuale } =
-    statoSpedizione(subtotaleCents);
+    statoSpedizione(subtotaleDiretto);
 
   return (
     <div className="rounded-2xl bg-surface p-3.5 ring-1 ring-line">

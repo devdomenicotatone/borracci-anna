@@ -49,6 +49,8 @@ import {
   rimuoviDalCarrello,
   statoCarrello,
   svuotaCarrello,
+  svuotaCarrelloParziale,
+  type SottoinsiemeCarrello,
 } from "@/lib/cart";
 import { useToast } from "@/components/Toaster";
 import type {
@@ -139,6 +141,12 @@ interface CartContextValue {
   aggiorna: (rigaId: string, quantita: number) => Promise<void>;
   rimuovi: (rigaId: string) => Promise<void>;
   svuota: () => Promise<void>;
+  /**
+   * Rimuove SOLO le righe del sottoinsieme indicato (pronta consegna o su
+   * richiesta), lasciando le altre: usato dai flussi separati del carrello
+   * misto (pagamento diretto / invio richiesta).
+   */
+  svuotaParziale: (quali: SottoinsiemeCarrello) => Promise<void>;
   /** Rilegge il carrello dal server (es. dopo che il checkout lo ha riconciliato). */
   ricarica: () => Promise<void>;
   /**
@@ -442,6 +450,32 @@ export function CartProvider({
     }
   }, [righe, mostra, annullaSyncQuantita, applicaRigheServer]);
 
+  const svuotaParziale = useCallback<CartContextValue["svuotaParziale"]>(
+    async (quali) => {
+      const daRimuovere = (r: RigaCarrello) =>
+        !!r.prodotto.disponibilita_su_richiesta === (quali === "su_richiesta");
+      // La rimozione supera gli aggiornamenti quantita in corso, ma solo per
+      // le righe che se ne vanno: le altre continuano indisturbate.
+      for (const r of righe) {
+        if (daRimuovere(r)) annullaSyncQuantita(r.id);
+      }
+      const snapshot = righe;
+      setRighe(righe.filter((r) => !daRimuovere(r)));
+
+      const esito = await svuotaCarrelloParziale(quali);
+
+      if (esito.ok) {
+        applicaRigheServer(esito.righe);
+      } else {
+        setRighe(snapshot);
+        if (esito.motivo !== "non_configurato") {
+          mostra("Aggiornamento del carrello non riuscito. Riprova.", "errore");
+        }
+      }
+    },
+    [righe, mostra, annullaSyncQuantita, applicaRigheServer],
+  );
+
   const count = righe.reduce((a, r) => a + r.quantita, 0);
   const subtotaleCents = righe.reduce(
     (a, r) => a + r.prodotto.prezzo_cents * r.quantita,
@@ -462,6 +496,7 @@ export function CartProvider({
       aggiorna,
       rimuovi,
       svuota,
+      svuotaParziale,
       ricarica,
       attendiSincronizzazioni,
     }),
@@ -477,6 +512,7 @@ export function CartProvider({
       aggiorna,
       rimuovi,
       svuota,
+      svuotaParziale,
       ricarica,
       attendiSincronizzazioni,
     ],
