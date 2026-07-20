@@ -4,6 +4,9 @@
 > (tsc + lint puliti): qui ci sono solo i passi **manuali** di messa in produzione.
 > Scenario: **Solo Italia, <50 spedizioni/mese, da zero senza contratto corriere**,
 > abbigliamento leggero. Aggregatore scelto: **Packlink (pay-per-use, niente canone)**.
+>
+> **Aggiornato 2026-07-21:** tariffa **unica nazionale** (le due zone
+> continentale/isole non esistono più, vedi callout sotto).
 
 ## Cosa fa (in breve)
 
@@ -11,16 +14,18 @@ La spedizione viene addebitata in **due flussi**, entrambi via Stripe Checkout:
 
 | Flusso | Quando si usa | Chi fissa la spedizione | Come |
 |---|---|---|---|
-| **Diretto** | prodotti in pronta consegna (`disponibilita_su_richiesta = false`) | il **cliente sceglie la zona** sulla pagina Stripe | `shipping_options`: *Italia continentale* / *Isole e aree disagiate*, **gratis ≥ 89 €** |
+| **Diretto** | prodotti in pronta consegna (`disponibilita_su_richiesta = false`) | **automatica** (nessuna scelta del cliente) | `shipping_options` con UNA sola voce: *Spedizione standard (Italia)* con stima 2–5 gg lavorativi, **gratis ≥ 89 €** |
 | **Su richiesta** (default) | prodotti `disponibilita_su_richiesta = true` | il **gestore** in "Conferma disponibilità" | voce fissa "Spedizione" col costo concordato |
 
 In entrambi i casi il **webhook** salva su `ordini`: `costo_spedizione_cents`, `spedizione_indirizzo`
 (indirizzo scelto su Stripe) e allinea `totale_cents` all'incassato reale (merce + spedizione).
 
-> ⚠️ **Limite Stripe (per scelta):** Stripe Checkout *hosted* non ricalcola la spedizione
-> live sul CAP. Quindi il flusso diretto usa **fasce per zona** (il cliente seleziona la
-> sua). Un cliente delle isole *potrebbe* scegliere "continentale": a questi volumi è una
-> perdita trascurabile, blindabile in futuro col controllo CAP nel webhook.
+> ℹ️ **Tariffa unica nazionale (decisione della titolare, audit lug 2026, finding 16):**
+> in origine il flusso diretto offriva due fasce a scelta del cliente (*continentale* /
+> *isole*), ma su Stripe hosted le shipping option sono radio a libera scelta: chi
+> spediva nelle isole poteva selezionare la fascia più bassa. Con la tariffa unica il
+> problema sparisce; l'eventuale **supplemento isole del corriere è assorbito dal
+> negozio**. Fonte di verità: [`src/lib/spedizione.ts`](../src/lib/spedizione.ts).
 
 ---
 
@@ -38,10 +43,10 @@ La migration è additiva (aggiunge colonne + estende la RPC `finalizza_ordine_pa
 **non distruttiva**.
 
 ```bash
-# Progetto Supabase collegato (consigliato):
-npx supabase db push
-
-# In alternativa: incolla ed esegui il contenuto del file nel SQL Editor di Supabase.
+# Consigliato in QUESTO progetto: incolla ed esegui il contenuto del file nel
+# SQL Editor di Supabase. Il ledger delle migration CLI e' fermo (le migration
+# successive sono state applicate a mano): un `supabase db push` tenterebbe di
+# riapplicare tutto lo storico.
 ```
 
 File: [`supabase/migrations/20260625100000_spedizione.sql`](../supabase/migrations/20260625100000_spedizione.sql)
@@ -65,20 +70,27 @@ select pg_get_function_identity_arguments(oid)
 
 ---
 
-## Step 2 — Configura le tariffe (env)
+## Step 2 — Configura la tariffa (env)
 
-I default funzionano già (5,90 / 8,90 / gratis ≥ 89 €). Le tariffe per zona sono
-**server-only** (no `NEXT_PUBLIC_`): si leggono a runtime → per cambiarle basta
-modificarle e **riavviare**, niente rebuild.
+I default funzionano già (5,90 € tariffa unica / gratis ≥ 89 €). La tariffa è
+**server-only** (no `NEXT_PUBLIC_`): si legge a runtime → per cambiarla basta
+modificarla e **riavviare**, niente rebuild.
+
+> ⚠️ Dal 2026-07-21 tariffa e soglia compaiono anche nella pagina legale
+> [`/condizioni-di-vendita`](../src/app/(vetrina)/condizioni-di-vendita/page.tsx),
+> che è **statica** (i valori vengono incollati al build): dopo averle cambiate
+> serve anche un **deploy**, altrimenti la pagina mostra le cifre vecchie mentre
+> il checkout addebita quelle nuove.
 
 In `.env.local` (vedi [`.env.example`](../.env.example)):
 
 ```bash
 # Soglia spedizione gratuita (pubblica: la usa la barra "spedizione gratis"). 8900 = 89,00 €
 NEXT_PUBLIC_FREE_SHIPPING_CENTS=8900
-# Tariffe per zona (server-only). Centesimi.
-SHIPPING_IT_CONTINENTE_CENTS=590   # 5,90 €
-SHIPPING_IT_ISOLE_CENTS=890        # 8,90 €
+# Tariffa UNICA Italia (server-only). Centesimi. La storica
+# SHIPPING_IT_CONTINENTE_CENTS resta letta come fallback se questa manca;
+# SHIPPING_IT_ISOLE_CENTS non è più usata.
+SHIPPING_IT_CENTS=590   # 5,90 €
 ```
 
 - [ ] Env impostate (o lasciati i default consapevolmente).
@@ -91,9 +103,11 @@ I prezzi "vetrina" online sono risultati **fuorvianti**: le tariffe nette vere s
 ottengono solo dai preventivi nel pannello.
 
 - [ ] Apri un account **Packlink PRO (Free)** — e opzionalmente **SpedirePRO** per confronto.
-- [ ] Fai **2-3 preventivi reali** per un pacco 0,5–1 kg: una destinazione *continentale*
-      e una *isole*, leggendo il **netto con supplementi inclusi** (fuel, isole/aree disagiate).
-- [ ] **Tara le env** dello Step 2 in base al costo reale + un piccolo cuscinetto.
+- [ ] Fai **2-3 preventivi reali** per un pacco 0,5–1 kg su destinazioni diverse (una
+      continentale e una nelle isole), leggendo il **netto con supplementi inclusi**
+      (fuel, isole/aree disagiate): la tariffa addebitata al cliente è unica, quindi va
+      tarata sul costo **medio**, tenendo conto del supplemento isole assorbito dal negozio.
+- [ ] **Tara la env** dello Step 2 in base al costo reale + un piccolo cuscinetto.
       Verifica che la soglia **89 €** copra il costo medio spedizione + margine.
 
 > Per <50 spedizioni/mese **non serve l'API**: si stampano le etichette a mano dal
@@ -114,8 +128,9 @@ Carta test: `4242 4242 4242 4242`, scadenza futura, CVC qualsiasi.
 
 **Flusso DIRETTO** (serve un prodotto con `disponibilita_su_richiesta = false`):
 - [ ] Aggiungi al carrello → mini-cart → "Paga".
-- [ ] Su Stripe compaiono le 2 opzioni di spedizione (o **"Spedizione gratuita"** se il
-      carrello è ≥ 89 €). Scegli la zona, inserisci l'indirizzo, paga.
+- [ ] Su Stripe compare UNA sola voce di spedizione: **"Spedizione standard (Italia)"**
+      con stima 2–5 gg lavorativi (o **"Spedizione gratuita"** se il carrello è ≥ 89 €).
+      Nessuna scelta di zona. Inserisci l'indirizzo, paga.
 - [ ] L'ordine in DB risulta `pagato` con `costo_spedizione_cents`, `spedizione_indirizzo`
       e `totale_cents` = merce + spedizione.
 
@@ -170,10 +185,12 @@ select stato, totale_cents, costo_spedizione_cents, spedizione_indirizzo
 
 ## Limiti noti / evoluzioni future
 
-- **Loophole isole** (flusso diretto): il cliente auto-seleziona la zona. Blindabile col
-  controllo del CAP nel webhook (annulla/aggiusta se la zona non torna).
-- **Peso non considerato**: tariffa per zona, non per peso. Per l'abbigliamento leggero
+- **Supplemento isole assorbito** (flusso diretto): con la tariffa unica il cliente
+  delle isole paga come tutti; l'eventuale supplemento del corriere resta a carico
+  del negozio. Scelta deliberata (vedi callout in alto): a questi volumi costa meno
+  del vecchio loophole della zona auto-selezionata.
+- **Peso non considerato**: tariffa unica, non per peso. Per l'abbigliamento leggero
   (ordine tipico < 1 kg) va bene. Se servirà far pagare di più gli ordini voluminosi:
-  aggiungere `peso_grammi` al prodotto e passare a fasce peso×zona.
+  aggiungere `peso_grammi` al prodotto e passare a fasce di peso.
 - **Tariffe live multi-zona / UE**: richiederebbero un checkout custom (Payment Element +
   API corriere). Da valutare solo con la crescita (UE / volumi alti).
