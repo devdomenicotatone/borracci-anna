@@ -21,6 +21,7 @@ import {
   assicuraStripeCustomer,
 } from "@/lib/account/stripe-cliente";
 import { inviaEmail } from "@/lib/email";
+import { testoCondizioniCheckout } from "@/lib/legale";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 
@@ -450,6 +451,9 @@ export async function creaCheckoutOrdineAction(
       billing_address_collection: "auto",
       shipping_address_collection: { allowed_countries: ["IT"] },
       locale: "it",
+      // Condizioni di vendita e recesso davanti al cliente al momento della
+      // conclusione del contratto (art. 49 Cod. Consumo; audit C2).
+      custom_text: { submit: { message: testoCondizioniCheckout(siteUrl) } },
       ...(customerId
         ? {
             customer: customerId,

@@ -5,10 +5,12 @@
 // il negozio conferma la disponibilità e poi il cliente paga da /ordine/[token].
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useCarrello } from "@/components/cart/CartProvider";
 import { conTimeout, ErroreTimeout } from "@/lib/con-timeout";
+import { PERCORSO_CONDIZIONI, PERCORSO_PRIVACY } from "@/lib/legale";
 import { inviaRichiestaAction, type StatoRichiesta } from "@/lib/ordini";
 
 const inputCls =
@@ -204,6 +206,27 @@ export default function ModuloRichiesta({
       >
         {pending ? "Invio in corso…" : "Invia richiesta"}
       </button>
+
+      {/* Informativa nei punti di raccolta dati (GDPR art. 13) + rinvio alle
+          condizioni: qui parte il flusso d'acquisto "su richiesta". */}
+      <p className="text-center text-xs text-muted">
+        Inviando la richiesta non paghi nulla: ti ricontattiamo noi. Trattiamo
+        i tuoi dati come da{" "}
+        <Link
+          href={PERCORSO_PRIVACY}
+          className="font-bold text-sea underline-offset-2 hover:underline"
+        >
+          Informativa privacy
+        </Link>
+        ; all&apos;eventuale acquisto si applicano le{" "}
+        <Link
+          href={PERCORSO_CONDIZIONI}
+          className="font-bold text-sea underline-offset-2 hover:underline"
+        >
+          Condizioni di vendita
+        </Link>
+        .
+      </p>
     </form>
   );
 }

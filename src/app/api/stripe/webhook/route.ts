@@ -23,6 +23,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStripe } from "@/lib/stripe";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { inviaEmail } from "@/lib/email";
+import { noteLegaliEmail } from "@/lib/legale";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 import type { Json } from "@/lib/supabase/database.types";
@@ -295,13 +296,16 @@ async function inviaNotificheOrdinePagato(
         clienteNome ? `Cliente: ${clienteNome}\n` : ""
       }${clienteEmail ? `Email: ${clienteEmail}\n` : ""}\nArticoli:\n${articoli}\n\nTotale incassato: ${totale}\n\nSpedire a:\n${indirizzo}\n\nGestisci l'ordine: ${siteUrl}/gestore/ordini`,
     }),
-    // 2) Conferma al cliente (solo se Stripe ha raccolto un'email).
+    // 2) Conferma al cliente (solo se Stripe ha raccolto un'email). E' la
+    //    conferma del contratto su supporto durevole ex art. 51 co. 7 Cod.
+    //    Consumo: il blocco noteLegaliEmail (recesso + modulo, garanzia,
+    //    condizioni, identita del venditore) e' contenuto obbligatorio.
     ...(clienteEmail
       ? [
           inviaEmail({
             to: clienteEmail,
             subject: "Ordine confermato — Anna Shop",
-            text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\nArticoli:\n${articoli}\n\nTotale: ${totale}\n\nSpedizione a:\n${indirizzo}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+            text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\nArticoli:\n${articoli}\n\nTotale: ${totale} (IVA inclusa)\n\nSpedizione a:\n${indirizzo}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
           }),
         ]
       : []),

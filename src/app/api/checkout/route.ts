@@ -10,6 +10,7 @@ import { getStripe } from "@/lib/stripe";
 import { cartIdCorrente, leggiCarrello, riconciliaCarrello } from "@/lib/cart";
 import { verificaSessioneCliente } from "@/lib/account/auth";
 import { assicuraStripeCustomer } from "@/lib/account/stripe-cliente";
+import { testoCondizioniCheckout } from "@/lib/legale";
 import { consentiPerIp } from "@/lib/rate-limit-ip";
 import {
   CONSEGNA_MAX_GG,
@@ -184,6 +185,9 @@ export async function POST(): Promise<Response> {
       billing_address_collection: "auto",
       shipping_address_collection: { allowed_countries: ["IT"] },
       locale: "it",
+      // Condizioni di vendita e recesso davanti al cliente al momento della
+      // conclusione del contratto (art. 49 Cod. Consumo; audit C2).
+      custom_text: { submit: { message: testoCondizioniCheckout(siteUrl) } },
       ...(customerId
         ? {
             customer: customerId,

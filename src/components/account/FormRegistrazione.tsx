@@ -5,7 +5,9 @@
 // partita), con reinvio a countdown. L'email non finisce mai nell'URL.
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 
+import { PERCORSO_PRIVACY } from "@/lib/legale";
 import {
   registratiClienteAction,
   type StatoAuthCliente,
@@ -110,6 +112,14 @@ export default function FormRegistrazione() {
 
       <p className="text-center text-xs text-muted">
         Usiamo la tua email solo per l&apos;account e gli ordini: niente spam.
+        Trattiamo i tuoi dati come descritto nell&apos;
+        <Link
+          href={PERCORSO_PRIVACY}
+          className="font-bold text-sea underline-offset-2 hover:underline"
+        >
+          Informativa privacy
+        </Link>
+        .
       </p>
     </form>
   );

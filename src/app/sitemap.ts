@@ -1,5 +1,10 @@
 import type { MetadataRoute } from "next";
 
+import {
+  PERCORSO_CONDIZIONI,
+  PERCORSO_PRIVACY,
+  PERCORSO_RECESSO,
+} from "@/lib/legale";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { leggiTutteLeRighe } from "@/lib/supabase/scansione";
 
@@ -16,6 +21,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    ...[PERCORSO_CONDIZIONI, PERCORSO_RECESSO, PERCORSO_PRIVACY].map(
+      (percorso) => ({
+        url: `${SITE}${percorso}`,
+        changeFrequency: "yearly" as const,
+        priority: 0.3,
+      }),
+    ),
   ];
 
   try {

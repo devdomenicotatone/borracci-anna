@@ -5,6 +5,11 @@
 import Link from "next/link";
 
 import Wordmark from "@/components/Wordmark";
+import {
+  PERCORSO_CONDIZIONI,
+  PERCORSO_PRIVACY,
+  PERCORSO_RECESSO,
+} from "@/lib/legale";
 import { MAPPA, NEGOZIO } from "@/lib/negozio";
 
 export default function Footer() {
@@ -153,7 +158,39 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 border-t border-white/10 pt-5 text-sm text-[#90a6b8]">
-          <p>
+          {/* Documenti legali: sempre raggiungibili da ogni pagina (GDPR
+              art. 12 e Cod. Consumo art. 49; audit conformita 2026-07-14). */}
+          <nav aria-label="Documenti legali">
+            <ul className="flex flex-wrap gap-x-2 gap-y-1">
+              <li>
+                <Link
+                  href={PERCORSO_CONDIZIONI}
+                  className="transition-colors hover:text-white"
+                >
+                  Condizioni di vendita
+                </Link>
+              </li>
+              <li aria-hidden="true">·</li>
+              <li>
+                <Link
+                  href={PERCORSO_RECESSO}
+                  className="transition-colors hover:text-white"
+                >
+                  Diritto di recesso
+                </Link>
+              </li>
+              <li aria-hidden="true">·</li>
+              <li>
+                <Link
+                  href={PERCORSO_PRIVACY}
+                  className="transition-colors hover:text-white"
+                >
+                  Privacy e cookie
+                </Link>
+              </li>
+            </ul>
+          </nav>
+          <p className="mt-2">
             {NEGOZIO.ragioneSociale} · P.IVA {NEGOZIO.partitaIva} · REA{" "}
             {NEGOZIO.rea} · PEC{" "}
             <a

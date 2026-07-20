@@ -16,6 +16,7 @@ import { verifySession } from "@/lib/gestore/auth";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { inviaEmail } from "@/lib/email";
+import { noteLegaliEmail } from "@/lib/legale";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 import type { StatoOrdine } from "@/lib/types";
@@ -335,10 +336,14 @@ export async function confermaOrdineAction(
       // Quell'email e l'UNICO canale con cui il cliente scopre che l'ordine e
       // pagabile: se non parte (inviaEmail non lancia, ritorna false) la
       // titolare deve saperlo, altrimenti aspetta un pagamento che non arrivera.
+      // Il blocco noteLegaliEmail (recesso, garanzia, condizioni, identita del
+      // venditore) accompagna la proposta pagabile: nel flusso su richiesta il
+      // cliente conclude il contratto proprio a partire da questa email, il
+      // corredo informativo deve viaggiare con lei (artt. 49 e 51 Cod. Consumo).
       const inviata = await inviaEmail({
         to: ordine.email,
         subject: "La tua richiesta è disponibile — completa l'ordine · Anna Shop",
-        text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\nArticoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)}\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\nArticoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)} (IVA inclusa)\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
       if (!inviata) {
         return {
