@@ -191,6 +191,17 @@ export async function statoCarrello(): Promise<EsitoCarrello> {
 }
 
 /**
+ * Id del carrello corrente (dal cookie httpOnly), o null se assente.
+ * Usato dal checkout per collegare la sessione Stripe al carrello d'origine
+ * (metadata cart_id): cosi il webhook puo ripulire le righe pagate anche se il
+ * cliente non torna mai sulla success page. E' un uuid opaco, nessun dato
+ * personale.
+ */
+export async function cartIdCorrente(): Promise<string | null> {
+  return leggiCartId();
+}
+
+/**
  * Assicura l'esistenza di un carrello e ritorna il suo id.
  * Crea la riga in "carrelli" e imposta il cookie httpOnly se serve.
  * Ritorna null se Supabase non e configurato.

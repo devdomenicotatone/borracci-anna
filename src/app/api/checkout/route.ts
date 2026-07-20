@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { getStripe } from "@/lib/stripe";
-import { leggiCarrello, riconciliaCarrello } from "@/lib/cart";
+import { cartIdCorrente, leggiCarrello, riconciliaCarrello } from "@/lib/cart";
 import { verificaSessioneCliente } from "@/lib/account/auth";
 import { assicuraStripeCustomer } from "@/lib/account/stripe-cliente";
 import { consentiPerIp } from "@/lib/rate-limit-ip";
@@ -161,6 +161,16 @@ export async function POST(): Promise<Response> {
     ? await assicuraStripeCustomer(sessioneCliente)
     : null;
 
+  // Metadata della sessione. cart_id (uuid opaco del cookie): permette al
+  // webhook di ripulire dal carrello le righe PAGATE anche se il cliente non
+  // torna mai sulla success page (finding F2, audit integrita 2026-07-20) —
+  // senza, quelle righe restano ripagabili. user_id: solo osservabilita
+  // (l'aggancio ordine<->account lo fa il trigger DB sull'email verificata).
+  const metadata: Record<string, string> = {};
+  const cartId = await cartIdCorrente();
+  if (cartId) metadata.cart_id = cartId;
+  if (sessioneCliente) metadata.user_id = sessioneCliente.userId;
+
   try {
     const stripe = getStripe();
 
@@ -189,13 +199,9 @@ export async function POST(): Promise<Response> {
             { customer_email: sessioneCliente.email }
           : {}),
       ...(sessioneCliente
-        ? {
-            // Solo osservabilita (dashboard Stripe): l'aggancio ordine<->account
-            // lo fa il trigger DB sull'email verificata, non questi metadata.
-            client_reference_id: sessioneCliente.userId,
-            metadata: { user_id: sessioneCliente.userId },
-          }
+        ? { client_reference_id: sessioneCliente.userId }
         : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     });
 
     // 5) NIENTE ordine salvato qui. Un checkout abbandonato (cliente che torna

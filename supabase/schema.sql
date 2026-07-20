@@ -112,6 +112,10 @@ create table if not exists public.ordini (
   costo_spedizione_cents integer
     check (costo_spedizione_cents is null or costo_spedizione_cents >= 0),
   spedizione_indirizzo   jsonb,
+  -- Deficit di giacenza fotografato alla finalizzazione (migration
+  -- 20260720170000): array di {variante_id, sku, richiesti, disponibili}.
+  -- NULL = giacenza sufficiente.
+  stock_mancante     jsonb,
   creato_il          timestamptz not null default now()
 );
 -- Idempotente per i DB gia creati. Vedi migration 20260623180000.
@@ -127,6 +131,7 @@ alter table public.ordini add column if not exists confermato_il timestamptz;
 alter table public.ordini add column if not exists stock_scalato boolean not null default false;
 alter table public.ordini add column if not exists costo_spedizione_cents integer;
 alter table public.ordini add column if not exists spedizione_indirizzo jsonb;
+alter table public.ordini add column if not exists stock_mancante jsonb;
 
 create index if not exists idx_ordini_stato on public.ordini (stato);
 create unique index if not exists idx_ordini_token on public.ordini (token);
@@ -227,7 +232,9 @@ create policy "carrello_righe_all"
 -- Finalizzazione ordini atomica/idempotente (migration 20260623200000) +
 -- persistenza costo spedizione/indirizzo (migration 20260625100000) +
 -- ritorno boolean e ricostruzione righe (20260708120000/20260708170000) +
--- scarico stock per variante_id anziche SKU (20260710120000).
+-- scarico stock per variante_id anziche SKU (20260710120000) +
+-- ricostruzione righe per variante_id (20260713160000) +
+-- oversell visibile in ordini.stock_mancante (20260720170000).
 drop function if exists public.finalizza_ordine_pagato(text, text, integer, jsonb);
 create or replace function public.finalizza_ordine_pagato(
   p_session_id     text,
@@ -242,7 +249,8 @@ create or replace function public.finalizza_ordine_pagato(
   set search_path = ''
 as $$
 declare
-  v_ordine public.ordini%rowtype;
+  v_ordine   public.ordini%rowtype;
+  v_mancante jsonb;
 begin
   -- Lock della riga ordine: serializza le finalizzazioni concorrenti.
   select * into v_ordine
@@ -273,8 +281,11 @@ begin
     return false;
   end if;
 
-  -- Righe mancanti (pre-save fallito): ricostruiscile da p_righe risolvendo la
-  -- variante per SKU (unico riferimento dai metadata Stripe nel fallback).
+  -- Righe mancanti (direct-buy, o pre-save fallito): ricostruiscile da p_righe.
+  -- Risoluzione della variante PRIMA per variante_id (immutabile, dai metadata
+  -- Stripe), poi ripiego sullo SKU per le sessioni vecchie senza variante_id.
+  -- Confronto su vi.id::text (niente cast ::uuid dell'input): un valore assente
+  -- o malformato non fa fallire la funzione, semplicemente non matcha -> SKU.
   if not exists (
     select 1 from public.ordine_righe where ordine_id = v_ordine.id
   ) then
@@ -284,24 +295,55 @@ begin
     )
     select
       v_ordine.id,
-      v.prodotto_id,
-      v.id,
+      coalesce(vi.prodotto_id, vs.prodotto_id),
+      coalesce(vi.id, vs.id),
       coalesce(nullif(r->>'nome', ''), 'Articolo ' || coalesce(r->>'sku', '?')),
       r->>'sku',
-      v.taglia,
-      v.colore,
+      coalesce(vi.taglia, vs.taglia),
+      coalesce(vi.colore, vs.colore),
       greatest(0, coalesce((r->>'prezzo_cents')::int, 0)),
       coalesce((r->>'qta')::int, 1),
       p.immagine_url
     from jsonb_array_elements(coalesce(p_righe, '[]'::jsonb)) as r
-    left join public.varianti v on v.sku = (r->>'sku')
-    left join public.prodotti p on p.id = v.prodotto_id
+    left join public.varianti vi on vi.id::text = nullif(r->>'variante_id', '')
+    left join public.varianti vs on vs.sku = (r->>'sku')
+    left join public.prodotti  p  on p.id = coalesce(vi.prodotto_id, vs.prodotto_id)
     where coalesce((r->>'qta')::int, 0) > 0;
   end if;
 
+  -- Blocca le varianti coinvolte in ordine DETERMINISTICO (per id) e fotografa
+  -- il deficit PRIMA del decremento, nella stessa transazione: il conto e'
+  -- esatto anche sotto concorrenza e l'ordine di lock fisso evita i deadlock
+  -- tra ordini multi-variante.
+  with agg as (
+    select variante_id, sum(quantita)::int as qta
+      from public.ordine_righe
+     where ordine_id = v_ordine.id
+       and variante_id is not null
+       and rimossa_il is null
+     group by variante_id
+  ), bloccate as (
+    select v.id, v.sku, v.stock, agg.qta
+      from agg
+      join public.varianti v on v.id = agg.variante_id
+     order by v.id
+       for update of v
+  )
+  select jsonb_agg(
+           jsonb_build_object(
+             'variante_id', b.id,
+             'sku',         b.sku,
+             'richiesti',   b.qta,
+             'disponibili', b.stock
+           )
+           order by b.sku
+         ) filter (where b.stock < b.qta)
+    into v_mancante
+    from bloccate b;
+
   -- Decremento per variante_id (immutabile) dalle ordine_righe attive: robusto al
   -- rename dello SKU. Salta variante_id null e righe rimosse. Stesso criterio di
-  -- segna_ordine_pagato_manuale.
+  -- segna_ordine_pagato_manuale. (Righe gia' bloccate qui sopra.)
   update public.varianti vv
      set stock = greatest(0, vv.stock - agg.qta)
     from (
@@ -320,7 +362,8 @@ begin
          stock_scalato = true,
          totale_cents = coalesce(p_total, totale_cents),
          costo_spedizione_cents = coalesce(p_shipping_cents, costo_spedizione_cents),
-         spedizione_indirizzo = coalesce(p_indirizzo, spedizione_indirizzo)
+         spedizione_indirizzo = coalesce(p_indirizzo, spedizione_indirizzo),
+         stock_mancante = v_mancante
    where id = v_ordine.id;
 
   return true;
@@ -337,7 +380,8 @@ create or replace function public.segna_ordine_pagato_manuale(
   set search_path = ''
 as $$
 declare
-  v_ordine public.ordini%rowtype;
+  v_ordine   public.ordini%rowtype;
+  v_mancante jsonb;
 begin
   select * into v_ordine from public.ordini where id = p_ordine_id for update;
   if not found then
@@ -349,8 +393,36 @@ begin
   if v_ordine.stato not in ('in_attesa', 'confermato') then
     raise exception 'Transizione non consentita da % a pagato.', v_ordine.stato;
   end if;
-  -- Le righe rimosse in conferma parziale non scalano lo stock.
+  -- Le righe rimosse in conferma parziale non scalano lo stock. Come nella
+  -- finalizzazione webhook: lock deterministico + fotografia del deficit di
+  -- giacenza prima del decremento (oversell visibile).
   if not v_ordine.stock_scalato then
+    with agg as (
+      select variante_id, sum(quantita)::int as qta
+        from public.ordine_righe
+       where ordine_id = p_ordine_id
+         and variante_id is not null
+         and rimossa_il is null
+       group by variante_id
+    ), bloccate as (
+      select v.id, v.sku, v.stock, agg.qta
+        from agg
+        join public.varianti v on v.id = agg.variante_id
+       order by v.id
+         for update of v
+    )
+    select jsonb_agg(
+             jsonb_build_object(
+               'variante_id', b.id,
+               'sku',         b.sku,
+               'richiesti',   b.qta,
+               'disponibili', b.stock
+             )
+             order by b.sku
+           ) filter (where b.stock < b.qta)
+      into v_mancante
+      from bloccate b;
+
     update public.varianti v
        set stock = greatest(0, v.stock - agg.qta)
       from (
@@ -363,7 +435,10 @@ begin
      where agg.variante_id = v.id;
   end if;
   update public.ordini
-     set stato = 'pagato', stock_scalato = true
+     set stato = 'pagato',
+         stock_scalato = true,
+         stock_mancante = case when v_ordine.stock_scalato
+                               then stock_mancante else v_mancante end
    where id = v_ordine.id;
 end;
 $$;

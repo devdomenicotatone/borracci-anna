@@ -168,6 +168,71 @@ async function finalizzaOrdine(
   return data === true;
 }
 
+/** Voce del deficit di giacenza fotografato dalla RPC (ordini.stock_mancante). */
+interface VoceStockMancante {
+  sku: string | null;
+  richiesti: number;
+  disponibili: number;
+}
+
+/**
+ * Rilegge il deficit di giacenza scritto dalla RPC nella stessa transazione del
+ * decremento (migration 20260720170000): se il pagamento ha "venduto" piu pezzi
+ * di quelli a magazzino, l'email alla titolare deve dirlo subito, non lasciarlo
+ * scoprire al momento del pacco. Best effort: DB senza la colonna (migration
+ * non ancora applicata) o lettura fallita -> null, nessun avviso ma nessun errore.
+ */
+async function stockMancanteOrdine(
+  supabase: SupabaseClient,
+  sessionId: string,
+): Promise<VoceStockMancante[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("ordini")
+      .select("stock_mancante")
+      .eq("stripe_session_id", sessionId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const grezzo = (data as { stock_mancante?: unknown }).stock_mancante;
+    if (!Array.isArray(grezzo) || grezzo.length === 0) return null;
+    return grezzo as VoceStockMancante[];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ripulisce dal carrello d'origine le righe appena PAGATE, per variante_id.
+ * Senza questo, se il cliente chiude il browser prima del redirect alla success
+ * page (unico punto che svuotava il carrello) le righe pagate restano nel
+ * carrello, ripagabili per sbaglio. Le righe su richiesta di un carrello misto
+ * non sono mai nella sessione, quindi restano intatte. Il cart_id arriva dai
+ * metadata della sessione (assente nelle sessioni vecchie e nel flusso ordine
+ * confermato: in quei casi non c'e nulla da pulire qui). Best effort e
+ * idempotente: sui retry Stripe le righe sono gia sparite.
+ */
+async function ripulisciCarrelloPagato(
+  supabase: SupabaseClient,
+  session: Stripe.Checkout.Session,
+  righe: LineaSessione[],
+): Promise<void> {
+  const cartId = session.metadata?.cart_id ?? null;
+  if (!cartId) return;
+  const varianteIds = righe
+    .map((r) => r.varianteId)
+    .filter((v): v is string => Boolean(v));
+  if (varianteIds.length === 0) return;
+  try {
+    await supabase
+      .from("carrello_righe")
+      .delete()
+      .eq("carrello_id", cartId)
+      .in("variante_id", varianteIds);
+  } catch {
+    // Best effort: al peggio resta la pulizia client-side della success page.
+  }
+}
+
 /** Indirizzo di spedizione in testo leggibile per le email. "—" se assente. */
 function indirizzoLeggibile(session: Stripe.Checkout.Session): string {
   const d = session.collected_information?.shipping_details;
@@ -191,6 +256,7 @@ function indirizzoLeggibile(session: Stripe.Checkout.Session): string {
 async function inviaNotificheOrdinePagato(
   session: Stripe.Checkout.Session,
   righe: LineaSessione[],
+  stockMancante: VoceStockMancante[] | null,
 ): Promise<void> {
   const clienteEmail = session.customer_details?.email ?? null;
   const clienteNome =
@@ -202,13 +268,30 @@ async function inviaNotificheOrdinePagato(
   const indirizzo = indirizzoLeggibile(session);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
+  // Giacenza insufficiente al momento dell'incasso: avviso in testa all'email
+  // della titolare (il cliente NON viene allarmato: decide il negozio come
+  // gestire — riassortimento, attesa o rimborso).
+  const avvisoStock =
+    stockMancante && stockMancante.length > 0
+      ? `⚠️ ATTENZIONE: giacenza insufficiente per questo ordine.\nIl pagamento e' stato incassato ma a magazzino mancavano dei pezzi:\n${stockMancante
+          .map(
+            (v) =>
+              `• SKU ${v.sku ?? "?"}: ordinati ${v.richiesti}, disponibili ${v.disponibili}`,
+          )
+          .join(
+            "\n",
+          )}\nVerifica in negozio e, se la merce manca davvero, contatta il cliente.\n\n`
+      : "";
+
   await Promise.allSettled([
     // 1) Notifica alla titolare: una vendita e stata pagata, va spedita.
     inviaEmail({
       to: NEGOZIO.email,
       replyTo: clienteEmail ?? undefined,
-      subject: `Nuovo ordine pagato — ${totale}`,
-      text: `Un cliente ha pagato un ordine su Anna Shop.\n\n${
+      subject: avvisoStock
+        ? `⚠️ Ordine pagato con stock insufficiente — ${totale}`
+        : `Nuovo ordine pagato — ${totale}`,
+      text: `${avvisoStock}Un cliente ha pagato un ordine su Anna Shop.\n\n${
         clienteNome ? `Cliente: ${clienteNome}\n` : ""
       }${clienteEmail ? `Email: ${clienteEmail}\n` : ""}\nArticoli:\n${articoli}\n\nTotale incassato: ${totale}\n\nSpedire a:\n${indirizzo}\n\nGestisci l'ordine: ${siteUrl}/gestore/ordini`,
     }),
@@ -271,12 +354,18 @@ export async function POST(req: Request): Promise<Response> {
           session,
           righe,
         );
+        // Pulizia del carrello d'origine (righe pagate, per variante_id): fuori
+        // dal gate appenaFinalizzato perche idempotente — sui retry e un no-op.
+        await ripulisciCarrelloPagato(supabase, session, righe);
         // Email di notifica solo alla PRIMA finalizzazione (idempotenza sui retry
         // Stripe). Inviate via `after()`: partono dopo la risposta 200, così un
         // SMTP lento non fa scadere il webhook (che Stripe interpreterebbe come
         // fallimento, disabilitando l'endpoint dopo troppi retry).
         if (appenaFinalizzato) {
-          after(() => inviaNotificheOrdinePagato(session, righe));
+          // Deficit di giacenza fotografato dalla RPC: letto ORA (non dentro
+          // after(), dove il client admin potrebbe essere gia smontato).
+          const stockMancante = await stockMancanteOrdine(supabase, session.id);
+          after(() => inviaNotificheOrdinePagato(session, righe, stockMancante));
         }
       } catch (err) {
         // Errore lato nostro (DB/Stripe): logghiamo e rispondiamo 500 cosi
