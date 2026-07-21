@@ -60,6 +60,21 @@ export function noteLegaliEmail(siteUrl: string): string {
 }
 
 /**
+ * Riga di recapiti per le email di stato SENZA blocco legale completo
+ * (ricezione richiesta, annullo): email, telefono e WhatsApp in chiaro — i
+ * client di posta li rendono cliccabili (finding B9 audit conformita). Le
+ * email con noteLegaliEmail hanno gia i recapiti nella riga "Assistenza e
+ * reclami".
+ */
+export function rigaContattiEmail(): string {
+  return (
+    `Per qualsiasi domanda: ${NEGOZIO.email}` +
+    (NEGOZIO.telefono ? ` · tel. ${NEGOZIO.telefono}` : "") +
+    (NEGOZIO.whatsapp ? ` · WhatsApp https://wa.me/${NEGOZIO.whatsapp}` : "")
+  );
+}
+
+/**
  * Messaggio mostrato da Stripe Checkout sopra il bottone di pagamento
  * (custom_text.submit, max 1200 caratteri, markdown limitato: i link sono
  * supportati). Rende le condizioni opponibili: il cliente le ha davanti

@@ -234,7 +234,8 @@ create policy "carrello_righe_all"
 -- ritorno boolean e ricostruzione righe (20260708120000/20260708170000) +
 -- scarico stock per variante_id anziche SKU (20260710120000) +
 -- ricostruzione righe per variante_id (20260713160000) +
--- oversell visibile in ordini.stock_mancante (20260720170000).
+-- oversell visibile in ordini.stock_mancante (20260720170000) +
+-- token pubblico anche per il direct-buy (20260721200000, finding M10).
 drop function if exists public.finalizza_ordine_pagato(text, text, integer, jsonb);
 create or replace function public.finalizza_ordine_pagato(
   p_session_id     text,
@@ -258,15 +259,16 @@ begin
    where stripe_session_id = p_session_id
    for update;
 
-  -- Nessun ordine pre-creato (fallback direct-buy): lo creiamo gia "pagato".
+  -- Nessun ordine pre-creato (fallback direct-buy): lo creiamo gia "pagato",
+  -- col token pubblico per /ordine/[token] (finding M10).
   if not found then
     insert into public.ordini (
       stato, totale_cents, email, stripe_session_id, stock_scalato,
-      costo_spedizione_cents, spedizione_indirizzo
+      costo_spedizione_cents, spedizione_indirizzo, token
     )
     values (
       'pagato', coalesce(p_total, 0), p_email, p_session_id, false,
-      p_shipping_cents, p_indirizzo
+      p_shipping_cents, p_indirizzo, gen_random_uuid()::text
     )
     on conflict (stripe_session_id) do nothing
     returning * into v_ordine;
@@ -363,7 +365,10 @@ begin
          totale_cents = coalesce(p_total, totale_cents),
          costo_spedizione_cents = coalesce(p_shipping_cents, costo_spedizione_cents),
          spedizione_indirizzo = coalesce(p_indirizzo, spedizione_indirizzo),
-         stock_mancante = v_mancante
+         stock_mancante = v_mancante,
+         -- M10: ordini legacy pre-creati senza token (o creati dalla RPC
+         -- vecchia) lo ricevono alla finalizzazione; mai sovrascritto se c'e.
+         token = coalesce(token, gen_random_uuid()::text)
    where id = v_ordine.id;
 
   return true;

@@ -16,6 +16,7 @@ import BadgeStatoOrdine from "@/components/ordini/BadgeStatoOrdine";
 import DettaglioOrdine from "@/components/ordini/DettaglioOrdine";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { formatDataLunga } from "@/lib/format";
+import { NEGOZIO } from "@/lib/negozio";
 import {
   etichettaNumeroOrdine,
   type OrdineDettaglioUI,
@@ -101,8 +102,23 @@ export default async function PaginaOrdine({
   // Reduce dal pagamento Stripe: il webhook potrebbe non aver ancora aggiornato.
   const inElaborazione = pagato === "1" && ordine.stato !== "pagato";
 
+  // Recapiti cliccabili (finding B9): il riferimento ordine viaggia gia
+  // nell'oggetto/testo precompilato, cosi il cliente non deve ricopiarlo.
+  const riferimento = etichettaNumeroOrdine(ordine);
+  const mailto = `mailto:${NEGOZIO.email}?subject=${encodeURIComponent(riferimento)}`;
+  const tel = NEGOZIO.telefono
+    ? `tel:${NEGOZIO.telefono.replace(/[^\d+]/g, "")}`
+    : null;
+  const whatsapp = NEGOZIO.whatsapp
+    ? `https://wa.me/${NEGOZIO.whatsapp}?text=${encodeURIComponent(
+        `Ciao! Vi scrivo per il mio ordine (${riferimento}).`,
+      )}`
+    : null;
+
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-12 sm:px-6">
+    // <div>, non <main>: il landmark main lo mette gia il layout della vetrina
+    // (id="contenuto") — un secondo <main> annidato confonde gli screen reader.
+    <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-12 sm:px-6">
       <p className="font-display text-sm font-bold uppercase tracking-wide text-sea">
         Il tuo ordine
       </p>
@@ -113,7 +129,7 @@ export default async function PaginaOrdine({
         <BadgeStatoOrdine stato={ordine.stato} />
       </div>
       <p className="mt-1 text-sm text-muted">
-        {etichettaNumeroOrdine(ordine)} · {formatDataLunga(ordine.creato_il)}
+        {riferimento} · {formatDataLunga(ordine.creato_il)}
       </p>
 
       {/* Live region SEMPRE montata (WCAG 4.1.3): quando il polling di
@@ -144,6 +160,61 @@ export default async function PaginaOrdine({
 
       <DettaglioOrdine ordine={ordine} />
 
+      {/* Recapiti cliccabili (finding B9): il posto dove servono di piu — per
+          un ordine annullato l'hero dice "scrivici pure", qui ci sono i link
+          per farlo davvero (recesso, reclami, domande sulla consegna). */}
+      <section className="mt-8 rounded-3xl bg-surface p-6 shadow-soft ring-1 ring-line">
+        <h2 className="font-display text-base font-extrabold text-foreground">
+          Serve aiuto con quest&apos;ordine?
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Scrivici o chiamaci citando il riferimento{" "}
+          <span className="font-bold text-foreground">{riferimento}</span>{" "}
+          (nei link è già precompilato).
+        </p>
+        <ul className="mt-4 space-y-2 text-sm">
+          <li className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-display font-bold text-muted">Email</span>
+            {/* break-all: l'email e un token unico che a 320px sfonderebbe la
+                card (WCAG 1.4.10, reflow). */}
+            <a
+              href={mailto}
+              className="break-all font-medium text-foreground underline-offset-2 transition-colors hover:text-sea hover:underline"
+            >
+              {NEGOZIO.email}
+            </a>
+          </li>
+          {tel && (
+            <li className="flex flex-wrap items-baseline gap-x-2">
+              <span className="font-display font-bold text-muted">
+                Telefono
+              </span>
+              <a
+                href={tel}
+                className="font-medium text-foreground underline-offset-2 transition-colors hover:text-sea hover:underline"
+              >
+                {NEGOZIO.telefono}
+              </a>
+            </li>
+          )}
+          {whatsapp && (
+            <li className="flex flex-wrap items-baseline gap-x-2">
+              <span className="font-display font-bold text-muted">
+                WhatsApp
+              </span>
+              <a
+                href={whatsapp}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline-offset-2 transition-colors hover:text-sea hover:underline"
+              >
+                Apri la chat
+              </a>
+            </li>
+          )}
+        </ul>
+      </section>
+
       <div className="mt-6 text-center">
         <Link
           href="/"
@@ -152,6 +223,6 @@ export default async function PaginaOrdine({
           Torna alla vetrina
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

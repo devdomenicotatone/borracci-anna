@@ -21,7 +21,7 @@ import {
   assicuraStripeCustomer,
 } from "@/lib/account/stripe-cliente";
 import { inviaEmail } from "@/lib/email";
-import { testoCondizioniCheckout } from "@/lib/legale";
+import { rigaContattiEmail, testoCondizioniCheckout } from "@/lib/legale";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 
@@ -162,7 +162,7 @@ export async function inviaRichiestaAction(
         token,
         user_id: sessioneCliente?.userId ?? null,
       })
-      .select("id")
+      .select("id, numero")
       .single();
     if (error || !ordine) {
       return { error: "Impossibile creare la richiesta. Riprova." };
@@ -227,19 +227,23 @@ export async function inviaRichiestaAction(
       })
       .join("\n");
     const totale = formatPrezzo(totaleCents);
+    // Riferimento (M10) e recapiti cliccabili (B9) anche sulla ricezione: il
+    // numero e' assegnato dal default della colonna al momento dell'insert.
+    const rifRichiesta =
+      ordine.numero != null ? ` (richiesta #${ordine.numero})` : "";
     await Promise.allSettled([
       // 1) Notifica al gestore (rispondibile direttamente al cliente).
       inviaEmail({
         to: NEGOZIO.email,
         replyTo: email,
         subject: `Nuova richiesta da ${nome}`,
-        text: `Nuova richiesta d'ordine su Anna Shop.\n\nCliente: ${nome}\nEmail: ${email}${telefono ? `\nTelefono: ${telefono}` : ""}\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}${note ? `\n\nNote: ${note}` : ""}\n\nGestisci la richiesta: ${siteUrl}/gestore/ordini`,
+        text: `Nuova richiesta d'ordine su Anna Shop${rifRichiesta}.\n\nCliente: ${nome}\nEmail: ${email}${telefono ? `\nTelefono: ${telefono}` : ""}\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}${note ? `\n\nNote: ${note}` : ""}\n\nGestisci la richiesta: ${siteUrl}/gestore/ordini`,
       }),
       // 2) Conferma di ricezione al cliente, col link alla pagina ordine.
       inviaEmail({
         to: email,
         subject: "Abbiamo ricevuto la tua richiesta — Anna Shop",
-        text: `Ciao ${nome},\n\ngrazie! Abbiamo ricevuto la tua richiesta. Verifichiamo la disponibilità di tutti gli articoli e ti ricontattiamo a breve: appena confermiamo potrai pagare in sicurezza da questa pagina.\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}\n\nSegui la tua richiesta qui:\n${siteUrl}/ordine/${token}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        text: `Ciao ${nome},\n\ngrazie! Abbiamo ricevuto la tua richiesta${rifRichiesta}. Verifichiamo la disponibilità di tutti gli articoli e ti ricontattiamo a breve: appena confermiamo potrai pagare in sicurezza da questa pagina.\n\nArticoli:\n${articoli}\n\nTotale stimato: ${totale}\n\nSegui la tua richiesta qui:\n${siteUrl}/ordine/${token}\n\n${rigaContattiEmail()}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       }),
     ]);
 

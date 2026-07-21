@@ -11,6 +11,7 @@ import { verificaSessioneCliente } from "@/lib/account/auth";
 import { leggiCarrello } from "@/lib/cart";
 import { CONSEGNA_MAX_GG, CONSEGNA_MIN_GG } from "@/lib/spedizione";
 import { getStripe } from "@/lib/stripe";
+import { createAdminSupabase } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,37 @@ async function statoPagamento(sessionId?: string): Promise<EsitoPagamento> {
   }
 }
 
+/** Riferimento pubblico dell'ordine registrato dal webhook per la sessione. */
+interface RiferimentoOrdine {
+  numero: number | null;
+  token: string | null;
+}
+
+/**
+ * Numero e token dell'ordine gia registrato dal webhook per questa sessione
+ * (finding M10: anche l'ospite del direct-buy deve avere un riferimento).
+ * Il session_id e' gia stato verificato con Stripe dal chiamante: chi possiede
+ * l'URL di ritorno conosce gia il proprio ordine. Best effort: se il webhook
+ * non e' ancora arrivato (o il DB non risponde) -> null, il riferimento
+ * viaggia comunque nell'email di conferma.
+ */
+async function riferimentoOrdine(
+  sessionId: string,
+): Promise<RiferimentoOrdine | null> {
+  try {
+    const admin = createAdminSupabase();
+    const { data, error } = await admin
+      .from("ordini")
+      .select("numero, token")
+      .eq("stripe_session_id", sessionId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return { numero: data.numero, token: data.token };
+  } catch {
+    return null;
+  }
+}
+
 export default async function CheckoutSuccessoPage({
   searchParams,
 }: {
@@ -61,9 +93,11 @@ export default async function CheckoutSuccessoPage({
 
   // Sessione non verificabile: nessun falso successo, nessuno svuotamento del
   // carrello. Si invita a tornare al carrello per riprovare.
+  // <div>, non <main>: il landmark main lo mette gia il layout della vetrina
+  // (id="contenuto") — un secondo <main> annidato confonde gli screen reader.
   if (esito === "sconosciuto") {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 py-24">
         <div className="w-full max-w-md rounded-3xl bg-surface p-10 text-center shadow-soft ring-1 ring-line">
           <h1 className="font-display text-2xl font-extrabold tracking-tight text-foreground">
             Pagamento non confermato
@@ -88,11 +122,17 @@ export default async function CheckoutSuccessoPage({
             </Link>
           </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   const inAttesa = esito === "in_attesa";
+
+  // Riferimento ordine (numero + link /ordine/[token]) se il webhook ha gia
+  // registrato: SOLO a pagamento confermato (in attesa l'ordine non esiste
+  // ancora). Se manca (webhook in ritardo) arriva comunque via email.
+  const riferimento =
+    !inAttesa && session_id ? await riferimentoOrdine(session_id) : null;
 
   // Carrello misto: il pagamento ha coperto solo la parte in pronta consegna.
   // Se restano articoli su richiesta, il secondo flusso e ancora da completare:
@@ -107,7 +147,8 @@ export default async function CheckoutSuccessoPage({
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
+    // <div>, non <main>: il landmark main lo mette gia il layout della vetrina.
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-24">
       {/* Svuotiamo il carrello SOLO a pagamento verificato: se il pagamento e
           ancora in registrazione (asincrono) e poi fallisse, il cliente non
           deve aver perso il carrello. La verita dell'ordine e nel webhook. */}
@@ -136,6 +177,18 @@ export default async function CheckoutSuccessoPage({
             ? "Stiamo registrando il pagamento: appena confermato riceverai una email con il riepilogo dell'ordine."
             : "Il pagamento è andato a buon fine. Riceverai a breve una email di conferma con il riepilogo dell'ordine."}
         </p>
+
+        {/* Riferimento ordine (M10): il numero da citare per assistenza e
+            recesso, visibile subito anche all'ospite senza account. */}
+        {riferimento?.numero != null && (
+          <p className="mt-3 rounded-2xl bg-surface-2 px-4 py-3 text-sm text-muted">
+            Il tuo numero d&apos;ordine è{" "}
+            <span className="font-display font-extrabold text-foreground">
+              #{riferimento.numero}
+            </span>
+            : citalo se ci scrivi per assistenza.
+          </p>
+        )}
 
         {/* Carrello misto: promemoria del flusso richiesta ancora aperto. */}
         {richiestaResidua > 0 && (
@@ -188,16 +241,26 @@ export default async function CheckoutSuccessoPage({
             Continua lo shopping
           </Link>
           {/* Cliente loggato: l'ordine appena pagato e gia nel suo storico. */}
-          {sessioneCliente && (
+          {sessioneCliente ? (
             <Link
               href="/account/ordini"
               className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 font-display font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface"
             >
               Vai ai tuoi ordini
             </Link>
+          ) : (
+            // Ospite: la pagina token e l'unico posto dove rivedere l'ordine.
+            riferimento?.token && (
+              <Link
+                href={`/ordine/${riferimento.token}`}
+                className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 font-display font-bold text-sea ring-2 ring-surface-2 transition-colors hover:bg-surface"
+              >
+                Segui il tuo ordine
+              </Link>
+            )
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

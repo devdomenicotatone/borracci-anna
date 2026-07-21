@@ -179,29 +179,51 @@ interface VoceStockMancante {
   disponibili: number;
 }
 
+/** Dati dell'ordine appena finalizzato che servono SOLO alle email. */
+interface DatiOrdineFinalizzato {
+  /** Numero leggibile ("Ordine #1042"): il riferimento da citare (M10). */
+  numero: number | null;
+  /** Token pubblico di /ordine/[token]: link di tracciamento nell'email (M10). */
+  token: string | null;
+  stockMancante: VoceStockMancante[] | null;
+}
+
 /**
- * Rilegge il deficit di giacenza scritto dalla RPC nella stessa transazione del
- * decremento (migration 20260720170000): se il pagamento ha "venduto" piu pezzi
- * di quelli a magazzino, l'email alla titolare deve dirlo subito, non lasciarlo
- * scoprire al momento del pacco. Best effort: DB senza la colonna (migration
- * non ancora applicata) o lettura fallita -> null, nessun avviso ma nessun errore.
+ * Rilegge dall'ordine appena finalizzato cio che serve alle email: numero e
+ * token (riferimento e link di tracciamento per il cliente, finding M10) e il
+ * deficit di giacenza scritto dalla RPC nella stessa transazione del decremento
+ * (migration 20260720170000) — se il pagamento ha "venduto" piu pezzi di quelli
+ * a magazzino, l'email alla titolare deve dirlo subito, non lasciarlo scoprire
+ * al momento del pacco. Best effort: DB senza le colonne (migration non ancora
+ * applicata) o lettura fallita -> campi null, email degradate ma mai bloccate.
  */
-async function stockMancanteOrdine(
+async function datiOrdineFinalizzato(
   supabase: SupabaseClient,
   sessionId: string,
-): Promise<VoceStockMancante[] | null> {
+): Promise<DatiOrdineFinalizzato> {
+  const vuoto: DatiOrdineFinalizzato = {
+    numero: null,
+    token: null,
+    stockMancante: null,
+  };
   try {
     const { data, error } = await supabase
       .from("ordini")
-      .select("stock_mancante")
+      .select("numero, token, stock_mancante")
       .eq("stripe_session_id", sessionId)
       .maybeSingle();
-    if (error || !data) return null;
+    if (error || !data) return vuoto;
     const grezzo = (data as { stock_mancante?: unknown }).stock_mancante;
-    if (!Array.isArray(grezzo) || grezzo.length === 0) return null;
-    return grezzo as VoceStockMancante[];
+    return {
+      numero: typeof data.numero === "number" ? data.numero : null,
+      token: typeof data.token === "string" && data.token ? data.token : null,
+      stockMancante:
+        Array.isArray(grezzo) && grezzo.length > 0
+          ? (grezzo as VoceStockMancante[])
+          : null,
+    };
   } catch {
-    return null;
+    return vuoto;
   }
 }
 
@@ -295,8 +317,9 @@ async function registraEsitoEmailConferma(
 async function inviaNotificheOrdinePagato(
   session: Stripe.Checkout.Session,
   righe: LineaSessione[],
-  stockMancante: VoceStockMancante[] | null,
+  dati: DatiOrdineFinalizzato,
 ): Promise<void> {
+  const { numero, token, stockMancante } = dati;
   const clienteEmail = session.customer_details?.email ?? null;
   const clienteNome =
     session.customer_details?.name ??
@@ -306,6 +329,19 @@ async function inviaNotificheOrdinePagato(
   const articoli = righe.map((r) => `• ${r.qta}× ${r.nome}`).join("\n");
   const indirizzo = indirizzoLeggibile(session);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+
+  // Riferimento ordine (M10): il numero nel subject e nel corpo, il link
+  // /ordine/[token] come pagina di stato. Se numero/token mancano (migration
+  // non applicata o lettura fallita) le email degradano ai testi di prima.
+  const rifOrdine = numero != null ? `Ordine #${numero}` : null;
+  const rigaRiferimento =
+    numero != null
+      ? `Numero d'ordine: #${numero} — citalo se ci scrivi per assistenza, recesso o reclami.\n\n`
+      : "";
+  const rigaTracciamento =
+    token && siteUrl
+      ? `Puoi rivedere il riepilogo e lo stato del tuo ordine qui:\n${siteUrl}/ordine/${token}\n\n`
+      : "";
 
   // Giacenza insufficiente al momento dell'incasso: avviso in testa all'email
   // della titolare (il cliente NON viene allarmato: decide il negozio come
@@ -328,9 +364,11 @@ async function inviaNotificheOrdinePagato(
       to: NEGOZIO.email,
       replyTo: clienteEmail ?? undefined,
       subject: avvisoStock
-        ? `⚠️ Ordine pagato con stock insufficiente — ${totale}`
-        : `Nuovo ordine pagato — ${totale}`,
+        ? `⚠️ Ordine pagato con stock insufficiente — ${rifOrdine ? `${rifOrdine} · ` : ""}${totale}`
+        : `Nuovo ordine pagato — ${rifOrdine ? `${rifOrdine} · ` : ""}${totale}`,
       text: `${avvisoStock}Un cliente ha pagato un ordine su Anna Shop.\n\n${
+        rifOrdine ? `${rifOrdine}\n` : ""
+      }${
         clienteNome ? `Cliente: ${clienteNome}\n` : ""
       }${clienteEmail ? `Email: ${clienteEmail}\n` : ""}\nArticoli:\n${articoli}\n\nTotale incassato: ${totale}\n\nSpedire a:\n${indirizzo}\n\nGestisci l'ordine: ${siteUrl}/gestore/ordini`,
     }),
@@ -338,11 +376,15 @@ async function inviaNotificheOrdinePagato(
     //    conferma del contratto su supporto durevole ex art. 51 co. 7 Cod.
     //    Consumo: il blocco noteLegaliEmail (recesso + modulo, garanzia,
     //    condizioni, identita del venditore) e' contenuto obbligatorio.
+    //    Numero d'ordine e link /ordine/[token] (M10): il riferimento da
+    //    citare per recesso/reclami viaggia sulla conferma stessa.
     clienteEmail
       ? inviaEmail({
           to: clienteEmail,
-          subject: "Ordine confermato — Anna Shop",
-          text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\nArticoli:\n${articoli}\n\nTotale: ${totale} (IVA inclusa)\n\nSpedizione a:\n${indirizzo}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+          subject: rifOrdine
+            ? `${rifOrdine} confermato — Anna Shop`
+            : "Ordine confermato — Anna Shop",
+          text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\n${rigaRiferimento}Articoli:\n${articoli}\n\nTotale: ${totale} (IVA inclusa)\n\nSpedizione a:\n${indirizzo}\n\n${rigaTracciamento}${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
         })
       : Promise.resolve<boolean | null>(null),
   ]);
@@ -448,10 +490,11 @@ export async function POST(req: Request): Promise<Response> {
         // SMTP lento non fa scadere il webhook (che Stripe interpreterebbe come
         // fallimento, disabilitando l'endpoint dopo troppi retry).
         if (appenaFinalizzato) {
-          // Deficit di giacenza fotografato dalla RPC: letto ORA (non dentro
-          // after(), dove il client admin potrebbe essere gia smontato).
-          const stockMancante = await stockMancanteOrdine(supabase, session.id);
-          after(() => inviaNotificheOrdinePagato(session, righe, stockMancante));
+          // Numero/token e deficit di giacenza scritti dalla RPC: letti ORA
+          // (non dentro after(), dove il client admin potrebbe essere gia
+          // smontato).
+          const dati = await datiOrdineFinalizzato(supabase, session.id);
+          after(() => inviaNotificheOrdinePagato(session, righe, dati));
         }
       } catch (err) {
         // Errore lato nostro (DB/Stripe): logghiamo e rispondiamo 500 cosi

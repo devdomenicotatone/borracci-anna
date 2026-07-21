@@ -16,7 +16,7 @@ import { verifySession } from "@/lib/gestore/auth";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { inviaEmail } from "@/lib/email";
-import { noteLegaliEmail } from "@/lib/legale";
+import { noteLegaliEmail, rigaContattiEmail } from "@/lib/legale";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
 import type { StatoOrdine } from "@/lib/types";
@@ -251,7 +251,7 @@ export async function confermaOrdineAction(
       })
       .eq("id", id)
       .eq("stato", "in_attesa")
-      .select("email, nome, token")
+      .select("email, nome, token, numero")
       .maybeSingle();
     if (error) {
       return { ok: false, error: messaggioErroreGenerico(error, "confermaOrdineAction") };
@@ -354,10 +354,16 @@ export async function confermaOrdineAction(
       // venditore) accompagna la proposta pagabile: nel flusso su richiesta il
       // cliente conclude il contratto proprio a partire da questa email, il
       // corredo informativo deve viaggiare con lei (artt. 49 e 51 Cod. Consumo).
+      // Riferimento ordine (M10): il numero accompagna la proposta pagabile,
+      // cosi il cliente ha da subito un riferimento da citare.
+      const rifOrdine =
+        ordine.numero != null
+          ? `Numero d'ordine: #${ordine.numero} — citalo se ci scrivi per assistenza.\n\n`
+          : "";
       const inviata = await inviaEmail({
         to: ordine.email,
         subject: "La tua richiesta è disponibile — completa l'ordine · Anna Shop",
-        text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\nArticoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)} (IVA inclusa)\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        text: `Ciao ${ordine.nome ?? ""},\n\n${intro}\n\n${rifOrdine}Articoli:\n${elencoDisponibili}${sezioneRimosse}\n\n${rigaSped}\nTotale: ${formatPrezzo(totaleCents)} (IVA inclusa)\n\nCompleta il pagamento in sicurezza da questa pagina:\n\n${siteUrl}/ordine/${ordine.token}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
       if (!inviata) {
         return {
@@ -391,14 +397,17 @@ export async function annullaOrdineAction(id: string): Promise<EsitoOrdine> {
     const admin = createAdminSupabase();
     const { data } = await admin
       .from("ordini")
-      .select("email, nome")
+      .select("email, nome, numero")
       .eq("id", id)
       .maybeSingle();
     if (data?.email) {
+      // Riferimento e recapiti cliccabili (B9): "scrivici" senza un contatto
+      // esplicito lasciava il cliente a cercarselo nel footer.
+      const rif = data.numero != null ? ` (richiesta #${data.numero})` : "";
       const inviata = await inviaEmail({
         to: data.email,
         subject: "La tua richiesta — Anna Shop",
-        text: `Ciao ${data.nome ?? ""},\n\ngrazie per la tua richiesta. Purtroppo questa volta non possiamo darle seguito: gli articoli richiesti non sono disponibili.\n\nSe vuoi, rispondi a questa email o passa a trovarci in negozio: troviamo un'alternativa insieme.\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        text: `Ciao ${data.nome ?? ""},\n\ngrazie per la tua richiesta${rif}. Purtroppo questa volta non possiamo darle seguito: gli articoli richiesti non sono disponibili.\n\nSe vuoi, rispondi a questa email o passa a trovarci in negozio: troviamo un'alternativa insieme.\n\n${rigaContattiEmail()}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
       });
       if (!inviata) {
         return {
