@@ -150,8 +150,12 @@ WCAG 2.2 AA, SEO tecnico.
    sviluppatore, B8) — nota: è anche la casella che riceve gli alert
    tecnici e le notifiche ordine.
 6. Far **validare i testi legali** pubblicati da un legale.
-7. Confermare l'**esenzione microimpresa EAA** (se non esente serve la
-   dichiarazione di accessibilità).
+7. ~~Confermare l'esenzione microimpresa EAA~~ **FATTO il 21/07**: la
+   titolare conferma <10 dipendenti e fatturato ≤2M € → microimpresa,
+   ESENTE dagli obblighi EAA sui servizi (niente dichiarazione di
+   accessibilità). L'esenzione decade se un giorno si superano le soglie:
+   da lì servirebbe la dichiarazione. La qualità a11y del sito resta
+   comunque (audit WCAG 2.2 AA chiuso).
 8. (Eventuale) URL delle condizioni nella dashboard Stripe se si vorrà
    `consent_collection` al posto del `custom_text`.
 
