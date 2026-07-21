@@ -64,7 +64,7 @@ export default function ConfermaDialog({
             type="button"
             onClick={onConferma}
             disabled={inCorso}
-            className="flex h-12 flex-1 items-center justify-center rounded-full bg-coral font-display text-sm font-bold text-white shadow-coral transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+            className="flex h-12 flex-1 items-center justify-center rounded-full bg-coral-ink font-display text-sm font-bold text-white shadow-coral transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
           >
             {inCorso ? "Attendi…" : etichettaConferma}
           </button>

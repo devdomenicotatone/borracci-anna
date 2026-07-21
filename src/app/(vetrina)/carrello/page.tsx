@@ -13,7 +13,7 @@ import { verificaSessioneCliente } from "@/lib/account/auth";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Carrello · Anna Shop",
+  title: "Carrello",
 };
 
 export default async function CarrelloPage() {

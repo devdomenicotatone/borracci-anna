@@ -4,13 +4,14 @@
 // conferma su ENTRAMBE le caselle). Alla conferma finale, il trigger DB
 // sincronizza clienti.email e aggancia gli ordini della nuova email.
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 
 import {
   cambiaEmailAction,
   type StatoAuthCliente,
 } from "@/lib/account/auth-actions";
 import { Campo, Spinner, inputCls } from "@/components/gestore/ui";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function FormCambioEmail() {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -18,9 +19,21 @@ export default function FormCambioEmail() {
     {},
   );
 
+  // Su ok il form SPARISCE e resta solo il messaggio: senza spostare il focus
+  // cadrebbe sul body e gli screen reader non annuncerebbero nulla. Stesso
+  // pattern di PannelloEmailInviata: focus sul messaggio al montaggio.
+  const messaggioRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (stato?.ok) messaggioRef.current?.focus();
+  }, [stato?.ok]);
+
   if (stato?.ok) {
     return (
-      <p role="status" className="text-sm leading-relaxed text-muted">
+      <p
+        ref={messaggioRef}
+        tabIndex={-1}
+        className="text-sm leading-relaxed text-muted outline-none"
+      >
         {stato.messaggio}
       </p>
     );
@@ -59,6 +72,7 @@ export default function FormCambioEmail() {
         {pending && <Spinner className="h-4 w-4" />}
         {pending ? "Invio in corso…" : "Cambia email"}
       </button>
+      <StatoInvio attivo={pending} />
     </form>
   );
 }

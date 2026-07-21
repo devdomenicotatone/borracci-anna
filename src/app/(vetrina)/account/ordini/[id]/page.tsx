@@ -67,7 +67,7 @@ export default async function PaginaOrdineAccount({
           </p>
           <Link
             href={`/ordine/${ordine.token}`}
-            className="mt-3 inline-flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition hover:-translate-y-0.5"
+            className="mt-3 inline-flex h-11 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition hover:-translate-y-0.5"
           >
             Vai al pagamento
           </Link>

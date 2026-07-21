@@ -12,6 +12,7 @@ import {
 } from "@/lib/account/auth-actions";
 import { Campo } from "@/components/gestore/ui";
 import InputPassword from "@/components/account/InputPassword";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function FormReimpostaPassword() {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -56,6 +57,10 @@ export default function FormReimpostaPassword() {
       >
         {pending ? "Salvataggio…" : "Salva la nuova password"}
       </button>
+      <StatoInvio
+        attivo={pending}
+        testo="Salvataggio della nuova password in corso"
+      />
     </form>
   );
 }

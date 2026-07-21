@@ -15,7 +15,7 @@ import { getStripe } from "@/lib/stripe";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Ordine confermato · Anna Shop",
+  title: "Ordine confermato",
 };
 
 type EsitoPagamento = "pagato" | "in_attesa" | "sconosciuto";
@@ -73,7 +73,7 @@ export default async function CheckoutSuccessoPage({
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link
               href="/carrello"
-              className="inline-flex h-12 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+              className="inline-flex h-12 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
             >
               Torna al carrello
             </Link>
@@ -151,7 +151,7 @@ export default async function CheckoutSuccessoPage({
             </p>
             <Link
               href="/carrello#richiesta"
-              className="mt-3 inline-flex h-11 items-center justify-center rounded-full bg-coral px-5 font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+              className="mt-3 inline-flex h-11 items-center justify-center rounded-full bg-coral-ink px-5 font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
             >
               Invia la richiesta
             </Link>
@@ -180,7 +180,7 @@ export default async function CheckoutSuccessoPage({
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link
             href="/"
-            className="inline-flex h-12 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+            className="inline-flex h-12 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
           >
             Continua lo shopping
           </Link>

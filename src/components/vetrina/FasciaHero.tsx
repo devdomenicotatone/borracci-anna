@@ -61,7 +61,9 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
       aria-labelledby="hero-title"
       className="bg-sea-gradient relative isolate overflow-hidden text-white"
     >
-      {/* Immagine di sfondo opzionale + velo per la leggibilita del testo. */}
+      {/* Immagine di sfondo opzionale. Il velo scuro (piu sotto) e SEMPRE
+          attivo: senza, sul lembo lagoon del gradiente il bianco si ferma a
+          2.0-2.5:1 (audit a11y 2026-07, WCAG 1.4.3). */}
       {immagine && (
         <>
           {urlSuBucketSupabase(immagine) ? (
@@ -94,12 +96,13 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
               className="absolute inset-0 -z-20 h-full w-full object-cover"
             />
           )}
-          <span
-            aria-hidden="true"
-            className="absolute inset-0 -z-10 bg-[#00395f]/55"
-          />
         </>
       )}
+      {/* Velo per la leggibilita del testo: sempre attivo, con o senza foto. */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 bg-[#00395f]/60"
+      />
       {/* Sole sfumato in alto a destra (decorativo). */}
       <span
         aria-hidden="true"
@@ -118,7 +121,7 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
           className="pointer-events-none absolute inset-0 z-[1] hidden md:block"
         >
           {config.stickerAlto && (
-            <span className="absolute right-[6%] top-10 rotate-6 rounded-xl bg-coral px-4 py-2.5 font-display text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(0,40,70,.5)]">
+            <span className="absolute right-[6%] top-10 rotate-6 rounded-xl bg-coral-ink px-4 py-2.5 font-display text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(0,40,70,.5)]">
               {config.stickerAlto}
             </span>
           )}
@@ -146,7 +149,7 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
           </h1>
         )}
         {fascia.sottotitolo && (
-          <p className="mt-3.5 max-w-[46ch] text-base text-white/95 sm:text-lg">
+          <p className="mt-3.5 max-w-[46ch] text-base text-white sm:text-lg">
             {fascia.sottotitolo}
           </p>
         )}
@@ -155,7 +158,7 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
             {config.ctaPrimariaLabel && (
               <BottoneCta
                 href={config.ctaPrimariaHref || "/prodotti"}
-                className="inline-flex items-center justify-center rounded-full bg-coral px-6 py-3.5 font-display font-bold text-white shadow-coral transition duration-200 hover:-translate-y-0.5"
+                className="inline-flex items-center justify-center rounded-full bg-coral-ink px-6 py-3.5 font-display font-bold text-white shadow-coral transition duration-200 hover:-translate-y-0.5"
               >
                 {config.ctaPrimariaLabel}
               </BottoneCta>

@@ -9,6 +9,7 @@ import {
   type EsitoProfilo,
 } from "@/lib/account/profilo-actions";
 import { Campo, Spinner, inputCls } from "@/components/gestore/ui";
+import StatoInvio from "@/components/StatoInvio";
 import { useToast } from "@/components/Toaster";
 
 export default function FormProfilo({ nome }: { nome: string | null }) {
@@ -61,6 +62,7 @@ export default function FormProfilo({ nome }: { nome: string | null }) {
         {pending && <Spinner className="h-4 w-4" />}
         {pending ? "Salvataggio…" : "Salva modifiche"}
       </button>
+      <StatoInvio attivo={pending} testo="Salvataggio in corso" />
     </form>
   );
 }

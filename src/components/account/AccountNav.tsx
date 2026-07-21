@@ -104,7 +104,7 @@ export default function AccountNav() {
         aria-current={on ? "page" : undefined}
         className={`flex shrink-0 items-center gap-3 rounded-2xl px-4 py-3 font-display text-sm font-bold transition-colors ${
           on
-            ? "bg-sea/10 text-sea"
+            ? "bg-sea/10 text-sea-ink"
             : "text-muted hover:bg-surface hover:text-foreground"
         }`}
       >

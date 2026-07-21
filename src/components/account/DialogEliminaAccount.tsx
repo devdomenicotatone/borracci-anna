@@ -13,6 +13,7 @@ import {
 import { useDialogModale } from "@/components/useDialogModale";
 import { Campo, Spinner } from "@/components/gestore/ui";
 import InputPassword from "@/components/account/InputPassword";
+import StatoInvio from "@/components/StatoInvio";
 
 function PannelloEliminazione({ onChiudi }: { onChiudi: () => void }) {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -71,12 +72,16 @@ function PannelloEliminazione({ onChiudi }: { onChiudi: () => void }) {
             <button
               type="submit"
               disabled={pending}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-coral font-display text-sm font-bold text-white shadow-coral transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-coral-ink font-display text-sm font-bold text-white shadow-coral transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
             >
               {pending && <Spinner className="h-4 w-4" />}
               {pending ? "Eliminazione…" : "Elimina account"}
             </button>
           </div>
+          <StatoInvio
+            attivo={pending}
+            testo="Eliminazione dell'account in corso"
+          />
         </form>
       </div>
     </div>

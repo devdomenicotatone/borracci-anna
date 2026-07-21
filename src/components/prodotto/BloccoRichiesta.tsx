@@ -8,6 +8,7 @@
 import { useState, useTransition } from "react";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import StatoInvio from "@/components/StatoInvio";
 import { NEGOZIO } from "@/lib/negozio";
 import type { Prodotto, Variante } from "@/lib/types";
 
@@ -107,7 +108,7 @@ export default function BloccoRichiesta({
         onClick={handleAggiungi}
         disabled={inCorso}
         aria-disabled={!variante}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
       >
         <svg
           className="h-5 w-5"
@@ -125,6 +126,7 @@ export default function BloccoRichiesta({
         </svg>
         {inCorso ? "Aggiunta in corso..." : "Aggiungi alla richiesta"}
       </button>
+      <StatoInvio attivo={inCorso} testo="Aggiunta alla richiesta in corso" />
 
       {errore && (
         <p role="alert" className="text-sm font-semibold text-coral-ink">
@@ -144,7 +146,7 @@ export default function BloccoRichiesta({
         <span className="text-muted">Preferisci chiedere prima?</span>
         <a
           href={mailto}
-          className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+          className="font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
         >
           Scrivici via email
         </a>
@@ -153,7 +155,7 @@ export default function BloccoRichiesta({
             href={whatsapp}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+            className="font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
           >
             WhatsApp
           </a>
@@ -161,7 +163,7 @@ export default function BloccoRichiesta({
         {tel && (
           <a
             href={tel}
-            className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+            className="font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
           >
             Chiamaci
           </a>

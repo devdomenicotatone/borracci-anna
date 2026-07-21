@@ -26,7 +26,9 @@ function urlSuBucketSupabase(url: string): boolean {
   }
 }
 
-// Toni ammessi -> classi tile (globals.css). tile-sun e chiara: testo scuro.
+// Toni ammessi -> classi tile (globals.css). I toni con stop chiari vogliono
+// testo scuro: il bianco su cyan-soft/sunset/coral si ferma a 1.48-2.27:1
+// (audit a11y 2026-07, WCAG 1.4.3).
 const TONI = new Set([
   "deep",
   "coral",
@@ -35,7 +37,7 @@ const TONI = new Set([
   "sun",
   "cyan-soft",
 ]);
-const TONI_CHIARI = new Set(["sun"]);
+const TONI_CHIARI = new Set(["sun", "sunset", "coral", "cyan-soft"]);
 
 export default function FasciaBanner({ fascia }: { fascia: FasciaVetrina }) {
   const { config } = fascia;
@@ -94,7 +96,7 @@ export default function FasciaBanner({ fascia }: { fascia: FasciaVetrina }) {
           {config.occhiello && (
             <span
               className={`font-display text-xs font-bold uppercase tracking-wide ${
-                testoScuro ? "text-sea" : "text-white/85"
+                testoScuro ? "text-sea-ink" : "text-white/85"
               }`}
             >
               {config.occhiello}

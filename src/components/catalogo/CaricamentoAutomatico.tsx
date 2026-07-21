@@ -222,41 +222,50 @@ export default function CaricamentoAutomatico({
 
       {!finito && (
         <div className="mt-8 flex flex-col items-center gap-2">
-          <p className="text-sm tabular-nums text-muted">
+          {/* aria-live sul conteggio: il <p> esiste PRIMA dell'append e viene
+              solo aggiornato, quindi lo screen reader annuncia ogni blocco in
+              modo affidabile (un elemento live montato gia pieno non verrebbe
+              letto). */}
+          <p aria-live="polite" className="text-sm tabular-nums text-muted">
             Hai visto {visti} prodotti su {stato.totaleVivo}
           </p>
           <span ref={sentinella} aria-hidden="true" />
-          {inCorso ? (
-            <span
-              role="status"
-              className="inline-flex h-12 items-center gap-2 px-7 font-display text-sm font-bold text-sea"
-            >
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 animate-spin rounded-full border-2 border-sea border-t-transparent"
-              />
-              Carico…
-            </span>
-          ) : (
-            <Link
-              href={`${basePath}?${qsProssima.toString()}`}
-              scroll={false}
-              // Con JS il link non naviga mai: prefetchare il percorso
-              // cumulativo ?pagina=N sarebbe proprio il traffico da evitare.
-              prefetch={false}
-              onNavigate={(e) => {
-                // Progressive enhancement: la navigazione SPA si annulla e si
-                // appende il delta via action. onNavigate NON scatta senza JS
-                // ne su ctrl/cmd+click (scheda nuova): li vale l'href.
-                e.preventDefault();
-                autoConsecutivi.current = 0;
-                caricaProssima();
-              }}
-              className="inline-flex h-12 items-center rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface"
-            >
+          {/* Un SOLO controllo sempre montato: smontare il link durante il
+              caricamento farebbe cadere il focus sul body (WCAG 2.4.3). Qui
+              cambia solo il contenuto (spinner + "Carico…") e la guardia in
+              onNavigate ignora le attivazioni finche l'append e in corso. */}
+          <Link
+            href={`${basePath}?${qsProssima.toString()}`}
+            scroll={false}
+            // Con JS il link non naviga mai: prefetchare il percorso
+            // cumulativo ?pagina=N sarebbe proprio il traffico da evitare.
+            prefetch={false}
+            aria-disabled={inCorso}
+            onNavigate={(e) => {
+              // Progressive enhancement: la navigazione SPA si annulla e si
+              // appende il delta via action. onNavigate NON scatta senza JS
+              // ne su ctrl/cmd+click (scheda nuova): li vale l'href.
+              e.preventDefault();
+              // Attivazione durante il caricamento: ignorata (il controllo
+              // resta montato e il focus non si muove).
+              if (inCorso) return;
+              autoConsecutivi.current = 0;
+              caricaProssima();
+            }}
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-7 font-display text-sm font-bold text-sea ring-2 ring-sea transition-all hover:-translate-y-0.5 hover:bg-surface aria-disabled:cursor-wait aria-disabled:hover:translate-y-0 aria-disabled:hover:bg-white"
+          >
+            {inCorso ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-sea border-t-transparent"
+                />
+                Carico…
+              </>
+            ) : (
               <EtichettaMostraAltri />
-            </Link>
-          )}
+            )}
+          </Link>
         </div>
       )}
     </>

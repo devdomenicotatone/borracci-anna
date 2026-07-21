@@ -1,12 +1,18 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
-// 404 della vetrina pubblica: sostituisce la pagina di default (in inglese, senza
-// header ne link) di Next. Vive nel route group (vetrina), quindi eredita Header
-// e Footer dal layout del gruppo. La invoca `notFound()` da PDP e categorie
-// (slug inesistente, prodotto ritirato) e ogni URL pubblico non trovato.
-export default function NonTrovato() {
+// 404 di RADICE: e' l'unica che Next usa per gli URL che non corrispondono a
+// NESSUNA route (la not-found dentro (vetrina) scatta solo per i notFound()
+// delle sue pagine: PDP/categoria inesistenti). Senza questo file gli URL
+// sbagliati ricevevano la 404 di default di Next, in inglese dentro
+// <html lang="it"> e senza alcun link di uscita (audit a11y 2026-07, WCAG
+// 3.1.1). Qui non c'e' il layout vetrina, quindi niente Header/Footer e il
+// <main> va dichiarato (non e' un annidamento: il root layout non ne ha).
+export const metadata: Metadata = { title: "Pagina non trovata" };
+
+export default function NonTrovatoRadice() {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-6 px-4 py-20 text-center sm:py-28">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-6 px-4 py-20 text-center">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-surface-2 text-4xl">
         🏖️
       </div>

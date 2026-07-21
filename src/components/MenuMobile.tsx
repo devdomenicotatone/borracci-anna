@@ -267,7 +267,7 @@ export default function MenuMobile({
                       enterKeyHint="search"
                       placeholder="Cerca un prodotto…"
                       aria-label="Cerca nel catalogo"
-                      className="h-12 w-full rounded-full bg-white pl-12 pr-4 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 focus:ring-2 focus:ring-sea"
+                      className="h-12 w-full rounded-full bg-white pl-12 pr-4 font-display text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow placeholder:text-muted focus:ring-2 focus:ring-sea"
                     />
                   </label>
                 </form>

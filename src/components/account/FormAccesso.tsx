@@ -14,6 +14,7 @@ import {
 import { Campo, inputCls } from "@/components/gestore/ui";
 import InputPassword from "@/components/account/InputPassword";
 import BottoneReinviaConferma from "@/components/account/BottoneReinviaConferma";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function FormAccesso({
   da,
@@ -90,6 +91,7 @@ export default function FormAccesso({
         >
           {pending ? "Accesso in corso…" : "Accedi"}
         </button>
+        <StatoInvio attivo={pending} testo="Accesso in corso" />
       </form>
 
       {stato?.emailNonVerificata && (

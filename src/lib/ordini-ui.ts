@@ -40,7 +40,7 @@ export const STATO_ORDINE_UI: Record<
   in_attesa: { chip: "In attesa di conferma", chipCls: "bg-sun/30 text-sun-ink" },
   confermato: { chip: "Da pagare", chipCls: "bg-lagoon/15 text-lagoon-ink" },
   pagato: { chip: "Pagato", chipCls: "bg-sea/15 text-sea-ink" },
-  annullato: { chip: "Annullato", chipCls: "bg-coral/15 text-coral-ink" },
+  annullato: { chip: "Annullato", chipCls: "bg-coral/10 text-[#b91c1c]" },
 };
 
 /** Etichetta breve per l'intestazione ("Ordine #1042", fallback su uuid corto). */

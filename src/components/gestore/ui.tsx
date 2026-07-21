@@ -15,9 +15,10 @@ import {
 
 // Stile base dei campi input/select del pannello. Include il focus ring (era
 // presente solo nella vetrina): unificarlo verso l'alto non toglie la
-// visibilita del focus a nessun form.
+// visibilita del focus a nessun form. ring-line-strong: il confine del campo
+// deve reggere 3:1 su bianco (WCAG 1.4.11; ring-line era 1.19:1).
 export const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow focus:ring-2 focus:ring-sea";
+  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow focus:ring-2 focus:ring-sea";
 
 /** Etichetta + campo + hint/errore. Con `htmlFor` l'etichetta e un <label>
  *  associato; senza (es. quando il controllo non ha un id) degrada a <span>.

@@ -76,11 +76,11 @@ I default funzionano già (5,90 € tariffa unica / gratis ≥ 89 €). La tarif
 **server-only** (no `NEXT_PUBLIC_`): si legge a runtime → per cambiarla basta
 modificarla e **riavviare**, niente rebuild.
 
-> ⚠️ Dal 2026-07-21 tariffa e soglia compaiono anche nella pagina legale
-> [`/condizioni-di-vendita`](../src/app/(vetrina)/condizioni-di-vendita/page.tsx),
-> che è **statica** (i valori vengono incollati al build): dopo averle cambiate
-> serve anche un **deploy**, altrimenti la pagina mostra le cifre vecchie mentre
-> il checkout addebita quelle nuove.
+> ℹ️ Dal 2026-07-21 tariffa e soglia compaiono anche nella pagina legale
+> [`/condizioni-di-vendita`](../src/app/(vetrina)/condizioni-di-vendita/page.tsx).
+> La pagina è server-rendered on demand (il layout vetrina la rende dinamica),
+> quindi dopo il cambio env basta il **riavvio**, come per il checkout: al
+> riavvio si aggiornano insieme cifre addebitate e cifre mostrate.
 
 In `.env.local` (vedi [`.env.example`](../.env.example)):
 

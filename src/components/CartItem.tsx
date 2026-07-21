@@ -13,6 +13,7 @@ import Image from "next/image";
 import { useTransition } from "react";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import StatoInvio from "@/components/StatoInvio";
 import { useToast } from "@/components/Toaster";
 import { conTimeout } from "@/lib/con-timeout";
 import { formatPrezzo } from "@/lib/format";
@@ -250,13 +251,19 @@ export function CheckoutButton({
   }
 
   return (
-    <button
-      type="button"
-      onClick={vaiAlPagamento}
-      disabled={disabilitato || inAttesa}
-      className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-    >
-      {inAttesa ? "Reindirizzamento…" : "Vai al pagamento"}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={vaiAlPagamento}
+        disabled={disabilitato || inAttesa}
+        className="flex h-12 w-full items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+      >
+        {inAttesa ? "Reindirizzamento…" : "Vai al pagamento"}
+      </button>
+      <StatoInvio
+        attivo={inAttesa}
+        testo="Reindirizzamento al pagamento in corso"
+      />
+    </>
   );
 }

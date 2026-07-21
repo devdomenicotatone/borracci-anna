@@ -206,7 +206,7 @@ export default function CartDrawer() {
             <button
               type="button"
               onClick={chiudi}
-              className="flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98]"
+              className="flex h-11 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98]"
             >
               Scopri i prodotti
             </button>

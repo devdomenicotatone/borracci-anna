@@ -7,8 +7,9 @@ import type { GruppoCategorie } from "@/lib/categorie-albero";
 import type { FasciaVetrina } from "@/lib/vetrina-home";
 import OcchielloSezione from "@/components/vetrina/OcchielloSezione";
 
-// Tile gradiente per le card categoria (classi in globals.css). tile-sun e
-// chiara: vuole testo scuro per il contrasto.
+// Tile gradiente per le card categoria (classi in globals.css). Le tile con
+// stop chiari vogliono testo scuro: il bianco su cyan-soft/sunset/coral si
+// ferma a 1.48-2.27:1 (audit a11y 2026-07, WCAG 1.4.3).
 const TILE_CATEGORIE = [
   "tile-deep",
   "tile-coral",
@@ -17,7 +18,12 @@ const TILE_CATEGORIE = [
   "tile-sun",
   "tile-cyan-soft",
 ] as const;
-const TILE_CHIARE = new Set<string>(["tile-sun"]);
+const TILE_CHIARE = new Set<string>([
+  "tile-sun",
+  "tile-sunset",
+  "tile-coral",
+  "tile-cyan-soft",
+]);
 
 export default function FasciaCategorie({
   fascia,

@@ -9,7 +9,9 @@ import MappaNegozio from "@/components/MappaNegozio";
 import { MAPPA, NEGOZIO } from "@/lib/negozio";
 
 export const metadata = {
-  title: "Vieni a trovarci · Anna Shop",
+  // Titolo NUDO: il suffisso "· Anna Shop" lo aggiunge il template del root
+  // layout (con quello hardcoded usciva doppio: "… · Anna Shop · Anna Shop").
+  title: "Vieni a trovarci",
   description:
     "Il negozio Anna Shop sul lungomare di Rimini, a Rivazzurra: Viale Regina Margherita 169/C. Mappa interattiva, orari e indicazioni stradali.",
 };
@@ -23,6 +25,9 @@ export default function VieniATrovarciPage() {
           aria-hidden="true"
           className="dots-overlay absolute inset-0 -z-10 opacity-50 [-webkit-mask-image:linear-gradient(180deg,#000_0%,transparent_70%)] [mask-image:linear-gradient(180deg,#000_0%,transparent_70%)]"
         />
+        {/* Velo scuro sempre attivo: senza, sul lembo lagoon il bianco si ferma
+            a 2.0-2.5:1 (audit a11y 2026-07, WCAG 1.4.3). */}
+        <span aria-hidden="true" className="absolute inset-0 -z-10 bg-[#00395f]/60" />
         <div className="mx-auto max-w-6xl px-5 pb-20 pt-12 sm:pb-24 sm:pt-16">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-medium ring-1 ring-white/35 backdrop-blur">
             <span className="h-2 w-2 rounded-full bg-sun shadow-[0_0_0_4px_rgba(255,210,63,.35)]" />
@@ -31,7 +36,7 @@ export default function VieniATrovarciPage() {
           <h1 className="mt-4 font-display text-[clamp(2rem,7vw,3.4rem)] font-extrabold leading-[1.05] [text-shadow:0_6px_24px_rgba(0,57,99,.35)]">
             Vieni a trovarci
           </h1>
-          <p className="mt-3.5 max-w-[48ch] text-base text-white/95 sm:text-lg">
+          <p className="mt-3.5 max-w-[48ch] text-base text-white sm:text-lg">
             Siamo sul lungomare di Rimini, a Rivazzurra: aria di mare, vetrine
             piene di colore e capi scelti uno a uno. Passa a salutarci.
           </p>
@@ -140,13 +145,15 @@ export default function VieniATrovarciPage() {
                     <path d="m3 7 9 6 9-6" />
                   </svg>
                 </span>
-                <div>
+                <div className="min-w-0">
                   <p className="font-display text-sm font-bold uppercase tracking-wide text-muted">
                     Scrivici
                   </p>
+                  {/* break-all + min-w-0 sul padre: l'email e un token unico
+                      che a 320px sfondava la card (WCAG 1.4.10, reflow). */}
                   <a
                     href={`mailto:${NEGOZIO.email}`}
-                    className="font-medium text-foreground underline-offset-2 transition-colors hover:text-sea hover:underline"
+                    className="break-all font-medium text-foreground underline-offset-2 transition-colors hover:text-sea hover:underline"
                   >
                     {NEGOZIO.email}
                   </a>
@@ -160,7 +167,7 @@ export default function VieniATrovarciPage() {
                 href={MAPPA.indicazioni}
                 target="_blank"
                 rel="noreferrer"
-                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
               >
                 <svg
                   viewBox="0 0 24 24"

@@ -9,12 +9,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import StatoInvio from "@/components/StatoInvio";
 import { conTimeout, ErroreTimeout } from "@/lib/con-timeout";
 import { PERCORSO_CONDIZIONI, PERCORSO_PRIVACY } from "@/lib/legale";
 import { inviaRichiestaAction, type StatoRichiesta } from "@/lib/ordini";
 
 const inputCls =
-  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow";
+  "h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow";
 
 /** Dati del cliente loggato per il prefill (campi comunque modificabili). */
 export interface PrefillRichiesta {
@@ -186,7 +187,7 @@ export default function ModuloRichiesta({
           name="note"
           rows={2}
           placeholder="Richieste particolari, orari per il ritiro…"
-          className="min-h-20 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
+          className="min-h-20 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow"
         />
       </div>
 
@@ -202,10 +203,11 @@ export default function ModuloRichiesta({
       <button
         type="submit"
         disabled={pending}
-        className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+        className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
       >
         {pending ? "Invio in corso…" : "Invia richiesta"}
       </button>
+      <StatoInvio attivo={pending} testo="Invio della richiesta in corso" />
 
       {/* Informativa nei punti di raccolta dati (GDPR art. 13) + rinvio alle
           condizioni: qui parte il flusso d'acquisto "su richiesta". */}

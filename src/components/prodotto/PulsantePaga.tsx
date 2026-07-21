@@ -8,6 +8,7 @@
 
 import { useState, useTransition } from "react";
 
+import StatoInvio from "@/components/StatoInvio";
 import { conTimeout, ErroreTimeout } from "@/lib/con-timeout";
 import { creaCheckoutOrdineAction } from "@/lib/ordini";
 
@@ -43,7 +44,7 @@ export default function PulsantePaga({ token }: { token: string }) {
         type="button"
         onClick={paga}
         disabled={inCorso}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
       >
         <svg
           viewBox="0 0 24 24"
@@ -60,6 +61,7 @@ export default function PulsantePaga({ token }: { token: string }) {
         </svg>
         {inCorso ? "Avvio pagamento…" : "Paga ora"}
       </button>
+      <StatoInvio attivo={inCorso} testo="Avvio del pagamento in corso" />
       {errore && (
         <p role="alert" className="text-sm font-semibold text-coral-ink">
           {errore}

@@ -4,7 +4,7 @@
 // ritornano SEMPRE la rubrica aggiornata (idioma EsitoCarrello): lo stato
 // locale si riallinea senza router.refresh().
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import {
   eliminaIndirizzoAction,
@@ -29,11 +29,30 @@ export default function RubricaIndirizzi({
   const [inCorso, startTransition] = useTransition();
   const { mostra } = useToast();
 
+  // WCAG 2.4.3: alla chiusura il dialog di conferma ripristina il focus
+  // sull'elemento che l'aveva aperto — ma dopo un'eliminazione riuscita quel
+  // bottone "Elimina" sta sulla card appena rimossa dal DOM: il ripristino e
+  // un no-op e il focus cade sul body. Si sposta quindi esplicitamente sul
+  // superstite piu sensato, la card/bottone "Aggiungi indirizzo" (montata in
+  // entrambi i rami: grid e stato vuoto). L'effect gira DOPO il cleanup di
+  // useDialogModale nello stesso commit, quindi vince sul suo ripristino.
+  const refAggiungi = useRef<HTMLButtonElement>(null);
+  // Flag in ref (non state): l'effect sotto scatta sul cambio di `indirizzi`
+  // — stesso commit del cleanup del dialog, quindi il nostro focus vince sul
+  // suo ripristino no-op — senza setState sincrono dentro l'effect.
+  const focusSuAggiungiRef = useRef(false);
+  useEffect(() => {
+    if (!focusSuAggiungiRef.current) return;
+    focusSuAggiungiRef.current = false;
+    refAggiungi.current?.focus();
+  }, [indirizzi]);
+
   const elimina = () => {
     if (!daEliminare) return;
     startTransition(async () => {
       const esito = await eliminaIndirizzoAction(daEliminare.id);
       if (esito.ok && esito.indirizzi) {
+        focusSuAggiungiRef.current = true;
         setIndirizzi(esito.indirizzi);
         mostra("Indirizzo eliminato", "ok");
       } else {
@@ -84,6 +103,7 @@ export default function RubricaIndirizzi({
           </div>
           <button
             type="button"
+            ref={refAggiungi}
             onClick={() => setInModifica(null)}
             className="flex h-12 items-center justify-center rounded-full bg-sea px-6 font-display font-bold text-white shadow-sea transition hover:-translate-y-0.5"
           >
@@ -151,6 +171,7 @@ export default function RubricaIndirizzi({
           {/* Card "Aggiungi" */}
           <button
             type="button"
+            ref={refAggiungi}
             onClick={() => setInModifica(null)}
             className="grid min-h-40 place-items-center rounded-3xl border border-dashed border-line bg-surface text-muted transition hover:bg-surface-2 hover:text-foreground"
           >

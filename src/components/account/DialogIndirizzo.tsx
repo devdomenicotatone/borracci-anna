@@ -13,6 +13,7 @@ import {
 } from "@/lib/account/indirizzi-actions";
 import { useDialogModale } from "@/components/useDialogModale";
 import { Campo, Spinner, inputCls } from "@/components/gestore/ui";
+import StatoInvio from "@/components/StatoInvio";
 import type { Indirizzo } from "@/lib/types";
 
 export default function DialogIndirizzo({
@@ -243,6 +244,10 @@ export default function DialogIndirizzo({
               {pending ? "Salvataggio…" : "Salva indirizzo"}
             </button>
           </div>
+          <StatoInvio
+            attivo={pending}
+            testo="Salvataggio dell'indirizzo in corso"
+          />
         </form>
       </div>
     </div>

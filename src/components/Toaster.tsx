@@ -52,11 +52,19 @@ export function ToasterProvider({
   const mostra = useCallback((messaggio: string, tipo: TipoToast = "ok") => {
     const id = (counter.current += 1);
     setToasts((t) => [...t, { id, tipo, messaggio }]);
-    // Auto-dismiss dopo 3,5s (oltre alla chiusura manuale al tap).
+    // Gli errori NON si auto-chiudono (WCAG 2.2.1): per il checkout il toast
+    // e l'unico canale del messaggio (anche testi lunghi dal server) e un
+    // timer fisso non basta a leggerli. Restano finche l'utente non li chiude
+    // col bottone/tap gia presente sul toast.
+    if (tipo === "errore") return;
+    // Auto-dismiss dei toast informativi: base 3,5s + 50ms per ogni carattere
+    // oltre i 40, cosi anche i testi lunghi restano leggibili (oltre alla
+    // chiusura manuale al tap).
+    const durata = 3500 + Math.max(0, messaggio.length - 40) * 50;
     const timer = setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id));
       timers.current.delete(timer);
-    }, 3500);
+    }, durata);
     timers.current.add(timer);
   }, []);
 
@@ -95,8 +103,10 @@ export function ToasterProvider({
             role={t.tipo === "errore" ? "alert" : "status"}
             className={[
               "pointer-events-auto relative flex max-w-sm items-center gap-2.5 rounded-2xl px-4 py-3 font-display text-sm font-bold text-white",
+              // coral-ink e non coral: col testo bianco il coral pieno si
+              // ferma a 3.03:1, l'ink (#d62828) regge l'AA (WCAG 1.4.3).
               t.tipo === "errore"
-                ? "bg-coral shadow-coral"
+                ? "bg-coral-ink shadow-coral"
                 : "bg-sea shadow-sea",
             ].join(" ")}
           >
@@ -130,7 +140,8 @@ export function ToasterProvider({
               )}
             </span>
             {t.messaggio}
-            {/* Tap ovunque sul toast per chiuderlo senza aspettare il timer. */}
+            {/* Tap/Invio ovunque sul toast per chiuderlo senza aspettare il
+                timer; per gli errori (senza auto-dismiss) e l'unica chiusura. */}
             <button
               type="button"
               aria-label="Chiudi la notifica"

@@ -11,6 +11,7 @@ import {
 } from "@/lib/account/auth-actions";
 import { Campo, inputCls } from "@/components/gestore/ui";
 import PannelloEmailInviata from "@/components/account/PannelloEmailInviata";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function FormPasswordDimenticata() {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -54,6 +55,7 @@ export default function FormPasswordDimenticata() {
       >
         {pending ? "Invio in corso…" : "Inviami il link di recupero"}
       </button>
+      <StatoInvio attivo={pending} />
     </form>
   );
 }

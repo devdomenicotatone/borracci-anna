@@ -269,7 +269,7 @@ export default function ProdottoDettaglio({
         </p>
 
         {soloOnline ? (
-          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-sea/10 px-3 py-1.5 font-display text-xs font-bold text-sea ring-1 ring-sea/25">
+          <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-sea/10 px-3 py-1.5 font-display text-xs font-bold text-sea-ink ring-1 ring-sea/25">
             <svg
               viewBox="0 0 24 24"
               fill="none"

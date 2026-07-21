@@ -5,10 +5,11 @@
 //   - <SwipeFoto> (wrapper): in ProductCard avvolge TUTTO il contenuto della
 //     card, Link overlay compreso. I gestori touch vivono qui: i tocchi che
 //     atterrano sul Link (che copre la card, z-10) risalgono in bubbling fino
-//     al wrapper, cosi lo swipe cambia foto anche su mobile dove le frecce
-//     sono nascoste — senza rubare al tap la navigazione.
+//     al wrapper, cosi su mobile lo swipe cambia foto come scorciatoia delle
+//     frecce — senza rubare al tap la navigazione.
 //   - <FotoCard> (default): la pila di foto nel layer immagine, con frecce
-//     (desktop, su hover) e pallini indicatore in basso; le frecce fermano
+//     (sempre operabili; su desktop compaiono all'hover, su mobile restano
+//     semitrasparenti) e pallini indicatore in basso; le frecce fermano
 //     l'evento (preventDefault/stopPropagation) per non navigare.
 //
 // Le foto oltre la prima si montano SOLO alla prima visualizzazione (set
@@ -134,8 +135,12 @@ export default function FotoCard({
         ) : null,
       )}
 
-      {/* Frecce: nascoste su mobile (si scorre con lo swipe), su desktop
-          compaiono all'hover della card o al focus da tastiera. */}
+      {/* Frecce: sempre operabili, anche sotto 640px (WCAG 2.5.1: lo swipe e
+          un gesto path-based e non puo essere l'unico comando — resta come
+          scorciatoia). Su desktop compaiono all'hover della card o al focus
+          da tastiera; su mobile, dove l'hover non esiste, restano visibili in
+          semitrasparenza (max-sm:opacity-70) per non coprire la foto. Target
+          8x8 = 32px, sopra il minimo di 24px. */}
       <button
         type="button"
         aria-label="Foto precedente"
@@ -144,7 +149,7 @@ export default function FotoCard({
           e.stopPropagation();
           vai(-1);
         }}
-        className="absolute left-1.5 top-1/2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground opacity-0 shadow-soft ring-1 ring-line backdrop-blur transition focus-visible:opacity-100 group-hover:opacity-100 active:scale-95 sm:grid"
+        className="absolute left-1.5 top-1/2 z-20 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground opacity-0 shadow-soft ring-1 ring-line backdrop-blur transition focus-visible:opacity-100 group-hover:opacity-100 active:scale-95 max-sm:opacity-70"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
           <path d="m15 18-6-6 6-6" />
@@ -158,7 +163,7 @@ export default function FotoCard({
           e.stopPropagation();
           vai(1);
         }}
-        className="absolute right-1.5 top-1/2 z-20 hidden h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground opacity-0 shadow-soft ring-1 ring-line backdrop-blur transition focus-visible:opacity-100 group-hover:opacity-100 active:scale-95 sm:grid"
+        className="absolute right-1.5 top-1/2 z-20 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-foreground opacity-0 shadow-soft ring-1 ring-line backdrop-blur transition focus-visible:opacity-100 group-hover:opacity-100 active:scale-95 max-sm:opacity-70"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
           <path d="m9 18 6-6-6-6" />

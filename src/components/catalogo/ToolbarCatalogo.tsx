@@ -206,7 +206,7 @@ export default function ToolbarCatalogo({
             onBlur={() => setRicercaInUso(false)}
             placeholder="Cerca un prodotto, una squadra, un personaggio…"
             aria-label="Cerca nel catalogo"
-            className="h-12 w-full rounded-full bg-white pl-12 pr-11 font-display text-base text-foreground ring-1 ring-line outline-none transition-shadow placeholder:text-muted/70 hover:ring-sea focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:hidden"
+            className="h-12 w-full rounded-full bg-white pl-12 pr-11 font-display text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow placeholder:text-muted hover:ring-sea focus:ring-2 focus:ring-sea [&::-webkit-search-cancel-button]:hidden"
           />
           {/* Area tattile piena (44px, a filo del bordo destro): un tap
               mancato sull'icona nuda finirebbe nell'input riaprendo la
@@ -314,7 +314,7 @@ export default function ToolbarCatalogo({
           </svg>
           Filtri
           {filtriDrawer > 0 && (
-            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1 font-display text-[11px] font-bold text-white">
+            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-coral-ink px-1 font-display text-[11px] font-bold text-white">
               {filtriDrawer}
             </span>
           )}
@@ -337,7 +337,7 @@ export default function ToolbarCatalogo({
             onChange={(e) =>
               naviga({ ...filtri, ordina: e.target.value as Ordinamento })
             }
-            className="h-11 appearance-none rounded-full bg-white pl-4 pr-9 font-display text-base font-bold text-foreground ring-1 ring-line outline-none transition hover:ring-sea active:scale-95 sm:text-sm"
+            className="h-11 appearance-none rounded-full bg-white pl-4 pr-9 font-display text-base font-bold text-foreground ring-1 ring-line-strong outline-none transition hover:ring-sea active:scale-95 sm:text-sm"
           >
             {ORDINAMENTI.map((o) => (
               <option key={o} value={o}>
@@ -635,7 +635,7 @@ function DrawerFiltri({
                   onChange={(e) =>
                     setBozza((b) => ({ ...b, prezzoMin: e.target.value }))
                   }
-                  className="h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
+                  className="h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow"
                 />
               </label>
               <span aria-hidden="true" className="text-muted">
@@ -652,7 +652,7 @@ function DrawerFiltri({
                   onChange={(e) =>
                     setBozza((b) => ({ ...b, prezzoMax: e.target.value }))
                   }
-                  className="h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
+                  className="h-12 w-full rounded-2xl bg-white px-4 text-base text-foreground ring-1 ring-line-strong outline-none transition-shadow"
                 />
               </label>
             </div>
@@ -711,7 +711,7 @@ function DrawerFiltri({
                       className={[
                         "inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all active:scale-95",
                         attivo
-                          ? "bg-sea/10 text-sea ring-2 ring-sea"
+                          ? "bg-sea/10 text-sea-ink ring-2 ring-sea"
                           : "bg-white text-foreground ring-1 ring-line hover:ring-sea",
                       ].join(" ")}
                     >

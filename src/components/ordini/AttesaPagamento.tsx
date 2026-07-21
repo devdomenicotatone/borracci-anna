@@ -45,12 +45,14 @@ export default function AttesaPagamento() {
     router.refresh();
   }
 
+  // Niente role="status" qui: la pagina ordine monta il componente dentro un
+  // <div aria-live="polite"> sempre presente (WCAG 4.1.3), che annuncia ogni
+  // cambio di testo — compreso il passaggio a "pagato", quando questo
+  // componente non viene piu renderizzato. Una live region annidata qui
+  // causerebbe doppi annunci all'inserimento.
   if (scaduto) {
     return (
-      <p
-        role="status"
-        className="mt-4 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-sun-ink ring-1 ring-sun/40"
-      >
+      <p className="mt-4 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-sun-ink ring-1 ring-sun/40">
         La conferma sta impiegando più del previsto. Se hai completato il
         pagamento non serve ripeterlo:{" "}
         <button
@@ -66,10 +68,7 @@ export default function AttesaPagamento() {
   }
 
   return (
-    <p
-      role="status"
-      className="mt-4 flex items-center gap-3 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-sun-ink ring-1 ring-sun/40"
-    >
+    <p className="mt-4 flex items-center gap-3 rounded-2xl bg-sun/15 px-4 py-3 text-sm text-sun-ink ring-1 ring-sun/40">
       <span
         aria-hidden="true"
         className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-sun-ink border-t-transparent"

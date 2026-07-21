@@ -11,6 +11,7 @@
 import { useEffect, useRef, useTransition } from "react";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import StatoInvio from "@/components/StatoInvio";
 import { formatPrezzo } from "@/lib/format";
 import type { Prodotto, Variante } from "@/lib/types";
 
@@ -53,6 +54,11 @@ export default function BarraAcquistoMobile({
     const compensa = () => {
       const altezza = barra.offsetHeight;
       document.body.style.paddingBottom = altezza > 0 ? `${altezza}px` : "";
+      // scroll-padding-bottom: il browser deve fermare lo scroll-into-view del
+      // focus PRIMA della barra fixed, o l'elemento focalizzato ci finisce
+      // sotto (WCAG 2.4.11; il top e' coperto dallo scroll-padding-top globale).
+      document.documentElement.style.scrollPaddingBottom =
+        altezza > 0 ? `${altezza}px` : "";
     };
     compensa();
     const osservatore = new ResizeObserver(compensa);
@@ -60,6 +66,7 @@ export default function BarraAcquistoMobile({
     return () => {
       osservatore.disconnect();
       document.body.style.paddingBottom = "";
+      document.documentElement.style.scrollPaddingBottom = "";
     };
   }, []);
 
@@ -116,7 +123,7 @@ export default function BarraAcquistoMobile({
             onClick={handleTap}
             disabled={inCorso}
             aria-disabled={!pronta}
-            className="flex h-12 flex-none items-center justify-center rounded-full bg-coral px-5 font-display font-bold text-white shadow-coral transition-transform active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:opacity-60"
+            className="flex h-12 flex-none items-center justify-center rounded-full bg-coral-ink px-5 font-display font-bold text-white shadow-coral transition-transform active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:opacity-60"
           >
             {inCorso
               ? "Aggiunta in corso..."
@@ -126,6 +133,14 @@ export default function BarraAcquistoMobile({
           </button>
         )}
       </div>
+      <StatoInvio
+        attivo={inCorso}
+        testo={
+          suRichiesta
+            ? "Aggiunta alla richiesta in corso"
+            : "Aggiunta al carrello in corso"
+        }
+      />
     </div>
   );
 }

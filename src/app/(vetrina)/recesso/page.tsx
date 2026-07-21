@@ -172,7 +172,9 @@ export default function RecessoPage() {
           Consumo — compila e inviaci questo modulo solo se desideri recedere
           dal contratto:
         </p>
-        <pre className="overflow-x-auto whitespace-pre rounded-3xl bg-surface p-5 text-[13px] leading-relaxed text-foreground ring-1 ring-line sm:p-6 sm:text-sm">
+        {/* whitespace-pre-wrap: a 320px il modulo deve andare a capo, non
+            chiedere scroll orizzontale (WCAG 1.4.10, reflow). */}
+        <pre className="whitespace-pre-wrap break-words rounded-3xl bg-surface p-5 text-[13px] leading-relaxed text-foreground ring-1 ring-line sm:p-6 sm:text-sm">
           {MODULO_RECESSO}
         </pre>
       </SezioneLegale>

@@ -14,6 +14,7 @@
 import { useState, useTransition } from "react";
 
 import { useCarrello } from "@/components/cart/CartProvider";
+import StatoInvio from "@/components/StatoInvio";
 import { NEGOZIO } from "@/lib/negozio";
 import type { Prodotto, Variante } from "@/lib/types";
 
@@ -151,7 +152,7 @@ export default function BloccoAcquisto({
         onClick={handleAggiungi}
         disabled={suRichiesta ? inCorso : !puoAggiungere || inCorso}
         aria-disabled={suRichiesta ? !puoAggiungere : undefined}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-disabled:opacity-60 sm:w-auto"
       >
         <svg
           className="h-5 w-5"
@@ -173,6 +174,14 @@ export default function BloccoAcquisto({
             ? "Aggiungi alla richiesta"
             : "Aggiungi al carrello"}
       </button>
+      <StatoInvio
+        attivo={inCorso}
+        testo={
+          suRichiesta
+            ? "Aggiunta alla richiesta in corso"
+            : "Aggiunta al carrello in corso"
+        }
+      />
 
       {errore && (
         <p role="alert" className="text-sm font-semibold text-coral-ink">
@@ -194,7 +203,7 @@ export default function BloccoAcquisto({
             <span className="text-muted">Preferisci chiedere prima?</span>
             <a
               href={mailto}
-              className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+              className="font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
             >
               Scrivici via email
             </a>
@@ -203,7 +212,7 @@ export default function BloccoAcquisto({
                 href={whatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+                className="font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
               >
                 WhatsApp
               </a>
@@ -211,7 +220,7 @@ export default function BloccoAcquisto({
             {tel && (
               <a
                 href={tel}
-                className="font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+                className="font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
               >
                 Chiamaci
               </a>

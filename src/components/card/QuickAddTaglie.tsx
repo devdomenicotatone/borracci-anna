@@ -136,7 +136,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
               type="button"
               disabled={!multiColore && !varianteConStock(null)}
               onClick={(e) => scegli(e, null)}
-              className="flex h-10 w-full items-center justify-center rounded-xl bg-coral font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-full items-center justify-center rounded-xl bg-coral-ink font-display text-sm font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Aggiungi al carrello
             </button>

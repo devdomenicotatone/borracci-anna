@@ -10,6 +10,7 @@
 import Link from "next/link";
 
 import CartBadge from "@/components/cart/CartBadge";
+import ChiusuraTendineEsc from "@/components/ChiusuraTendineEsc";
 import MenuMobile from "@/components/MenuMobile";
 import PreferitiBadge from "@/components/preferiti/PreferitiBadge";
 import Wordmark from "@/components/Wordmark";
@@ -35,6 +36,10 @@ export default function Header({
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-surface-2 bg-background/85 backdrop-blur-md backdrop-saturate-150">
+      {/* Esc chiude le tendine CSS-only qui sotto (.tendina-header) senza
+          dover spostare puntatore o focus (WCAG 1.4.13): vedi il componente
+          e la regola html[data-tendine-chiuse] in globals.css. */}
+      <ChiusuraTendineEsc />
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-5">
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Hamburger, prima del wordmark: sempre sotto lg; da lg in su solo
@@ -118,7 +123,7 @@ export default function Header({
                 // click del mouse lascia il focus sul trigger <Link> e terrebbe
                 // il pannello aperto, cosi passando col mouse su un'altra voce se
                 // ne aprivano due insieme.
-                <div className="invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100">
+                <div className="tendina-header invisible absolute left-0 top-full z-30 pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100">
                   {/* max-h + scroll: con figlie e nipoti il pannello puo
                       superare il viewport (header sticky a 4rem). */}
                   <div className="max-h-[calc(100vh-6rem)] min-w-48 overflow-y-auto rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
@@ -179,7 +184,7 @@ export default function Header({
                   dimensione="sm"
                 />
               </Link>
-              <div className="invisible absolute right-0 top-full z-30 hidden pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100 lg:block">
+              <div className="tendina-header invisible absolute right-0 top-full z-30 hidden pt-2 opacity-0 transition-all duration-150 group-has-[:focus-visible]:visible group-has-[:focus-visible]:opacity-100 group-hover:visible group-hover:opacity-100 lg:block">
                 <div className="min-w-52 rounded-2xl bg-white p-2 shadow-soft ring-1 ring-line">
                   <p className="truncate px-3.5 py-2 text-xs text-muted">
                     Ciao, {cliente.nome ?? cliente.email}

@@ -14,7 +14,9 @@
 // Un click/tap sulla foto principale apre la vista INGRANDITA: overlay bianco a
 // tutto schermo con appena mezzo centimetro di margine, frecce, contatore.
 // Dentro: doppio tap per zoomare sul punto toccato, pinch per regolare la scala,
-// pan a un dito quando zoomato, swipe a scala 1 per cambiare foto. Si chiude
+// pan a un dito quando zoomato, swipe a scala 1 per cambiare foto; da tastiera
+// +/- regolano la scala e le frecce spostano la foto zoomata (bottoni +/- anche
+// a schermo per chi non usa i gesti). Si chiude
 // SOLO con Esc, la X o un tap sul bordo fuori dalla foto. Sulla foto inline lo
 // swipe orizzontale cambia foto senza aprire l'overlay.
 
@@ -48,6 +50,8 @@ const PLACEHOLDER_GENERICO = ("data:image/svg+xml;charset=utf-8," +
 // Zoom nella vista ingrandita: il doppio tap porta a 2.5x, il pinch fino a 4x.
 const SCALA_DOPPIO_TAP = 2.5;
 const SCALA_MAX = 4;
+// Pan con le frecce quando la foto e zoomata: pixel per pressione.
+const PASSO_PAN_TASTIERA = 40;
 
 export default function GalleriaProdotto({
   foto,
@@ -144,6 +148,25 @@ export default function GalleriaProdotto({
       x: Math.max(-mx, Math.min(mx, x)),
       y: Math.max(-my, Math.min(my, y)),
     };
+  }
+
+  // Zoom a passi dai bottoni +/- o dalla tastiera: alternativa ai gesti
+  // (doppio tap/pinch) per chi usa la tastiera o non puo fare gesti complessi.
+  // Il passo e la scala del doppio tap; il punto al centro resta al centro.
+  function zoomAPassi(direzione: 1 | -1) {
+    const v = vistaRef.current;
+    const scala = Math.min(
+      SCALA_MAX,
+      Math.max(1, direzione > 0 ? v.scala * SCALA_DOPPIO_TAP : v.scala / SCALA_DOPPIO_TAP),
+    );
+    const fattore = scala / v.scala;
+    aggiornaVista(limita(scala, v.x * fattore, v.y * fattore));
+  }
+
+  // Pan con le frecce quando la foto e zoomata (stessi limiti dei gesti).
+  function panDaTastiera(dx: number, dy: number) {
+    const v = vistaRef.current;
+    aggiornaVista(limita(v.scala, v.x + dx, v.y + dy));
   }
 
   function onPointerDownZoom(e: React.PointerEvent<HTMLDivElement>) {
@@ -275,8 +298,19 @@ export default function GalleriaProdotto({
     });
   }, [idx]);
 
-  // Da ingrandita: Esc chiude, frecce navigano, scroll bloccato, focus spostato
-  // dentro (pulsante Chiudi) e intrappolato (Tab), poi ripristinato in chiusura.
+  // Il keydown legge la navigazione via ref (aggiornata dopo ogni render, in
+  // un effect: scrivere la ref durante il render e vietato dalle regole dei
+  // hook): cosi l'effetto sotto dipende SOLO da zoomAperto e il cambio foto
+  // non lo smonta/rimonta (rifacendo focus sul Chiudi e scroll-lock a ogni
+  // freccia: il focus deve restare sul bottone freccia appena attivato).
+  const vaiRef = useRef(vai);
+  useEffect(() => {
+    vaiRef.current = vai;
+  });
+
+  // Da ingrandita: Esc chiude, +/- regolano la scala, frecce navigano (o
+  // spostano la foto quando zoomata), scroll bloccato, focus spostato dentro
+  // (pulsante Chiudi) e intrappolato (Tab), poi ripristinato in chiusura.
   useEffect(() => {
     if (!zoomAperto) return;
     const precedente = document.activeElement as HTMLElement | null;
@@ -284,9 +318,24 @@ export default function GalleriaProdotto({
     contenitore?.querySelector<HTMLButtonElement>("button")?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setZoomAperto(false);
-      else if (e.key === "ArrowLeft") vai(-1);
-      else if (e.key === "ArrowRight") vai(1);
+      if (e.key === "Escape") {
+        setZoomAperto(false);
+        return;
+      }
+      // Con Ctrl/Alt/Meta sono scorciatoie del browser (es. Ctrl e +), non nostre.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const zoomato = vistaRef.current.scala > 1;
+      if (e.key === "+" || e.key === "=") zoomAPassi(1);
+      else if (e.key === "-") zoomAPassi(-1);
+      else if (e.key === "ArrowLeft") {
+        // Zoomati le frecce spostano la foto; a scala 1 cambiano foto.
+        if (zoomato) panDaTastiera(PASSO_PAN_TASTIERA, 0);
+        else vaiRef.current(-1);
+      } else if (e.key === "ArrowRight") {
+        if (zoomato) panDaTastiera(-PASSO_PAN_TASTIERA, 0);
+        else vaiRef.current(1);
+      } else if (e.key === "ArrowUp" && zoomato) panDaTastiera(0, PASSO_PAN_TASTIERA);
+      else if (e.key === "ArrowDown" && zoomato) panDaTastiera(0, -PASSO_PAN_TASTIERA);
       else if (e.key === "Tab") {
         const f = Array.from(
           contenitore?.querySelectorAll<HTMLElement>("button") ?? [],
@@ -310,8 +359,8 @@ export default function GalleriaProdotto({
       sbloccaScroll();
       precedente?.focus?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- vai dipende solo da idx/foto
-  }, [zoomAperto, idx, foto.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gli helper leggono solo ref (vistaRef/vaiRef), niente da rimontare
+  }, [zoomAperto]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -421,6 +470,14 @@ export default function GalleriaProdotto({
             </span>
           </>
         )}
+
+        {/* Annuncio del cambio foto per screen reader (come in FotoCard): live
+            region sempre montata, il contatore visivo da solo e muto. */}
+        {principale && (
+          <span className="sr-only" aria-live="polite">
+            Foto {idx + 1} di {foto.length}: {principale.etichetta}
+          </span>
+        )}
       </div>
 
       {/* Striscia miniature */}
@@ -522,6 +579,29 @@ export default function GalleriaProdotto({
             </svg>
           </button>
 
+          {/* Zoom senza gesti: bottoni +/- impilati sotto la X, per chi usa
+              tastiera, mouse o non puo fare doppio tap/pinch. */}
+          <button
+            type="button"
+            onClick={() => zoomAPassi(1)}
+            aria-label="Ingrandisci la foto"
+            className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[calc(max(1rem,env(safe-area-inset-top))+3.5rem)] grid h-11 w-11 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105 active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomAPassi(-1)}
+            aria-label="Riduci la foto"
+            className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[calc(max(1rem,env(safe-area-inset-top))+7rem)] grid h-11 w-11 place-items-center rounded-full bg-white/90 text-foreground shadow-soft ring-1 ring-line backdrop-blur transition-transform hover:scale-105 active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+
           {multipla && (
             <>
               <button
@@ -548,6 +628,14 @@ export default function GalleriaProdotto({
                 {idx + 1}/{foto.length}
               </span>
             </>
+          )}
+
+          {/* Annuncio del cambio foto anche qui dentro: aria-modal esclude
+              dall'AT le live region fuori dal dialog. Sempre montata. */}
+          {principale && (
+            <span className="sr-only" aria-live="polite">
+              Foto {idx + 1} di {foto.length}: {principale.etichetta}
+            </span>
           )}
         </div>
       )}

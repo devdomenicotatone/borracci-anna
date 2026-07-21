@@ -43,7 +43,7 @@ export default function FreeShippingBar() {
             <span aria-hidden="true">🚚</span>
             <span>
               Ti mancano{" "}
-              <span className="text-sea">
+              <span className="text-sea-ink">
                 {formatPrezzo(mancanteCents, valuta)}
               </span>{" "}
               alla spedizione gratuita

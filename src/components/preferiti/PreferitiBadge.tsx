@@ -16,7 +16,7 @@ export default function PreferitiBadge() {
         <span
           key={count}
           aria-hidden="true"
-          className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1 font-display text-[11px] font-bold leading-none text-white shadow-coral ring-2 ring-background"
+          className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-coral-ink px-1 font-display text-[11px] font-bold leading-none text-white shadow-coral ring-2 ring-background"
         >
           {count > 99 ? "99+" : count}
         </span>

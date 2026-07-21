@@ -12,6 +12,7 @@ import {
 } from "@/lib/account/auth-actions";
 import { Campo, Spinner } from "@/components/gestore/ui";
 import InputPassword from "@/components/account/InputPassword";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function FormCambioPassword() {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -60,11 +61,15 @@ export default function FormCambioPassword() {
           {stato.error}
         </p>
       )}
-      {stato?.ok && (
-        <p role="status" className="text-sm font-medium text-sea">
-          Password aggiornata.
-        </p>
-      )}
+      {/* Esito: live region SEMPRE montata (sr-only quando vuota, per non
+          lasciare un buco nel layout): montare l'elemento gia' pieno non viene
+          annunciato in modo affidabile, l'inserimento del testo si'. */}
+      <p
+        role="status"
+        className={stato?.ok ? "text-sm font-medium text-sea" : "sr-only"}
+      >
+        {stato?.ok ? "Password aggiornata." : ""}
+      </p>
 
       <button
         type="submit"
@@ -74,6 +79,10 @@ export default function FormCambioPassword() {
         {pending && <Spinner className="h-4 w-4" />}
         {pending ? "Aggiornamento…" : "Aggiorna password"}
       </button>
+      <StatoInvio
+        attivo={pending}
+        testo="Aggiornamento della password in corso"
+      />
     </form>
   );
 }

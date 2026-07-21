@@ -16,6 +16,7 @@ import { Campo, inputCls } from "@/components/gestore/ui";
 import InputPassword from "@/components/account/InputPassword";
 import PannelloEmailInviata from "@/components/account/PannelloEmailInviata";
 import BottoneReinviaConferma from "@/components/account/BottoneReinviaConferma";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function FormRegistrazione() {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -105,10 +106,11 @@ export default function FormRegistrazione() {
       <button
         type="submit"
         disabled={pending}
-        className="flex h-12 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+        className="flex h-12 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
       >
         {pending ? "Creazione in corso…" : "Crea il tuo account"}
       </button>
+      <StatoInvio attivo={pending} testo="Creazione dell'account in corso" />
 
       <p className="text-center text-xs text-muted">
         Usiamo la tua email solo per l&apos;account e gli ordini: niente spam.

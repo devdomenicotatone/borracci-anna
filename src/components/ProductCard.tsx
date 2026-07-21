@@ -27,9 +27,14 @@ const TILE_GRADIENTS = [
   "tile-cyan-soft",
 ] as const;
 
-// Le tile chiare (sole, ciano tenue) vogliono testo/icona scuri per contrasto AA:
-// il bianco su "tile-cyan-soft" (parte da #7fe3f5) non arriva a 4.5:1.
-const TILE_INK = new Set<string>(["tile-sun", "tile-cyan-soft"]);
+// Le tile chiare vogliono testo/icona scuri per contrasto AA: il bianco su
+// cyan-soft/sunset/coral si ferma a 1.48-2.27:1 (audit a11y 2026-07, 1.4.3).
+const TILE_INK = new Set<string>([
+  "tile-sun",
+  "tile-cyan-soft",
+  "tile-sunset",
+  "tile-coral",
+]);
 
 /** Sceglie un gradiente in modo stabile a partire da una stringa. */
 function gradientPer(seed: string): (typeof TILE_GRADIENTS)[number] {

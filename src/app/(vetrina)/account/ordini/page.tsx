@@ -81,7 +81,7 @@ export default async function PaginaOrdiniAccount({
           </div>
           <Link
             href="/prodotti"
-            className="flex h-12 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition hover:-translate-y-0.5"
+            className="flex h-12 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition hover:-translate-y-0.5"
           >
             Scopri la collezione
           </Link>

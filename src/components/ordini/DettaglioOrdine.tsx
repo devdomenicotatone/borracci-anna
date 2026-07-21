@@ -68,7 +68,7 @@ export default function DettaglioOrdine({
                   <p className="text-xs text-muted">Quantità: {r.quantita}</p>
                   {rimossa && (
                     <>
-                      <span className="mt-1 inline-flex rounded-full bg-coral/10 px-2 py-0.5 text-xs font-bold text-coral-ink">
+                      <span className="mt-1 inline-flex rounded-full bg-coral/10 px-2 py-0.5 text-xs font-bold text-[#b91c1c]">
                         Non disponibile
                       </span>
                       <p className="mt-1 text-xs text-coral-ink">

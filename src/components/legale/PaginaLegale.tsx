@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 /** Classe canonica dei link testuali dentro i testi legali. */
 export const linkLegale =
-  "font-semibold text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline";
+  "font-semibold text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink";
 
 export function PaginaLegale({
   occhiello,
@@ -34,6 +34,9 @@ export function PaginaLegale({
           aria-hidden="true"
           className="dots-overlay absolute inset-0 -z-10 opacity-50 [-webkit-mask-image:linear-gradient(180deg,#000_0%,transparent_70%)] [mask-image:linear-gradient(180deg,#000_0%,transparent_70%)]"
         />
+        {/* Velo scuro sempre attivo: il lembo lagoon del gradiente non regge il
+            bianco (2.0-2.5:1); col velo il testo pieno supera il 4.5:1 (AA). */}
+        <span aria-hidden="true" className="absolute inset-0 -z-10 bg-[#00395f]/60" />
         <div className="mx-auto max-w-3xl px-5 pb-16 pt-10 sm:pb-20 sm:pt-14">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-medium ring-1 ring-white/35 backdrop-blur">
             <span className="h-2 w-2 rounded-full bg-sun shadow-[0_0_0_4px_rgba(255,210,63,.35)]" />
@@ -42,10 +45,8 @@ export function PaginaLegale({
           <h1 className="mt-4 font-display text-[clamp(1.8rem,6vw,2.8rem)] font-extrabold leading-[1.08] [text-shadow:0_6px_24px_rgba(0,57,99,.35)]">
             {titolo}
           </h1>
-          <p className="mt-3 max-w-[52ch] text-base text-white/95">
-            {sottotitolo}
-          </p>
-          <p className="mt-3 text-sm text-white/80">
+          <p className="mt-3 max-w-[52ch] text-base text-white">{sottotitolo}</p>
+          <p className="mt-3 text-sm text-white">
             Ultimo aggiornamento: {aggiornata}
           </p>
         </div>

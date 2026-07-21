@@ -153,7 +153,7 @@ export default function CarrelloContenuto({
             // CTA porta al modulo invece di inviare da qui.
             <a
               href="#richiesta"
-              className="flex h-12 w-full items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral"
+              className="flex h-12 w-full items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral"
             >
               Compila la richiesta
             </a>
@@ -479,7 +479,7 @@ function LinkContinua() {
     <div className="mt-4 text-center">
       <Link
         href="/"
-        className="text-sm font-medium text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+        className="text-sm font-medium text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
       >
         Continua lo shopping
       </Link>
@@ -504,7 +504,7 @@ function StatoVuoto() {
       </div>
       <Link
         href="/"
-        className="mt-2 flex h-11 items-center justify-center rounded-full bg-coral px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
+        className="mt-2 flex h-11 items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral transition-transform hover:-translate-y-0.5"
       >
         Scopri i prodotti
       </Link>

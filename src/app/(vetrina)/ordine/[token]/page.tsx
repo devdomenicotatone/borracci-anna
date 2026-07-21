@@ -25,8 +25,10 @@ import { isStatoOrdine, type StatoOrdine } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-// Pagina gated da token con PII dell'ordine: mai indicizzata.
+// Pagina gated da token con PII dell'ordine: mai indicizzata. Il title
+// (WCAG 2.4.2) resta generico: niente numero ordine o dati personali.
 export const metadata: Metadata = {
+  title: "Il tuo ordine",
   robots: { index: false, follow: false },
 };
 
@@ -114,13 +116,22 @@ export default async function PaginaOrdine({
         {etichettaNumeroOrdine(ordine)} · {formatDataLunga(ordine.creato_il)}
       </p>
 
-      {inElaborazione ? (
-        // Polling client-side: router.refresh() periodico finche il webhook
-        // non registra il pagamento (poi il componente non viene piu montato).
-        <AttesaPagamento />
-      ) : (
-        <p className="mt-4 max-w-prose leading-relaxed text-muted">{ui.testo}</p>
-      )}
+      {/* Live region SEMPRE montata (WCAG 4.1.3): quando il polling di
+          AttesaPagamento porta l'ordine a "pagato" (o al fallback "scaduto"),
+          il refresh sostituisce i figli di questo div; solo una regione live
+          gia presente nel DOM fa annunciare il nuovo testo di stato agli
+          screen reader. */}
+      <div aria-live="polite">
+        {inElaborazione ? (
+          // Polling client-side: router.refresh() periodico finche il webhook
+          // non registra il pagamento (poi il componente non viene piu montato).
+          <AttesaPagamento />
+        ) : (
+          <p className="mt-4 max-w-prose leading-relaxed text-muted">
+            {ui.testo}
+          </p>
+        )}
+      </div>
 
       {/* "Paga ora" nascosto mentre un pagamento e in elaborazione (ritorno da
           Stripe con webhook ancora in ritardo): evita che un secondo clic apra
@@ -136,7 +147,7 @@ export default async function PaginaOrdine({
       <div className="mt-6 text-center">
         <Link
           href="/"
-          className="text-sm font-medium text-sea underline-offset-2 transition-colors hover:text-lagoon hover:underline"
+          className="text-sm font-medium text-sea underline underline-offset-2 transition-colors hover:text-lagoon-ink"
         >
           Torna alla vetrina
         </Link>

@@ -12,6 +12,7 @@ import {
   type StatoAuthCliente,
 } from "@/lib/account/auth-actions";
 import { Spinner } from "@/components/gestore/ui";
+import StatoInvio from "@/components/StatoInvio";
 
 export default function BottoneReinviaConferma({ email }: { email: string }) {
   const [stato, formAction, pending] = useActionState<StatoAuthCliente, FormData>(
@@ -46,11 +47,18 @@ export default function BottoneReinviaConferma({ email }: { email: string }) {
         {pending && <Spinner className="h-4 w-4" />}
         {attesa > 0 ? `Reinvia tra ${attesa}s` : "Reinvia email di verifica"}
       </button>
-      {stato?.ok && attesa > 0 && (
-        <p className="text-xs text-muted" role="status">
-          Email inviata di nuovo: controlla la posta (anche lo spam).
-        </p>
-      )}
+      <StatoInvio attivo={pending} testo="Reinvio dell'email in corso" />
+      {/* Esito: live region SEMPRE montata (sr-only quando vuota, per non
+          lasciare un buco nel layout): montare l'elemento gia' pieno non viene
+          annunciato in modo affidabile, l'inserimento del testo si'. */}
+      <p
+        role="status"
+        className={stato?.ok && attesa > 0 ? "text-xs text-muted" : "sr-only"}
+      >
+        {stato?.ok && attesa > 0
+          ? "Email inviata di nuovo: controlla la posta (anche lo spam)."
+          : ""}
+      </p>
       {stato?.error && (
         <p role="alert" className="text-xs font-medium text-coral-ink">
           {stato.error}
