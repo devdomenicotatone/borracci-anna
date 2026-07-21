@@ -135,8 +135,11 @@ WCAG 2.2 AA, SEO tecnico.
    (indirizzo postale + email; se extra-UE anche il responsabile UE), poi:
    `node scripts/imposta-fabbricante.mjs BLT "Nome | Indirizzo | email" --applica`
    → compila 1840 schede e chiude M13.
-4. Confermare gli **orari del negozio**: aggiornare INSIEME `NEGOZIO.orari`
-   e `NEGOZIO.orariStrutturati` in src/lib/negozio.ts.
+4. ~~Confermare gli orari del negozio~~ **FATTO il 21/07**: orari
+   stagionali confermati dalla titolare e scritti in negozio.ts (testo +
+   JSON-LD per periodi a date fisse; il tratto pasquale, a inizio mobile,
+   vive solo nel testo). Se in futuro cambiano: aggiornare INSIEME
+   `NEGOZIO.orari` e `NEGOZIO.orariStrutturati`.
 5. Sostituire l'**email di contatto** (oggi casella personale dello
    sviluppatore, B8) — nota: è anche la casella che riceve gli alert
    tecnici e le notifiche ordine.

@@ -39,15 +39,26 @@ export const NEGOZIO = {
   partitaIva: "08395150728",
   rea: "RN-417723",
 
-  /** Orario di apertura (da confermare: la visura non riporta gli orari). */
-  orari: "Tutti i giorni 9:00–24:00 (stagione estiva)",
   /**
-   * Stesso orario in forma strutturata (schema.org openingHoursSpecification,
-   * usato dal JSON-LD ClothingStore in home). UNICA fonte insieme a `orari`:
-   * quando la titolare conferma gli orari, aggiornare ENTRAMBI. "24:00" si
-   * esprime come 23:59 (mezzanotte non e' un orario di chiusura valido).
+   * Orari di apertura (confermati dalla titolare il 21/07/2026). Il negozio e
+   * STAGIONALE: apre ogni anno la settimana di Pasqua e chiude il 30
+   * settembre; sempre orario continuato, 7 giorni su 7. UNICA fonte insieme a
+   * `orariStrutturati`: se gli orari cambiano, aggiornare ENTRAMBI.
+   */
+  orari:
+    "Da Pasqua al 30 settembre, orario continuato: marzo e aprile 9:00–20:00 " +
+    "(a Pasqua anche più a lungo), maggio 8:00–22:30, giugno–settembre " +
+    "7:30–23:30.",
+  /**
+   * Stessi orari in forma strutturata (schema.org openingHoursSpecification,
+   * JSON-LD ClothingStore in home). SOLO i periodi a date fisse: il tratto
+   * marzo–aprile parte dalla settimana di Pasqua, che cambia ogni anno —
+   * meglio nessun dato che date sbagliate su Google; quel tratto vive nel
+   * testo di `orari`. `validaDa`/`validaA` sono "MM-GG": l'anno corrente lo
+   * aggiunge la home al render, cosi il dato non scade mai.
    */
   orariStrutturati: {
+    /** Tutti i periodi valgono 7 giorni su 7 (orario continuato). */
     giorni: [
       "Monday",
       "Tuesday",
@@ -57,8 +68,10 @@ export const NEGOZIO = {
       "Saturday",
       "Sunday",
     ],
-    apre: "09:00",
-    chiude: "23:59",
+    periodi: [
+      { validaDa: "05-01", validaA: "05-31", apre: "08:00", chiude: "22:30" },
+      { validaDa: "06-01", validaA: "09-30", apre: "07:30", chiude: "23:30" },
+    ],
   },
 } as const;
 

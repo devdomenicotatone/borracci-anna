@@ -55,16 +55,23 @@ export default async function Home() {
       latitude: NEGOZIO.coordinate.lat,
       longitude: NEGOZIO.coordinate.lng,
     },
-    // Derivato dall'unica fonte NEGOZIO.orariStrutturati (prima era una
-    // stringa hardcoded che duplicava NEGOZIO.orari).
-    openingHoursSpecification: [
-      {
+    // Derivato dall'unica fonte NEGOZIO.orariStrutturati. Negozio STAGIONALE
+    // (da Pasqua al 30 settembre): un blocco per ciascun periodo a date
+    // fisse, ancorato all'anno corrente al render — il dato non scade mai.
+    // Il tratto pasquale (marzo-aprile, inizio mobile ogni anno) non ha date
+    // affidabili: vive solo nel testo di NEGOZIO.orari, meglio nessun dato
+    // che date sbagliate su Google.
+    openingHoursSpecification: NEGOZIO.orariStrutturati.periodi.map((p) => {
+      const anno = new Date().getFullYear();
+      return {
         "@type": "OpeningHoursSpecification",
         dayOfWeek: NEGOZIO.orariStrutturati.giorni,
-        opens: NEGOZIO.orariStrutturati.apre,
-        closes: NEGOZIO.orariStrutturati.chiude,
-      },
-    ],
+        opens: p.apre,
+        closes: p.chiude,
+        validFrom: `${anno}-${p.validaDa}`,
+        validThrough: `${anno}-${p.validaA}`,
+      };
+    }),
     priceRange: "€-€€",
     vatID: NEGOZIO.partitaIva,
   };
