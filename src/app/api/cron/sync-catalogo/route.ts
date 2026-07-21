@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { eseguiSyncCatalogo, salvaEsitoSync } from "@/lib/gestore/sync-catalogo";
+import { segnalaProblema } from "@/lib/osservabilita";
 import { TAG_CORRELATI } from "@/lib/correlati";
 import { TAG_FACETTE_VETRINA } from "@/lib/vetrina";
 import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
@@ -45,6 +46,20 @@ export async function GET(req: NextRequest) {
   // Persisti l'esito (solo run reali, salta internamente i dry-run) cosi il
   // gestore lo vede nel banner della lista prodotti. Best effort: non blocca.
   await salvaEsitoSync(report);
+
+  // Sync REALE fallito: oltre al banner (passivo), un'email alla titolare —
+  // senza, la vetrina continua a vendere giacenze vecchie finche qualcuno non
+  // apre la lista prodotti. Finestra 20h, NON 24: il cron gira ogni 24h in
+  // punto e con una finestra pari il dedup sopprimerebbe l'avviso del giorno
+  // dopo. segnalaProblema non lancia mai: il report al cron esce comunque.
+  if (!report.ok && !dryRun) {
+    await segnalaProblema({
+      titolo: "Aggiornamento giacenze BLT fallito",
+      chiave: "sync-giacenze",
+      finestraMinuti: 20 * 60,
+      dettaglio: `Il sync giornaliero delle giacenze dal CSV di Ingrosso BLT NON e andato a buon fine.\n\nErrore: ${report.error ?? "sconosciuto"}\n\nFinche non riesce un nuovo sync, il sito vende con le giacenze dell'ultimo aggiornamento riuscito (rischio di vendere articoli nel frattempo esauriti dal fornitore). L'esito e visibile anche nel banner della lista prodotti del gestore.\n\nCause tipiche: credenziali BLT scadute o cambiate, sito del fornitore giu, formato del CSV cambiato.`,
+    });
+  }
 
   // Dopo un run reale andato a buon fine: giacenze e disponibilita sono
   // cambiate, quindi rivalida vetrina, schede prodotto e lista gestore.

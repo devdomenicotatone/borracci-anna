@@ -13,8 +13,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Le email di notifica partono via `after()` DOPO la risposta 200 a Stripe: su
 // serverless il loro invio SMTP estende comunque la durata della funzione, quindi
-// diamo margine (default 10s troppo stretto per il connect+send SMTP).
-export const maxDuration = 30;
+// diamo margine (default 10s troppo stretto per il connect+send SMTP). 60 = tetto
+// del piano Hobby: copre anche il caso peggiore "SMTP giu" (notifiche fallite in
+// timeout + email di segnalazione alla titolare, in sequenza).
+export const maxDuration = 60;
 
 import { after } from "next/server";
 import type Stripe from "stripe";
@@ -26,6 +28,7 @@ import { inviaEmail } from "@/lib/email";
 import { noteLegaliEmail } from "@/lib/legale";
 import { NEGOZIO } from "@/lib/negozio";
 import { formatPrezzo } from "@/lib/format";
+import { segnalaProblema } from "@/lib/osservabilita";
 import type { Json } from "@/lib/supabase/database.types";
 
 // Eventi che corrispondono a un pagamento andato a buon fine.
@@ -249,10 +252,45 @@ function indirizzoLeggibile(session: Stripe.Checkout.Session): string {
 }
 
 /**
+ * Registra sull'ordine l'esito dell'email di conferma al cliente (finding M11
+ * audit legale: senza un flag persistito non si puo provare l'adempimento
+ * dell'art. 51 co. 7 per lo specifico ordine, ne accorgersi dei mancati invii).
+ * Gira dentro `after()`: client admin FRESCO, quello della richiesta potrebbe
+ * essere gia smontato. Fail-safe: DB senza le colonne (migration
+ * 20260721120000 non ancora applicata) o scrittura fallita -> solo log,
+ * l'ordine resta valido.
+ */
+async function registraEsitoEmailConferma(
+  sessionId: string,
+  inviata: boolean,
+): Promise<void> {
+  try {
+    const admin = createAdminSupabase();
+    const { error } = await admin
+      .from("ordini")
+      .update({
+        email_conferma_inviata: inviata,
+        email_conferma_il: inviata ? new Date().toISOString() : null,
+      })
+      .eq("stripe_session_id", sessionId);
+    if (error) {
+      console.error(
+        "[stripe-webhook] flag email_conferma non registrato:",
+        error.message,
+      );
+    }
+  } catch (err) {
+    console.error("[stripe-webhook] flag email_conferma non registrato:", err);
+  }
+}
+
+/**
  * Notifica un ordine pagato: email alla titolare (va spedito) e conferma al
  * cliente. Best effort (Promise.allSettled + inviaEmail non lancia mai): non
  * deve mai far ritentare il webhook. Chiamata via `after()`, cioe dopo aver gia
- * risposto 200 a Stripe, così l'SMTP non blocca la risposta.
+ * risposto 200 a Stripe, così l'SMTP non blocca la risposta. L'esito della
+ * conferma al cliente viene persistito sull'ordine (M11) e i mancati invii
+ * vengono segnalati alla titolare.
  */
 async function inviaNotificheOrdinePagato(
   session: Stripe.Checkout.Session,
@@ -284,7 +322,7 @@ async function inviaNotificheOrdinePagato(
           )}\nVerifica in negozio e, se la merce manca davvero, contatta il cliente.\n\n`
       : "";
 
-  await Promise.allSettled([
+  const [esitoTitolare, esitoCliente] = await Promise.allSettled([
     // 1) Notifica alla titolare: una vendita e stata pagata, va spedita.
     inviaEmail({
       to: NEGOZIO.email,
@@ -300,16 +338,49 @@ async function inviaNotificheOrdinePagato(
     //    conferma del contratto su supporto durevole ex art. 51 co. 7 Cod.
     //    Consumo: il blocco noteLegaliEmail (recesso + modulo, garanzia,
     //    condizioni, identita del venditore) e' contenuto obbligatorio.
-    ...(clienteEmail
-      ? [
-          inviaEmail({
-            to: clienteEmail,
-            subject: "Ordine confermato — Anna Shop",
-            text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\nArticoli:\n${articoli}\n\nTotale: ${totale} (IVA inclusa)\n\nSpedizione a:\n${indirizzo}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
-          }),
-        ]
-      : []),
+    clienteEmail
+      ? inviaEmail({
+          to: clienteEmail,
+          subject: "Ordine confermato — Anna Shop",
+          text: `Ciao${clienteNome ? ` ${clienteNome}` : ""},\n\ngrazie per il tuo acquisto! Abbiamo ricevuto il pagamento e prepariamo la spedizione.\n\nArticoli:\n${articoli}\n\nTotale: ${totale} (IVA inclusa)\n\nSpedizione a:\n${indirizzo}\n\n${noteLegaliEmail(siteUrl)}\n\nA presto,\nAnna Shop di Borracci Anna — ${NEGOZIO.indirizzoCompleto}`,
+        })
+      : Promise.resolve<boolean | null>(null),
   ]);
+
+  // M11: la conferma al cliente e "inviata" solo se l'SMTP l'ha accettata
+  // davvero. Flag persistito sull'ordine (prova + badge nel pannello gestore).
+  const confermaInviata =
+    esitoCliente.status === "fulfilled" && esitoCliente.value === true;
+  await registraEsitoEmailConferma(session.id, confermaInviata);
+
+  // Segnalazione dei mancati invii (un solo avviso per ordine: se l'SMTP e giu
+  // le due email falliscono insieme, inutile tempestare). L'avviso viaggia
+  // sullo stesso SMTP: se e giu del tutto resta comunque il log su Vercel e il
+  // flag a false nel pannello ordini, che non dipende dall'email.
+  const titolareInviata =
+    esitoTitolare.status === "fulfilled" && esitoTitolare.value === true;
+  if (!confermaInviata || !titolareInviata) {
+    const problemi: string[] = [];
+    if (!confermaInviata) {
+      problemi.push(
+        clienteEmail
+          ? `• La conferma d'ordine al cliente (${clienteEmail}) NON e partita: va contattato direttamente (obbligo di conferma su supporto durevole, art. 51 co. 7).`
+          : "• Stripe non ha fornito un'email del cliente: la conferma d'ordine non e recapitabile.",
+      );
+    }
+    if (!titolareInviata) {
+      problemi.push(
+        "• La notifica di vendita alla casella del negozio NON e partita: controlla il pannello ordini per non perdere la spedizione.",
+      );
+    }
+    await segnalaProblema({
+      titolo: "Problema email su un ordine pagato",
+      chiave: `email-ordine:${session.id}`,
+      dettaglio: `Ordine PAGATO e registrato (${totale}, sessione ${session.id}), ma:\n\n${problemi.join(
+        "\n",
+      )}\n\nPannello ordini: ${siteUrl}/gestore/ordini`,
+    });
+  }
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -337,6 +408,17 @@ export async function POST(req: Request): Promise<Response> {
     event = stripe.webhooks.constructEvent(body, firma, webhookSecret);
   } catch (err) {
     const messaggio = err instanceof Error ? err.message : "firma non valida";
+    // Header presente ma verifica fallita: con ogni probabilita e Stripe con un
+    // secret ruotato/sbagliato (gli scanner di solito non impostano l'header).
+    // Se fosse davvero cosi, NESSUN evento verrebbe piu elaborato: da segnalare.
+    // Via after(): la risposta 400 parte subito. Chiave fissa: max 1 email/24h.
+    after(() =>
+      segnalaProblema({
+        titolo: "Webhook Stripe: firma non valida",
+        chiave: "webhook-firma",
+        dettaglio: `Una chiamata al webhook Stripe presentava una firma non valida (${messaggio}).\n\nSe nelle prossime ore arrivano altri avvisi come questo, quasi certamente STRIPE_WEBHOOK_SECRET su Vercel non corrisponde piu al secret dell'endpoint nella dashboard Stripe: in quel caso gli ordini pagati NON vengono piu registrati sul sito. Verifica in Dashboard Stripe → Developers → Webhooks.\n\nSe invece resta un caso isolato, era probabilmente una chiamata estranea: nessuna azione necessaria.`,
+      }),
+    );
     return new Response(`Firma non valida: ${messaggio}`, { status: 400 });
   }
 
@@ -375,6 +457,17 @@ export async function POST(req: Request): Promise<Response> {
         // Errore lato nostro (DB/Stripe): logghiamo e rispondiamo 500 cosi
         // Stripe ritenta. Nessun dettaglio interno verso l'esterno.
         console.error("[stripe-webhook] finalizzazione fallita:", err);
+        // Segnalazione alla titolare: un pagamento INCASSATO non risulta sul
+        // sito finche un retry non riesce. Via after() (la risposta 500 parte
+        // subito); dedup per sessione: i retry di Stripe non tempestano.
+        const messaggio = err instanceof Error ? err.message : String(err);
+        after(() =>
+          segnalaProblema({
+            titolo: "Webhook Stripe: ordine pagato NON registrato",
+            chiave: `webhook-fin:${session.id}`,
+            dettaglio: `La registrazione di un ordine PAGATO e fallita (evento ${event.type}, sessione ${session.id}).\n\nErrore: ${messaggio}\n\nStripe ritentera automaticamente per qualche giorno: se il problema e passeggero l'ordine comparira da solo nel pannello. Se questo avviso si ripete per la stessa sessione, il pagamento e stato incassato ma l'ordine NON e sul sito: verifica su Dashboard Stripe → Payments e contatta il cliente.`,
+          }),
+        );
         return new Response("Elaborazione fallita.", { status: 500 });
       }
     }
@@ -399,6 +492,16 @@ export async function POST(req: Request): Promise<Response> {
     } catch (err) {
       // 500 -> Stripe ritenta: la pulizia e idempotente, il retry e innocuo.
       console.error("[stripe-webhook] pulizia sessione scaduta fallita:", err);
+      // Qui non ci sono soldi in ballo (nessun pagamento), ma un fallimento
+      // ripetuto e comunque un guasto (DB giu?): stessa segnalazione con dedup.
+      const messaggio = err instanceof Error ? err.message : String(err);
+      after(() =>
+        segnalaProblema({
+          titolo: "Webhook Stripe: pulizia sessione scaduta fallita",
+          chiave: `webhook-exp:${session.id}`,
+          dettaglio: `La pulizia di una sessione di checkout scaduta e fallita (sessione ${session.id}).\n\nErrore: ${messaggio}\n\nNessun pagamento coinvolto: al peggio un ordine legacy resta "Da confermare" nel pannello. Se l'avviso si ripete, il database potrebbe avere problemi.`,
+        }),
+      );
       return new Response("Elaborazione fallita.", { status: 500 });
     }
     console.info(

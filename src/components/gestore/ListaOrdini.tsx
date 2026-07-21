@@ -45,6 +45,13 @@ export interface OrdineGestore {
   confermato_il: string | null;
   creato_il: string;
   stock_mancante: VoceStockMancante[] | null;
+  /**
+   * Esito dell'email di conferma al cliente (M11): false = ordine pagato la cui
+   * conferma NON risulta inviata (badge). null/assente = non applicabile o
+   * migration non ancora applicata (nessun badge). Valorizzato dalla pagina con
+   * una query separata, non dalla select principale.
+   */
+  email_conferma_inviata?: boolean | null;
   ordine_righe: RigaOrdine[] | null;
 }
 
@@ -373,6 +380,11 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
             // dettaglio, cosi la titolare lo vede nel pannello e non solo
             // nell'email di avviso del webhook.
             const stockMancante = vociStockMancante(o);
+            // Ordine pagato senza conferma email al cliente (M11): la titolare
+            // deve vederlo qui, non solo nell'email di segnalazione (che
+            // potrebbe non partire se il guasto e proprio l'SMTP).
+            const confermaMancata =
+              o.stato === "pagato" && o.email_conferma_inviata === false;
             // Bozze di rimozione (solo per ordini in attesa) e totale live.
             const bozze = o.stato === "in_attesa" ? (rimozioni[o.id] ?? {}) : {};
             const numRimosse = righe.filter((r) => bozze[r.id]).length;
@@ -415,6 +427,11 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                       {stockMancante.length > 0 && (
                         <span className="rounded-full bg-coral/15 px-2.5 py-1 text-xs font-bold text-coral-ink">
                           Stock insufficiente
+                        </span>
+                      )}
+                      {confermaMancata && (
+                        <span className="rounded-full bg-sun/15 px-2.5 py-1 text-xs font-bold text-[#8a6500]">
+                          Email conferma non partita
                         </span>
                       )}
                     </div>
@@ -569,6 +586,11 @@ export default function ListaOrdini({ ordini }: { ordini: OrdineGestore[] }) {
                   {stockMancante.length > 0 && (
                     <span className="hidden rounded-full bg-coral/15 px-2.5 py-1 text-xs font-bold text-coral-ink lg:inline-flex">
                       Stock insufficiente
+                    </span>
+                  )}
+                  {confermaMancata && (
+                    <span className="hidden rounded-full bg-sun/15 px-2.5 py-1 text-xs font-bold text-[#8a6500] lg:inline-flex">
+                      Email conferma non partita
                     </span>
                   )}
 

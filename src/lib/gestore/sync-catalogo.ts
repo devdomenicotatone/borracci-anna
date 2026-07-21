@@ -205,6 +205,12 @@ export interface UltimoSync {
   eseguitoIl: string;
   ok: boolean;
   report: ReportSync | null;
+  /**
+   * Ore trascorse dall'ultimo run al momento della LETTURA (qui e non nel
+   * componente: il render deve restare puro per react-hooks/purity). Serve al
+   * banner per il caso "cron fermo".
+   */
+  oreDallUltimoRun: number;
 }
 
 /**
@@ -242,7 +248,13 @@ export async function leggiUltimoSync(supabase: Db): Promise<UltimoSync | null> 
       .maybeSingle();
     if (error || !data) return null;
     const r = data as { eseguito_il: string; ok: boolean; report: ReportSync | null };
-    return { eseguitoIl: r.eseguito_il, ok: r.ok, report: r.report };
+    return {
+      eseguitoIl: r.eseguito_il,
+      ok: r.ok,
+      report: r.report,
+      oreDallUltimoRun:
+        (Date.now() - new Date(r.eseguito_il).getTime()) / 36e5,
+    };
   } catch {
     return null;
   }

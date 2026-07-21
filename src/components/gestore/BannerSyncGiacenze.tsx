@@ -26,6 +26,35 @@ export default function BannerSyncGiacenze({
 
   const quando = dataIt(ultimo.eseguitoIl);
 
+  // Sync FERMO: l'ultimo run (riuscito o no) e piu vecchio di 30h — il cron e
+  // giornaliero, quindi ha saltato un giro (24h + margine per il drift dei cron
+  // Vercel Hobby). E l'unico segnale possibile per un cron MORTO (config
+  // Vercel, secret ruotato): un runner che non parte non puo nemmeno inviare
+  // email di allarme. Il fallimento di un run che invece GIRA arriva anche via
+  // email (segnalaProblema nel cron). Le ore arrivano calcolate da
+  // leggiUltimoSync: niente Date.now() nel render (react-hooks/purity).
+  const oreFermo = ultimo.oreDallUltimoRun;
+  if (oreFermo > 30) {
+    const giorni = Math.max(1, Math.floor(oreFermo / 24));
+    return (
+      <div className="mb-4 flex items-start gap-3 rounded-2xl bg-sun/15 px-4 py-3 text-sm ring-1 ring-sun/40">
+        <span aria-hidden="true" className="text-base leading-none">
+          ⚠️
+        </span>
+        <p className="text-[#8a6500]">
+          <span className="font-bold">
+            Aggiornamento giacenze fermo da{" "}
+            {giorni === 1 ? "oltre un giorno" : `${giorni} giorni`}
+          </span>{" "}
+          (ultimo run: {quando}
+          {ultimo.ok ? "" : ", non riuscito"}). Il sito sta vendendo con
+          giacenze vecchie: controlla il cron su Vercel (o segnalalo a chi
+          gestisce il sito).
+        </p>
+      </div>
+    );
+  }
+
   // Run fallito: avviso in ambra con il motivo.
   if (!ultimo.ok) {
     return (

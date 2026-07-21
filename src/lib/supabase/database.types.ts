@@ -181,6 +181,8 @@ export interface Database {
           spedizione_indirizzo: Json | null;
           user_id: string | null;
           numero: number | null;
+          email_conferma_inviata: boolean | null;
+          email_conferma_il: string | null;
           creato_il: string;
         };
         Insert: {
@@ -200,6 +202,8 @@ export interface Database {
           spedizione_indirizzo?: Json | null;
           user_id?: string | null;
           numero?: number | null;
+          email_conferma_inviata?: boolean | null;
+          email_conferma_il?: string | null;
           creato_il?: string;
         };
         Update: {
@@ -219,6 +223,8 @@ export interface Database {
           spedizione_indirizzo?: Json | null;
           user_id?: string | null;
           numero?: number | null;
+          email_conferma_inviata?: boolean | null;
+          email_conferma_il?: string | null;
           creato_il?: string;
         };
         Relationships: [];
