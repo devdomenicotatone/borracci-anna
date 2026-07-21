@@ -229,8 +229,12 @@ export default function ProductCard({
         <h3 className="line-clamp-2 min-h-[2.75em] font-display text-base font-bold leading-snug text-foreground">
           {prodotto.nome}
         </h3>
+        {/* "IVA incl.": il prezzo esposto deve dichiararsi comprensivo di
+            imposte anche in card (finding M1 audit legale). Sottotono per non
+            sporcare la griglia. */}
         <span className="mt-0.5 block font-bold tabular-nums text-sea">
-          {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
+          {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}{" "}
+          <span className="text-[11px] font-normal text-muted">IVA incl.</span>
         </span>
       </div>
 

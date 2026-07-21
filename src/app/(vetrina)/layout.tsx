@@ -22,6 +22,7 @@ import { statoCarrello } from "@/lib/cart";
 import { caricaCategoriePubbliche } from "@/lib/categorie";
 import { gruppiCategorie } from "@/lib/categorie-albero";
 import { verificaSessioneCliente } from "@/lib/account/auth";
+import { SPEDIZIONE_ITALIA_CENTS } from "@/lib/spedizione";
 
 export default async function VetrinaLayout({
   children,
@@ -59,7 +60,9 @@ export default async function VetrinaLayout({
           </main>
           <Footer />
         </div>
-        <CartDrawer />
+        {/* Tariffa passata dal server: e il valore env-driven che Stripe
+            addebitera (il modulo spedizione e server-only per quel valore). */}
+        <CartDrawer tariffaItaliaCents={SPEDIZIONE_ITALIA_CENTS} />
         <SincronizzaPreferiti userId={sessione?.userId ?? null} />
         {/* useSearchParams richiede un confine Suspense per non de-optimizzare
             la pagina a dynamic. */}

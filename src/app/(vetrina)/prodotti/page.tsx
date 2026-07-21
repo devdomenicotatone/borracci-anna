@@ -63,8 +63,10 @@ export default async function CatalogoCompleto({
     caricaFacetteVetrina(supabase),
   ]);
 
+  // xl:max-w-7xl: sui desktop larghi il catalogo passa a 5 colonne (griglia in
+  // CatalogoSezione) — prima usava 1112px fissi anche a 1920.
   return (
-    <section className="mx-auto max-w-6xl px-5 py-12 sm:py-16">
+    <section className="mx-auto max-w-6xl px-5 py-12 sm:py-16 xl:max-w-7xl">
       <div className="mb-8 sm:mb-10">
         <OcchielloSezione>Catalogo</OcchielloSezione>
         <h1 className="mt-2 font-display text-3xl font-extrabold leading-tight text-foreground sm:text-4xl">

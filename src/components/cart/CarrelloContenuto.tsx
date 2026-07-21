@@ -21,6 +21,7 @@ import ModuloRichiesta, {
 } from "@/components/cart/ModuloRichiesta";
 import { useCarrello } from "@/components/cart/CartProvider";
 import { formatPrezzo } from "@/lib/format";
+import { costoSpedizione } from "@/lib/spedizione";
 import type { RigaCarrello } from "@/lib/types";
 
 /** Subtotale in centesimi di un sottoinsieme di righe. */
@@ -40,9 +41,13 @@ function articoli(n: number): string {
 
 export default function CarrelloContenuto({
   prefill = null,
+  tariffaItaliaCents,
 }: {
   /** Dati del cliente loggato (null = ospite: comportamento identico a prima). */
   prefill?: PrefillRichiesta | null;
+  /** Tariffa spedizione Italia (centesimi) dal SERVER (valore env-driven che
+   *  Stripe addebitera: sul client il modulo spedizione vede solo il default). */
+  tariffaItaliaCents: number;
 }) {
   const { righe, count, valuta } = useCarrello();
   // Token dell'ultima richiesta inviata da un carrello misto: mostra il banner
@@ -94,6 +99,7 @@ export default function CarrelloContenuto({
             righe={disponibili}
             valuta={valuta}
             misto
+            tariffaItaliaCents={tariffaItaliaCents}
             slotFooter={!prefill ? <InvitoAccedi /> : null}
           />
           <div className="mt-12">
@@ -121,6 +127,7 @@ export default function CarrelloContenuto({
           righe={disponibili}
           valuta={valuta}
           misto={false}
+          tariffaItaliaCents={tariffaItaliaCents}
           slotFooter={footerRiepilogo}
         />
       )}
@@ -136,15 +143,28 @@ export default function CarrelloContenuto({
           per desktop. Nel carrello MISTO la barra spinge il pagamento (totale
           dei soli disponibili) e linka la sezione richiesta. */}
       <div className="sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:hidden">
+        {/* Totale coerente col riepilogo: quando c'e un pagamento diretto la
+            cifra INCLUDE la spedizione reale (M3+B6); nel flusso richiesta
+            resta la stima del solo subtotale. */}
         <div className="flex items-center justify-between">
           <span className="font-display text-sm font-bold text-foreground">
-            {misto ? "Disponibili subito" : "Totale stimato"}
+            {misto
+              ? "Disponibili subito (IVA incl.)"
+              : disponibili.length > 0
+                ? "Totale (IVA inclusa)"
+                : "Totale stimato (IVA incl.)"}
           </span>
           <span className="font-display text-lg font-extrabold tabular-nums text-sea">
-            {formatPrezzo(
-              misto ? subtotaleDi(disponibili) : subtotaleDi(righe),
-              valuta,
-            )}
+            {(() => {
+              if (disponibili.length === 0) {
+                return formatPrezzo(subtotaleDi(righe), valuta);
+              }
+              const sub = subtotaleDi(misto ? disponibili : righe);
+              return formatPrezzo(
+                sub + costoSpedizione(sub, tariffaItaliaCents),
+                valuta,
+              );
+            })()}
           </span>
         </div>
         <div className="mt-2">
@@ -211,15 +231,20 @@ function SezioneDisponibili({
   righe,
   valuta,
   misto,
+  tariffaItaliaCents,
   slotFooter = null,
 }: {
   righe: RigaCarrello[];
   valuta: string;
   misto: boolean;
+  tariffaItaliaCents: number;
   slotFooter?: React.ReactNode;
 }) {
   const sub = subtotaleDi(righe);
   const n = quantitaDi(righe);
+  // Spedizione REALE sul subtotale di QUESTA sezione (nel misto Stripe incassa
+  // solo i disponibili): stessa cifra che il checkout addebitera (M3+B6).
+  const sped = costoSpedizione(sub, tariffaItaliaCents);
 
   return (
     <section aria-labelledby={misto ? "sezione-disponibili" : undefined}>
@@ -251,16 +276,24 @@ function SezioneDisponibili({
           </div>
           <div className="flex items-center justify-between text-sm text-muted">
             <span>Spedizione</span>
-            <span>Calcolata al pagamento</span>
+            <span className="tabular-nums text-foreground">
+              {sped === 0 ? "Gratuita" : formatPrezzo(sped, valuta)}
+            </span>
           </div>
         </div>
 
+        {/* Totale VERO (subtotale + spedizione, IVA inclusa): e la cifra esatta
+            del checkout Stripe — niente piu "stimato" ne spedizione a sorpresa
+            (finding M3+B6 audit legale). */}
         <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
           <span className="font-display font-bold text-foreground">
-            Totale stimato
+            Totale{" "}
+            <span className="font-sans text-sm font-normal text-muted">
+              (IVA inclusa)
+            </span>
           </span>
           <span className="font-display text-2xl font-extrabold text-sea">
-            {formatPrezzo(sub, valuta)}
+            {formatPrezzo(sub + sped, valuta)}
           </span>
         </div>
 
@@ -268,8 +301,7 @@ function SezioneDisponibili({
           <CheckoutButton />
         </div>
         <p className="mt-3 text-center text-xs text-muted">
-          Pagamento sicuro con Stripe · Spedizione e imposte calcolate al
-          pagamento
+          Pagamento sicuro con Stripe · Prezzi IVA inclusa
         </p>
         {misto && (
           <p className="mt-1 text-center text-xs text-muted">
@@ -334,13 +366,16 @@ function SezioneRichiesta({
           </div>
           <div className="flex items-center justify-between text-sm text-muted">
             <span>Spedizione</span>
-            <span>Da concordare</span>
+            <span>Confermata con la disponibilità</span>
           </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
           <span className="font-display font-bold text-foreground">
-            Totale stimato
+            Totale stimato{" "}
+            <span className="font-sans text-sm font-normal text-muted">
+              (IVA inclusa)
+            </span>
           </span>
           <span className="font-display text-2xl font-extrabold text-sea">
             {formatPrezzo(sub, valuta)}

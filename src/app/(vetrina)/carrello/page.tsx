@@ -9,6 +9,7 @@
 
 import CarrelloContenuto from "@/components/cart/CarrelloContenuto";
 import { verificaSessioneCliente } from "@/lib/account/auth";
+import { SPEDIZIONE_ITALIA_CENTS } from "@/lib/spedizione";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +28,18 @@ export default async function CarrelloPage() {
     : null;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
+    // <div>, non <main>: il landmark main lo mette gia il layout della vetrina
+    // (id="contenuto") — un secondo <main> annidato confonde gli screen reader
+    // (residuo audit a11y, uniformato toccando il file).
+    <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
       <h1 className="font-display text-3xl font-extrabold tracking-tight text-foreground">
         Il tuo carrello
       </h1>
-      <CarrelloContenuto prefill={prefill} />
-    </main>
+      {/* Tariffa dal server: valore env-driven identico a quello del checkout. */}
+      <CarrelloContenuto
+        prefill={prefill}
+        tariffaItaliaCents={SPEDIZIONE_ITALIA_CENTS}
+      />
+    </div>
   );
 }

@@ -31,7 +31,7 @@ export default function SkeletonCatalogo({ card = 8 }: { card?: number }) {
       <div className="mt-5 h-12 w-full animate-pulse rounded-full bg-surface" />
 
       {/* Griglia card */}
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5">
         {Array.from({ length: card }, (_, i) => (
           <SkeletonCard key={i} />
         ))}

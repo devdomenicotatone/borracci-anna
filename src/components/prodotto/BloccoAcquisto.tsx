@@ -44,6 +44,11 @@ export default function BloccoAcquisto({
 
   const stockMax = variante?.stock ?? 0;
   const stockBasso = !suRichiesta && stockMax > 0 && stockMax <= 3;
+  // Il sync BLT marca "disponibile" con la giacenza-semaforo 999 (vedi
+  // sync-catalogo): quel numero e una convenzione interna, non un conteggio —
+  // mostrarlo ("999 disponibili") suona finto. Da quella soglia in su niente
+  // numero, solo la disponibilita.
+  const stockSemaforo = stockMax >= 999;
   // Tetto della quantita: lo stock in vendita diretta, NESSUNO su richiesta
   // (la disponibilita la conferma il negozio dopo l'invio della richiesta).
   const quantitaMax = suRichiesta ? Number.POSITIVE_INFINITY : stockMax || 1;
@@ -139,7 +144,11 @@ export default function BloccoAcquisto({
           <p
             className={`mt-2 text-xs ${stockBasso ? "font-semibold text-coral-ink" : "text-muted"}`}
           >
-            {stockBasso ? `Solo ${stockMax} rimasti` : `${stockMax} disponibili`}
+            {stockBasso
+              ? `Solo ${stockMax} rimasti`
+              : stockSemaforo
+                ? "Disponibilità immediata"
+                : `${stockMax} disponibili`}
           </p>
         )}
       </div>

@@ -4,10 +4,13 @@
 
 export default function Loading() {
   return (
-    <main
+    // <div> (landmark nel layout) e STESSO contenitore della pagina vera
+    // (max-w-5xl → lg:max-w-6xl, stessi padding): prima lo skeleton era 6xl
+    // fisso su una pagina 5xl — micro layout-shift al termine del load.
+    <div
       data-skel
       aria-hidden="true"
-      className="mx-auto max-w-6xl px-5 py-8 sm:py-10"
+      className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:max-w-6xl lg:px-8"
     >
       {/* Breadcrumb */}
       <div className="mb-6 flex items-center gap-2">
@@ -42,6 +45,6 @@ export default function Loading() {
           <div className="h-12 w-full animate-pulse rounded-full bg-surface sm:w-72" />
         </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -22,7 +22,7 @@ export default async function PaginaPreferiti() {
   const sessione = await verificaSessioneCliente();
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8 xl:max-w-7xl">
       <p className="mb-1 font-display text-xs font-bold uppercase tracking-wide text-sea">
         Salvati con il cuoricino
       </p>

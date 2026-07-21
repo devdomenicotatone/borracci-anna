@@ -191,8 +191,8 @@ export default async function CategoriaPage({
         }}
       />
 
-      {/* Intestazione categoria */}
-      <section className="mx-auto max-w-6xl px-5 pt-8 sm:pt-10">
+      {/* Intestazione categoria (xl:max-w-7xl allineato alla griglia sotto) */}
+      <section className="mx-auto max-w-6xl px-5 pt-8 sm:pt-10 xl:max-w-7xl">
         {/* Breadcrumb */}
         <nav aria-label="Percorso" className="mb-2">
           <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
@@ -306,7 +306,7 @@ export default async function CategoriaPage({
       {/* Griglia con filtri */}
       <section
         aria-label={`Prodotti della categoria ${cat.nome}`}
-        className="mx-auto max-w-6xl px-5 py-8 sm:py-10"
+        className="mx-auto max-w-6xl px-5 py-8 sm:py-10 xl:max-w-7xl"
       >
         <CatalogoSezione
           basePath={`/categoria/${cat.slug}`}

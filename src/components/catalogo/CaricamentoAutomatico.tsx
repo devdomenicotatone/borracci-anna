@@ -210,7 +210,7 @@ export default function CaricamentoAutomatico({
         <div
           key={stato.base + i + 1}
           aria-label="Altri prodotti in vetrina"
-          className="mt-4 grid grid-cols-2 gap-4 sm:mt-5 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
+          className="mt-4 grid grid-cols-2 gap-4 sm:mt-5 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5"
         >
           {blocco.map((prodotto) => (
             // Identiche alle card server sotto la piega: niente priorita, le

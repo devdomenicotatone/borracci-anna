@@ -17,9 +17,17 @@ import CartItem, { CheckoutButton } from "@/components/CartItem";
 import FreeShippingBar from "@/components/cart/FreeShippingBar";
 import { useCarrello } from "@/components/cart/CartProvider";
 import { formatPrezzo } from "@/lib/format";
+import { costoSpedizione } from "@/lib/spedizione";
 import { bloccaScrollBody } from "@/lib/scroll-lock";
 
-export default function CartDrawer() {
+export default function CartDrawer({
+  tariffaItaliaCents,
+}: {
+  /** Tariffa spedizione Italia (centesimi), passata dal layout SERVER: e il
+   *  valore env-driven che Stripe addebitera davvero (sul client il modulo
+   *  spedizione vedrebbe solo il default compilato). */
+  tariffaItaliaCents: number;
+}) {
   const { righe, count, subtotaleCents, valuta, drawerAperto, chiudiDrawer } =
     useCarrello();
   const pannelloRef = useRef<HTMLDivElement>(null);
@@ -225,17 +233,71 @@ export default function CartDrawer() {
               </ul>
             </div>
 
-            {/* Footer azioni */}
+            {/* Footer azioni. Il breakdown con spedizione REALE (tariffa unica
+                5,90 € / gratis sopra soglia) vale per il carrello interamente
+                pagabile: e la cifra esatta che Stripe addebitera (M2+M3 audit
+                legale: mai piu "spedizione e imposte calcolate al pagamento" —
+                i prezzi sono gia IVA inclusa e la spedizione e nota). Per i
+                carrelli con articoli su richiesta la spedizione la conferma il
+                negozio: resta il solo subtotale, con dicitura vera. */}
             <div className="border-t border-line bg-surface px-5 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">Subtotale</span>
-                <span className="font-display text-xl font-extrabold text-sea">
-                  {formatPrezzo(subtotaleCents, valuta)}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-muted">
-                Spedizione e imposte calcolate al pagamento.
-              </p>
+              {nRichiesta === 0 ? (
+                <>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm text-muted">
+                      <span>Subtotale</span>
+                      <span className="tabular-nums text-foreground">
+                        {formatPrezzo(subtotaleCents, valuta)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-muted">
+                      <span>Spedizione</span>
+                      <span className="tabular-nums text-foreground">
+                        {costoSpedizione(subtotaleCents, tariffaItaliaCents) === 0
+                          ? "Gratuita"
+                          : formatPrezzo(
+                              costoSpedizione(
+                                subtotaleCents,
+                                tariffaItaliaCents,
+                              ),
+                              valuta,
+                            )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
+                    <span className="text-sm font-bold text-foreground">
+                      Totale{" "}
+                      <span className="font-normal text-muted">
+                        (IVA inclusa)
+                      </span>
+                    </span>
+                    <span className="font-display text-xl font-extrabold text-sea">
+                      {formatPrezzo(
+                        subtotaleCents +
+                          costoSpedizione(subtotaleCents, tariffaItaliaCents),
+                        valuta,
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted">
+                      Subtotale{" "}
+                      <span className="text-xs">(IVA inclusa)</span>
+                    </span>
+                    <span className="font-display text-xl font-extrabold text-sea">
+                      {formatPrezzo(subtotaleCents, valuta)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">
+                    Spedizione degli articoli su richiesta: la confermiamo
+                    insieme alla disponibilità.
+                  </p>
+                </>
+              )}
 
               <div className="mt-4">
                 {/* CTA per natura del carrello: solo pronta consegna -> paga

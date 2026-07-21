@@ -328,7 +328,11 @@ export default async function PaginaProdotto({
   };
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
+    // <div>, non <main>: il landmark lo mette il layout vetrina (id="contenuto");
+    // il <main> annidato era un residuo dell'audit a11y, uniformato toccando il
+    // file. lg:max-w-6xl: a 1024+ la PDP usava meta schermo (960px totali, foto
+    // 492px) — piu respiro a galleria e colonna acquisto sui desktop veri.
+    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6 lg:max-w-6xl lg:px-8">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -418,6 +422,6 @@ export default async function PaginaProdotto({
           bloccarci sopra costa ~0 a cache calda. Se i correlati sono troppo
           pochi la sezione non compare (vedi ProdottiCorrelati). */}
       <ProdottiCorrelati slug={prodottoBase.slug} />
-    </main>
+    </div>
   );
 }

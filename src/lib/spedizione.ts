@@ -76,6 +76,20 @@ export function opzioniSpedizione(subtotaleCents: number): OpzioneSpedizione[] {
   ];
 }
 
+/**
+ * Costo di spedizione (centesimi) per un dato subtotale, con TARIFFA ESPLICITA.
+ * La tariffa va passata dal server (SPEDIZIONE_ITALIA_CENTS legge env
+ * server-only: sul client varrebbe sempre il default) — cosi il carrello
+ * mostra ESATTAMENTE la cifra che Stripe addebitera (finding M3+B6 audit
+ * legale). Pura: usabile ovunque.
+ */
+export function costoSpedizione(
+  subtotaleCents: number,
+  tariffaCents: number,
+): number {
+  return statoSpedizione(subtotaleCents).raggiunta ? 0 : tariffaCents;
+}
+
 export interface StatoSpedizione {
   /** Soglia in centesimi. */
   sogliaCents: number;

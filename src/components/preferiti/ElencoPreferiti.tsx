@@ -97,7 +97,7 @@ export default function ElencoPreferiti() {
   // Skeleton: prima del mount (SSR/idratazione) e finche non c'e nulla da mostrare.
   if (!montato || (caricamento && prodotti.length === 0)) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
@@ -118,7 +118,7 @@ export default function ElencoPreferiti() {
     prodotti.length > 0 ? (
       <div
         aria-label="I tuoi preferiti"
-        className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5"
       >
         {prodotti.map((prodotto, i) => (
           <ProductCard

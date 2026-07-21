@@ -92,7 +92,7 @@ export default function CatalogoSezione({
         <>
           <div
             aria-label="Prodotti in vetrina"
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
+            className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5"
           >
             {prodotti.map((prodotto, i) => (
               // Su mobile la griglia e a 2 colonne: fetchPriority high SOLO

@@ -263,9 +263,14 @@ export default function ProdottoDettaglio({
         </h1>
 
         {/* Prezzo in blu mare come nelle card della griglia (coerenza) e con
-            contrasto pieno AA: il corallo su bianco era appena sufficiente. */}
+            contrasto pieno AA: il corallo su bianco era appena sufficiente.
+            "IVA inclusa" accanto al prezzo: obbligo di indicazione del prezzo
+            comprensivo di imposte (finding M1 audit legale). */}
         <p className="mt-3 font-display text-3xl font-extrabold text-sea">
-          {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}
+          {formatPrezzo(prodotto.prezzo_cents, prodotto.valuta)}{" "}
+          <span className="align-middle font-sans text-sm font-normal text-muted">
+            IVA inclusa
+          </span>
         </p>
 
         {soloOnline ? (
@@ -306,8 +311,13 @@ export default function ProdottoDettaglio({
           </span>
         )}
 
+        {/* Su desktop (colonna sticky, fold ~800px) la descrizione qui in mezzo
+            spingeva la CTA "Aggiungi al carrello" SOTTO la piega: da md in su
+            scende dopo il blocco acquisto (md:order-1; la colonna e flex-col,
+            i fratelli restano a order 0 e lo SKU chiude a order 2). Su mobile
+            l'ordine resta quello di sempre. */}
         {prodotto.descrizione && (
-          <p className="mt-6 max-w-prose whitespace-pre-line leading-relaxed text-muted">
+          <p className="mt-6 max-w-prose whitespace-pre-line leading-relaxed text-muted md:order-1">
             {prodotto.descrizione}
           </p>
         )}
@@ -465,7 +475,7 @@ export default function ProdottoDettaglio({
           )}
         </div>
 
-        <p className="mt-8 font-mono text-xs text-muted">
+        <p className="mt-8 font-mono text-xs text-muted md:order-2">
           SKU prodotto: {prodotto.codice ?? prodotto.slug}
         </p>
       </div>
