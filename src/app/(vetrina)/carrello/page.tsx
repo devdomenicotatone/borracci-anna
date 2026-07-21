@@ -14,6 +14,10 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Carrello",
+  // noindex CRAWLABILE (niente Disallow in robots.txt): un Disallow blocca il
+  // crawl ma non l'indicizzazione da link esterni; il noindex de-indicizza
+  // davvero solo se Googlebot puo' leggerlo. Stesso pattern di /preferiti.
+  robots: { index: false, follow: false },
 };
 
 export default async function CarrelloPage() {

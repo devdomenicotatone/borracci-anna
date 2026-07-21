@@ -6,6 +6,8 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Pagamento annullato",
+  // noindex crawlabile (vedi carrello/page.tsx).
+  robots: { index: false, follow: false },
 };
 
 export default function CheckoutAnnullatoPage() {

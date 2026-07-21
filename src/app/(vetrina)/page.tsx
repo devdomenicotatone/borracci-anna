@@ -34,7 +34,12 @@ export default async function Home() {
     "@type": "ClothingStore",
     name: "Anna Shop",
     legalName: NEGOZIO.ragioneSociale,
-    ...(SITE ? { "@id": SITE, url: SITE } : {}),
+    // @id con frammento dedicato: la radice nuda colliderebbe con un futuro
+    // nodo WebSite. image e' richiesta dal pannello LocalBusiness: in assenza
+    // di una foto del negozio si usa la card OG di radice (audit SEO 2026-07).
+    ...(SITE
+      ? { "@id": `${SITE}/#negozio`, url: SITE, image: `${SITE}/opengraph-image` }
+      : {}),
     telephone: NEGOZIO.telefono,
     email: NEGOZIO.email,
     address: {
@@ -50,7 +55,17 @@ export default async function Home() {
       latitude: NEGOZIO.coordinate.lat,
       longitude: NEGOZIO.coordinate.lng,
     },
-    openingHours: "Mo-Su 09:00-24:00",
+    // Derivato dall'unica fonte NEGOZIO.orariStrutturati (prima era una
+    // stringa hardcoded che duplicava NEGOZIO.orari).
+    openingHoursSpecification: [
+      {
+        "@type": "OpeningHoursSpecification",
+        dayOfWeek: NEGOZIO.orariStrutturati.giorni,
+        opens: NEGOZIO.orariStrutturati.apre,
+        closes: NEGOZIO.orariStrutturati.chiude,
+      },
+    ],
+    priceRange: "€-€€",
     vatID: NEGOZIO.partitaIva,
   };
 

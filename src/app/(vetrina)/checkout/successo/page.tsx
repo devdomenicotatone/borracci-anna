@@ -16,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Ordine confermato",
+  // noindex crawlabile (vedi carrello/page.tsx): i success_url possono essere
+  // linkati/condivisi e senza meta robots resterebbero indicizzabili URL-only.
+  robots: { index: false, follow: false },
 };
 
 type EsitoPagamento = "pagato" | "in_attesa" | "sconosciuto";

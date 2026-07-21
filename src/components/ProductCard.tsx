@@ -237,12 +237,19 @@ export default function ProductCard({
       {/* Link overlay: copre l'intera card SOTTO i controlli (z-10 < z-20 di
           cuore/frecce/quick-add), cosi quelli restano cliccabili e il resto della
           card naviga. L'aspect-box non ha overflow/opacity/transform, quindi non
-          crea uno stacking context: gli z-index dei bottoni battono l'overlay. */}
+          crea uno stacking context: gli z-index dei bottoni battono l'overlay.
+          Il nome sta DENTRO il link come sr-only (non aria-label): e' l'unico
+          <a> verso le PDP e senza contenuto testuale Google lo vedeva come
+          link "senza anchor" su tutto il catalogo (audit SEO 2026-07); il nome
+          accessibile resta identico. */}
       <Link
         href={`/prodotti/${prodotto.slug}`}
-        aria-label={`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
         className="absolute inset-0 z-10 rounded-3xl"
-      />
+      >
+        <span className="sr-only">
+          {`Vedi ${prodotto.nome}${esaurito ? " (esaurito)" : ""}`}
+        </span>
+      </Link>
     </>
   );
 

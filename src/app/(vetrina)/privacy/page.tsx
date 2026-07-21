@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   title: "Informativa privacy",
   description:
     "Come Anna Shop tratta i tuoi dati personali: quali dati raccogliamo, perché, con quali fornitori, per quanto tempo e quali sono i tuoi diritti. Con la sezione dedicata ai cookie.",
+  alternates: { canonical: "/privacy" },
 };
 
 /** Titoletto interno alle sezioni (dati trattati, cookie). */

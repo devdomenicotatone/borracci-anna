@@ -34,6 +34,10 @@ export async function GET(
 ) {
   const { slug } = await params;
   const { nome, prezzo, immagine, soloOnline } = await caricaProdottoCard(slug);
+  // Troncatura a fine parola come nella card OG: i nomi lunghi del merch
+  // licenziato sfondavano il pannello (audit SEO 2026-07).
+  const nomeCard =
+    nome.length > 70 ? `${nome.slice(0, 70).replace(/\s+\S*$/, "")}…` : nome;
 
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const qr = await qrDataUrl(`${site}/prodotti/${slug}`, 400);
@@ -113,7 +117,7 @@ export async function GET(
 
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", fontSize: c.nome, fontWeight: 700, color: "#ffffff", lineHeight: 1.04 }}>
-              {nome}
+              {nomeCard}
             </div>
             {prezzo ? (
               <div style={{ display: "flex", marginTop: 20, fontSize: c.prezzo, fontWeight: 700, color: "#ffd23f" }}>

@@ -69,10 +69,9 @@ function ChipCat({
 
 export async function generateMetadata({
   params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
+  searchParams,
+}: PropsPagina): Promise<Metadata> {
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const categorie = await caricaCategoriePubbliche();
   const cat = categoriaPerSlug(categorie, slug);
   if (!cat) return { title: nomeDaSlug(slug) };
@@ -84,10 +83,24 @@ export async function generateMetadata({
     .reverse()
     .map((c) => c.nome)
     .join(" ");
+  const description = `${titolo} da Anna Shop, il negozio di abbigliamento sul lungomare di Rimini. Scopri la selezione: te la spediamo a casa o la ritiri in negozio.`;
+
+  // Pagine paginate ?pagina=N (contenuto cumulativo, crawlabile via "Mostra
+  // altri"): titolo distinto e noindex/follow, MAI canonical verso la pagina 1
+  // — non ne sono un duplicato e Google puo' rigettare l'hint (audit SEO
+  // 2026-07, stesso pattern di /prodotti).
+  const pagina = parsePagina(sp);
+  if (pagina > 1) {
+    return {
+      title: `${titolo} — pagina ${pagina}`,
+      description,
+      robots: { index: false, follow: true },
+    };
+  }
 
   return {
     title: titolo,
-    description: `${titolo} da Anna Shop, il negozio di abbigliamento sul lungomare di Rimini. Scopri la selezione: te la spediamo a casa o la ritiri in negozio.`,
+    description,
     alternates: { canonical: `/categoria/${slug}` },
   };
 }
@@ -105,9 +118,18 @@ export default async function CategoriaPage({
 
   let cat = categoriaPerSlug(categorie, slug);
   if (!cat) {
-    // Con DB connesso uno slug ignoto e un vero 404. Senza env (build/anteprima)
-    // la pagina rende comunque, con nome derivato dallo slug e griglia demo.
-    if (supabase) notFound();
+    // Con DB connesso e lista categorie CARICATA, uno slug ignoto e un vero
+    // 404. Ma se la lista e vuota (caricaCategoriePubbliche degrada a [] sugli
+    // errori) non possiamo saperlo: un notFound qui farebbe rispondere 404 a
+    // TUTTE le categorie reali durante un blip del DB — segnale di rimozione
+    // dall'indice per Google, mentre un 5xx sospende solo il crawl (audit SEO
+    // 2026-07). Senza env (build/anteprima) resta la demo.
+    if (supabase && categorie.length > 0) notFound();
+    if (supabase) {
+      throw new Error(
+        "Categorie non disponibili: impossibile verificare lo slug.",
+      );
+    }
     cat = { id: "demo", slug, nome: nomeDaSlug(slug), parent_id: null, ordine: 0 };
   }
 
@@ -216,8 +238,14 @@ export default async function CategoriaPage({
           </ol>
         </nav>
 
+        {/* h1 = percorso invertito come il <title> ("Gaming Berretti Bambino"):
+            il solo nome foglia era identico su decine di categorie omonime di
+            rami diversi (20 "Calcio", 11 "Gaming"... — audit SEO 2026-07). */}
         <h1 className="font-display text-3xl font-extrabold leading-tight text-foreground sm:text-4xl">
-          {cat.nome}
+          {[...percorso]
+            .reverse()
+            .map((c) => c.nome)
+            .join(" ")}
         </h1>
 
         {/* Chip di navigazione "a scala": le sorelle di 2o livello restano

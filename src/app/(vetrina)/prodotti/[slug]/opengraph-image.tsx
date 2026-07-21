@@ -5,12 +5,17 @@ import { caricaProdottoCard, qrDataUrl } from "@/lib/social-card";
 
 // Card di anteprima per la singola scheda prodotto: foto del capo a sinistra,
 // pannello brand con nome + prezzo a destra. E quello che si vede condividendo
-// il link del prodotto su WhatsApp/Facebook/Instagram. Generata al volo (cache).
+// il link del prodotto su WhatsApp/Facebook/Instagram.
 export const alt = "Prodotto · Anna Shop";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 // Node.js (default): la conversione WebP->JPEG della copertina usa sharp.
 export const runtime = "nodejs";
+// Cache ISR di un giorno: senza, la query Supabase non cacheata rendeva la
+// route dinamica (no-store) e OGNI scrape social rigenerava la card da zero
+// (query + download foto + sharp + satori, ~1-3s) — oltre la pazienza dello
+// scraper WhatsApp/FB, anteprime a intermittenza (audit SEO 2026-07).
+export const revalidate = 86400;
 
 export default async function Image({
   params,
@@ -20,6 +25,11 @@ export default async function Image({
   const { slug } = await params;
 
   const { nome, prezzo, immagine } = await caricaProdottoCard(slug);
+  // Nomi lunghi del merch licenziato: troncatura a fine parola, o il blocco
+  // nome sfora il pannello (space-between collassa e la tagline esce dal
+  // canvas — riprodotto coi nomi reali del catalogo, audit SEO 2026-07).
+  const nomeCard =
+    nome.length > 70 ? `${nome.slice(0, 70).replace(/\s+\S*$/, "")}…` : nome;
 
   // QR dell'URL prodotto (moduli navy + logo "A" centrale). Vedi qrDataUrl.
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
@@ -80,7 +90,7 @@ export default async function Image({
 
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", fontSize: 60, fontWeight: 700, color: "#ffffff", lineHeight: 1.08 }}>
-              {nome}
+              {nomeCard}
             </div>
             {prezzo ? (
               <div style={{ display: "flex", marginTop: 18, fontSize: 54, fontWeight: 700, color: "#ffd23f" }}>

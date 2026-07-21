@@ -12,6 +12,11 @@ import ProdottoDettaglio from "@/components/prodotto/ProdottoDettaglio";
 import ProdottiCorrelati from "@/components/prodotto/ProdottiCorrelati";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { ordineTaglia } from "@/lib/catalogo";
+import {
+  CONSEGNA_MAX_GG,
+  CONSEGNA_MIN_GG,
+  SPEDIZIONE_ITALIA_CENTS,
+} from "@/lib/spedizione";
 import type {
   Categoria,
   ProdottoConVarianti,
@@ -21,6 +26,14 @@ import type {
 
 // Le pagine che leggono dal DB non vanno prerenderizzate staticamente.
 export const dynamic = "force-dynamic";
+
+// Finestra rolling ~1 anno per offers.priceValidUntil (price snippet dei
+// merchant listing): prezzi IVA inclusa stabili, la precisione al giorno non
+// serve. A livello di MODULO perche' Date.now() e' impuro durante il render
+// (regola del compiler React); si rivaluta a ogni avvio del processo server.
+const PRICE_VALID_UNTIL = new Date(Date.now() + 365 * 24 * 3600 * 1000)
+  .toISOString()
+  .slice(0, 10);
 
 type ProdottoPdp = ProdottoConVarianti & {
   foto: ProdottoFoto[];
@@ -77,10 +90,16 @@ function prodottoEsempio(slug: string): ProdottoPdp {
 const caricaProdotto = cache(async (
   slug: string,
 ): Promise<ProdottoPdp | null> => {
-  try {
-    const supabase = await createServerSupabase();
-    if (!supabase) return prodottoEsempio(slug);
+  // Il prodotto demo e SOLO per l'assenza di env (build/anteprima): mai come
+  // fallback di un errore runtime col DB configurato, o qualunque slug
+  // risponderebbe 200 con contenuto fittizio indicizzabile (soft-404 su spazio
+  // URL infinito; audit SEO 2026-07). Un'eccezione runtime deve propagarsi:
+  // la error boundary risponde 5xx e Google sospende il crawl senza
+  // de-indicizzare.
+  const supabase = await createServerSupabase();
+  if (!supabase) return prodottoEsempio(slug);
 
+  {
     // Prodotto e lista categorie in parallelo: le categorie non dipendono dal
     // prodotto, cosi la catena del breadcrumb non aggiunge un round-trip.
     const [prodottoRes, categorieRes] = await Promise.all([
@@ -144,8 +163,6 @@ const caricaProdotto = cache(async (
       foto,
       percorso,
     };
-  } catch {
-    return prodottoEsempio(slug);
   }
 });
 
@@ -170,8 +187,13 @@ export async function generateMetadata({
     return { title: "Prodotto non trovato" };
   }
 
+  // Troncatura a fine parola con ellissi: uno slice cieco a 160 lasciava lo
+  // snippet SERP/social a meta' parola (audit SEO 2026-07).
+  const pulita = (prodotto.descrizione ?? "").replace(/\s+/g, " ").trim();
   const descrizione =
-    (prodotto.descrizione ?? "").replace(/\s+/g, " ").trim().slice(0, 160) ||
+    (pulita.length > 160
+      ? `${pulita.slice(0, 160).replace(/\s+\S*$/, "")}…`
+      : pulita) ||
     `${prodotto.nome} — Anna Shop, moda fresca sul lungomare di Rimini.`;
 
   return {
@@ -216,8 +238,11 @@ export default async function PaginaProdotto({
   const suRichiesta = prodotto.disponibilita_su_richiesta ?? true;
   const senzaVarianti = prodotto.varianti.length === 0;
   const esaurito = !senzaVarianti && prodotto.varianti.every((v) => v.stock <= 0);
+  // Su richiesta = ordinabile ORA con evasione differita, anche a stock 0:
+  // BackOrder, non LimitedAvailability ("pochi pezzi", incoerente con la
+  // pagina) ne' PreOrder (prodotti non ancora usciti). Audit SEO 2026-07.
   const disponibilitaSchema = suRichiesta
-    ? "https://schema.org/LimitedAvailability" // acquistabile solo su richiesta
+    ? "https://schema.org/BackOrder"
     : esaurito
       ? "https://schema.org/OutOfStock"
       : "https://schema.org/InStock";
@@ -228,13 +253,78 @@ export default async function PaginaProdotto({
     description: prodotto.descrizione ?? undefined,
     image: prodotto.immagine_url ? [prodotto.immagine_url] : undefined,
     brand: { "@type": "Brand", name: "Anna Shop" },
+    sku: prodotto.codice ?? undefined,
+    itemCondition: "https://schema.org/NewCondition",
     offers: {
       "@type": "Offer",
       price: (prodotto.prezzo_cents / 100).toFixed(2),
       priceCurrency: prodotto.valuta ?? "EUR",
       availability: disponibilitaSchema,
+      priceValidUntil: PRICE_VALID_UNTIL,
       ...(SITE ? { url: `${SITE}/prodotti/${prodotto.slug}` } : {}),
+      // Spedizione e reso dai punti di verita reali (lib/spedizione + pagine
+      // legali): alimentano il blocco "shipping & returns" del merchant
+      // listing. Tariffa piena dichiarata come caso peggiore (prassi accettata
+      // con soglia free-shipping); transit = stima 2-5 gg comunicata al
+      // cliente "dall'affidamento al corriere", handling 0-1 gg.
+      shippingDetails: {
+        "@type": "OfferShippingDetails",
+        shippingRate: {
+          "@type": "MonetaryAmount",
+          value: (SPEDIZIONE_ITALIA_CENTS / 100).toFixed(2),
+          currency: "EUR",
+        },
+        shippingDestination: {
+          "@type": "DefinedRegion",
+          addressCountry: "IT",
+        },
+        deliveryTime: {
+          "@type": "ShippingDeliveryTime",
+          handlingTime: {
+            "@type": "QuantitativeValue",
+            minValue: 0,
+            maxValue: 1,
+            unitCode: "DAY",
+          },
+          transitTime: {
+            "@type": "QuantitativeValue",
+            minValue: CONSEGNA_MIN_GG,
+            maxValue: CONSEGNA_MAX_GG,
+            unitCode: "DAY",
+          },
+        },
+      },
+      hasMerchantReturnPolicy: {
+        "@type": "MerchantReturnPolicy",
+        applicableCountry: "IT",
+        returnPolicyCategory:
+          "https://schema.org/MerchantReturnFiniteReturnWindow",
+        merchantReturnDays: 14,
+        returnMethod: "https://schema.org/ReturnByMail",
+        returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
+      },
     },
+  };
+  // BreadcrumbList: stessa catena del breadcrumb visivo qui sotto (pattern di
+  // categoria/[slug]); l'ultimo ListItem (il prodotto) resta senza `item`,
+  // come da linee guida Google per la pagina corrente.
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${SITE}/` },
+      ...percorso.map((c, i) => ({
+        "@type": "ListItem",
+        position: i + 2,
+        name: c.nome,
+        item: `${SITE}/categoria/${c.slug}`,
+      })),
+      {
+        "@type": "ListItem",
+        position: percorso.length + 2,
+        name: prodotto.nome,
+      },
+    ],
   };
 
   return (
@@ -243,6 +333,12 @@ export default async function PaginaProdotto({
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(datiStrutturati).replace(/</g, "\\u003c"),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c"),
         }}
       />
       <nav aria-label="Percorso di navigazione" className="mb-8">

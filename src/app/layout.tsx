@@ -30,17 +30,18 @@ export const metadata: Metadata = {
   // Le pagine figlie con titolo proprio diventano "Titolo · Anna Shop".
   title: { default: TITOLO, template: "%s · Anna Shop" },
   description: DESCRIZIONE,
+  // NIENTE title/description dentro openGraph/twitter: hardcodarli qui li
+  // faceva ereditare in blocco a TUTTE le pagine (og:title della homepage su
+  // categorie, catalogo e card Twitter delle PDP). Senza, il post-processing
+  // di Next li deriva dal title risolto per-pagina (template incluso) e dalla
+  // description della pagina. Audit SEO 2026-07.
   openGraph: {
-    title: TITOLO,
-    description: DESCRIZIONE,
     type: "website",
     locale: "it_IT",
     siteName: "Anna Shop",
   },
   twitter: {
     card: "summary_large_image",
-    title: TITOLO,
-    description: DESCRIZIONE,
   },
   // iOS: nome breve in home screen + web app "capace" con status bar chiara.
   // L'icona apple-touch (180x180) e' fornita da src/app/apple-icon.tsx.

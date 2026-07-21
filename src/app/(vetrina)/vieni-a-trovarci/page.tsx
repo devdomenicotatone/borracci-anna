@@ -14,6 +14,9 @@ export const metadata = {
   title: "Vieni a trovarci",
   description:
     "Il negozio Anna Shop sul lungomare di Rimini, a Rivazzurra: Viale Regina Margherita 169/C. Mappa interattiva, orari e indicazioni stradali.",
+  // Self-canonical: la pagina negozio e' linkata da profili/mappe esterne con
+  // parametri di tracciamento (utm_*, fbclid); il canonical li neutralizza.
+  alternates: { canonical: "/vieni-a-trovarci" },
 };
 
 export default function VieniATrovarciPage() {

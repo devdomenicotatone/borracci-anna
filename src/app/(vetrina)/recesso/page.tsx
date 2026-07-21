@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   title: "Diritto di recesso",
   description:
     "Hai 14 giorni dalla consegna per cambiare idea sugli acquisti fatti su Anna Shop: come comunicare il recesso, come restituire i prodotti, tempi di rimborso e modulo tipo.",
+  alternates: { canonical: "/recesso" },
 };
 
 /** Modulo tipo di recesso (Allegato I-B, D.lgs. 206/2005), precompilato. */

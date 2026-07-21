@@ -41,6 +41,25 @@ export const NEGOZIO = {
 
   /** Orario di apertura (da confermare: la visura non riporta gli orari). */
   orari: "Tutti i giorni 9:00–24:00 (stagione estiva)",
+  /**
+   * Stesso orario in forma strutturata (schema.org openingHoursSpecification,
+   * usato dal JSON-LD ClothingStore in home). UNICA fonte insieme a `orari`:
+   * quando la titolare conferma gli orari, aggiornare ENTRAMBI. "24:00" si
+   * esprime come 23:59 (mezzanotte non e' un orario di chiusura valido).
+   */
+  orariStrutturati: {
+    giorni: [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ],
+    apre: "09:00",
+    chiude: "23:59",
+  },
 } as const;
 
 const { lat, lng } = NEGOZIO.coordinate;

@@ -27,6 +27,7 @@ export const metadata: Metadata = {
   title: "Condizioni di vendita",
   description:
     "Condizioni generali di vendita di Anna Shop: come si acquista, prezzi e spedizioni in Italia, diritto di recesso di 14 giorni, garanzia legale e assistenza.",
+  alternates: { canonical: "/condizioni-di-vendita" },
 };
 
 export default function CondizioniDiVenditaPage() {
