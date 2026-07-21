@@ -151,6 +151,10 @@ export async function salvaProdottoAction(
   const slug = String(formData.get("slug") ?? "").trim();
   const codice = String(formData.get("codice") ?? "").trim();
   const descrizione = String(formData.get("descrizione") ?? "").trim();
+  // Etichettatura tessile (M12) e fabbricante GPSR (M13): testo libero, ""
+  // -> NULL (la PDP non mostra le sezioni vuote).
+  const composizione = String(formData.get("composizione") ?? "").trim();
+  const fabbricante = String(formData.get("fabbricante") ?? "").trim();
   const categoriaIdRaw = String(formData.get("categoria_id") ?? "").trim();
   const categoriaId = categoriaIdRaw || null;
   const prezzoCents = Number.parseInt(
@@ -203,6 +207,8 @@ export async function salvaProdottoAction(
     slug,
     codice: codice || null,
     descrizione: descrizione || null,
+    composizione: composizione || null,
+    fabbricante: fabbricante || null,
     categoria_id: categoriaId,
     prezzo_cents: prezzoCents,
     attivo,

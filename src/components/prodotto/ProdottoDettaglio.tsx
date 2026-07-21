@@ -18,6 +18,7 @@ import GalleriaProdotto, {
 } from "@/components/prodotto/GalleriaProdotto";
 import { formatPrezzo } from "@/lib/format";
 import { COLORI, coloreChiaro, coloreHex, ordinaTaglie } from "@/lib/catalogo";
+import { descrizioneSenzaComposizione } from "@/lib/etichetta";
 import type { ProdottoConVarianti, ProdottoFoto } from "@/lib/types";
 
 /** Indice palette di un colore (sconosciuti in fondo), per un ordine stabile. */
@@ -315,11 +316,40 @@ export default function ProdottoDettaglio({
             spingeva la CTA "Aggiungi al carrello" SOTTO la piega: da md in su
             scende dopo il blocco acquisto (md:order-1; la colonna e flex-col,
             i fratelli restano a order 0 e lo SKU chiude a order 2). Su mobile
-            l'ordine resta quello di sempre. */}
-        {prodotto.descrizione && (
-          <p className="mt-6 max-w-prose whitespace-pre-line leading-relaxed text-muted md:order-1">
-            {prodotto.descrizione}
-          </p>
+            l'ordine resta quello di sempre. Con la composizione strutturata
+            (colonna, M12) la riga legacy "Composizione:" in coda al testo
+            viene nascosta per non doppiare l'informazione. */}
+        {(() => {
+          const descrizioneMostrata = prodotto.composizione
+            ? descrizioneSenzaComposizione(prodotto.descrizione)
+            : prodotto.descrizione;
+          return descrizioneMostrata ? (
+            <p className="mt-6 max-w-prose whitespace-pre-line leading-relaxed text-muted md:order-1">
+              {descrizioneMostrata}
+            </p>
+          ) : null;
+        })()}
+
+        {/* Etichettatura tessile (M12) e fabbricante GPSR (M13): visibili in
+            scheda prima dell'acquisto. Stesso posto della descrizione (dopo il
+            blocco acquisto su desktop, md:order-1). */}
+        {(prodotto.composizione || prodotto.fabbricante) && (
+          <dl className="mt-6 max-w-prose space-y-2 text-sm md:order-1">
+            {prodotto.composizione && (
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="font-bold text-foreground">Composizione:</dt>
+                <dd className="text-muted">{prodotto.composizione}</dd>
+              </div>
+            )}
+            {prodotto.fabbricante && (
+              <div>
+                <dt className="font-bold text-foreground">Fabbricante:</dt>
+                <dd className="whitespace-pre-line text-muted">
+                  {prodotto.fabbricante}
+                </dd>
+              </div>
+            )}
+          </dl>
         )}
 
         {/* Selettore COLORE (evidenziato dalla barra mobile solo se il

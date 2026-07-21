@@ -60,6 +60,16 @@ export interface Prodotto {
    * assente altrove (es. correlati via RPC): la card degrada alla sola copertina.
    */
   foto_urls?: string[];
+  /**
+   * Composizione fibrosa da etichetta (M12, Reg. UE 1007/2011): mostrata in
+   * PDP prima dell'acquisto. Presente solo nella query della PDP.
+   */
+  composizione?: string | null;
+  /**
+   * Fabbricante e recapiti (M13, GPSR art. 19), testo libero multiriga.
+   * Presente solo nella query della PDP.
+   */
+  fabbricante?: string | null;
 }
 
 // --- Vetrina curata (home a fasce, gestibile dal pannello) -------------------

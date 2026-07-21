@@ -45,6 +45,10 @@ export interface ProdottoForm {
   slug: string;
   codice: string | null;
   descrizione: string | null;
+  /** Composizione fibrosa da etichetta (M12): mostrata in PDP prima dell'acquisto. */
+  composizione: string | null;
+  /** Fabbricante e recapiti (GPSR, M13): testo libero multiriga mostrato in PDP. */
+  fabbricante: string | null;
   prezzo_cents: number;
   valuta: string;
   attivo: boolean;
@@ -90,6 +94,10 @@ export default function FormProdotto({
   const [slugDirty, setSlugDirty] = useState(modifica);
   const [codice, setCodice] = useState(prodotto?.codice ?? "");
   const [descrizione, setDescrizione] = useState(prodotto?.descrizione ?? "");
+  const [composizione, setComposizione] = useState(
+    prodotto?.composizione ?? "",
+  );
+  const [fabbricante, setFabbricante] = useState(prodotto?.fabbricante ?? "");
   const [categoriaId, setCategoriaId] = useState(prodotto?.categoria_id ?? "");
   const [prezzoInput, setPrezzoInput] = useState(
     prodotto ? (prodotto.prezzo_cents / 100).toFixed(2).replace(".", ",") : "",
@@ -249,6 +257,8 @@ export default function FormProdotto({
       slug !== prodotto.slug ||
       codice !== (prodotto.codice ?? "") ||
       (descrizione ?? "") !== (prodotto.descrizione ?? "") ||
+      composizione !== (prodotto.composizione ?? "") ||
+      fabbricante !== (prodotto.fabbricante ?? "") ||
       categoriaId !== (prodotto.categoria_id ?? "") ||
       prezzoCents !== prodotto.prezzo_cents ||
       attivo !== prodotto.attivo ||
@@ -396,6 +406,35 @@ export default function FormProdotto({
               onChange={(e) => setDescrizione(e.target.value)}
               rows={4}
               className="min-h-24 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none transition-shadow lg:min-h-40"
+            />
+          </Campo>
+
+          {/* M12: la composizione fibrosa e obbligatoria PRIMA dell'acquisto
+              per i tessili (Reg. UE 1007/2011) — la PDP la mostra come voce
+              dedicata. */}
+          <Campo label="Composizione (etichetta)" htmlFor="composizione">
+            <input
+              id="composizione"
+              name="composizione"
+              type="text"
+              value={composizione}
+              onChange={(e) => setComposizione(e.target.value)}
+              placeholder="Es. 100% Cotone · 65% poliestere, 35% cotone"
+              className={inputCls}
+            />
+          </Campo>
+
+          {/* M13 (GPSR): fabbricante con recapiti postale ed email; se
+              extra-UE anche la persona responsabile UE. Multiriga libero. */}
+          <Campo label="Fabbricante e recapiti (GPSR)" htmlFor="fabbricante">
+            <textarea
+              id="fabbricante"
+              name="fabbricante"
+              value={fabbricante}
+              onChange={(e) => setFabbricante(e.target.value)}
+              rows={3}
+              placeholder={"Es. Nome S.r.l.\nVia Esempio 1, 00100 Roma (IT)\ninfo@esempio.it"}
+              className="min-h-20 w-full resize-y rounded-2xl bg-white px-4 py-3 text-base text-foreground ring-1 ring-line outline-none transition-shadow"
             />
           </Campo>
 

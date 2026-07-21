@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { verifySession } from "@/lib/gestore/auth";
 import { sincronizzaEmbeddingProdotto } from "@/lib/embeddings";
 import { slugify } from "@/lib/gestore/slug";
+import { estraiComposizione } from "@/lib/etichetta";
 import { franchiseDiNome } from "@/lib/franchise";
 import { COLORI, coloreCanonico } from "@/lib/catalogo";
 import { revalidatePath, revalidateTag } from "next/cache";
@@ -329,6 +330,10 @@ export async function creaSchedaDaFotoAction(
           slug: slugTry,
           nome,
           descrizione: dati.descrizione?.trim() || null,
+          // M12: la colonna nasce gia valorizzata dalla riga "Composizione:"
+          // della descrizione FINALE (eventualmente corretta dal gestore in
+          // revisione bozza) — stessa regex del backfill.
+          composizione: estraiComposizione(dati.descrizione),
           categoria_id: dati.categoria_id ?? null,
           prezzo_cents: dati.prezzo_cents,
           attivo: false,

@@ -31,6 +31,8 @@ export interface Database {
           categoria_id: string | null;
           codice: string | null;
           tema: string | null;
+          composizione: string | null;
+          fabbricante: string | null;
           creato_il: string;
         };
         Insert: {
@@ -47,6 +49,8 @@ export interface Database {
           categoria_id?: string | null;
           codice?: string | null;
           tema?: string | null;
+          composizione?: string | null;
+          fabbricante?: string | null;
           creato_il?: string;
         };
         Update: {
@@ -63,6 +67,8 @@ export interface Database {
           categoria_id?: string | null;
           codice?: string | null;
           tema?: string | null;
+          composizione?: string | null;
+          fabbricante?: string | null;
           creato_il?: string;
         };
         Relationships: [

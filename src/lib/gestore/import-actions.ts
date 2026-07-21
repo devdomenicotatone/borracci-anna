@@ -32,6 +32,7 @@ import {
   revalidaSchedaGestore,
 } from "@/lib/gestore/revalida";
 import { slugify } from "@/lib/gestore/slug";
+import { estraiComposizione } from "@/lib/etichetta";
 import { franchiseDiNome } from "@/lib/franchise";
 import {
   TAGLIA_UNICA,
@@ -643,6 +644,9 @@ export async function creaProdottoDaImportAction(input: {
           nome,
           codice,
           descrizione: input.descrizione?.trim() || null,
+          // M12: colonna valorizzata dalla riga "Composizione:" della
+          // descrizione generata (stessa regex del backfill).
+          composizione: estraiComposizione(input.descrizione),
           categoria_id: categoriaId,
           prezzo_cents: input.prezzoCents,
           attivo: false, //                       SEMPRE bozza: pubblica il gestore
