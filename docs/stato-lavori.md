@@ -34,10 +34,8 @@ non rifarli, non regredirli (report in docs/). Pattern vincolanti: vedi
 "Note operative" in docs/stato-lavori.md.
 
 LAVORO RIMASTO — un blocco per sessione, in quest'ordine consigliato:
-1. B5: sfondi banner/hero con URL libero verso host terzi (valutare
-   vincolo al bucket).
-2. Residui minori UX/a11y (vedi docs/stato-lavori.md).
-3. SEO in produzione (SOLO dopo che esiste il dominio).
+1. Residui minori UX/a11y (vedi docs/stato-lavori.md).
+2. SEO in produzione (SOLO dopo che esiste il dominio).
 B7 (storicizzazione prezzi Omnibus) solo se si vorranno annunciare sconti.
 
 A fine sessione: tsc + eslint (A ZERO) + next build puliti, verifica sul
@@ -71,6 +69,17 @@ Bonus: via i `<main>` annidati da /ordine/[token] e /checkout/successo.
 Verifica visiva di /ordine/[token] con dati reali ancora da fare (DB senza
 ordini): basta una richiesta di prova dal sito.
 
+Sessione B5 (21/07 notte): `744ce03` — **B5 chiuso lato codice**. Sfondi
+hero/banner SOLO dal bucket del sito o path relativi (fonte unica
+src/lib/vetrina-sfondi.ts): rifiuto al salvataggio con errore chiaro +
+guardia al rendering per i legacy (host esterni mai renderizzati). Nel
+pannello via il campo "incolla link": bottone "Carica immagine" (WebP
+client-side come la galleria, import dinamico), anteprima e "Togli".
+Bucket Storage dedicato `vetrina` (migration 20260721210000, DA
+APPLICARE — vedi "Stato database"). Nessuna fascia a DB aveva immagini:
+zero retrocompatibilita da gestire. Senza migration: upload fallisce con
+errore leggibile, il resto funziona.
+
 Audit precedenti (tutti chiusi, report in docs/): conformità legale
 (critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
 WCAG 2.2 AA, SEO tecnico.
@@ -79,8 +88,12 @@ WCAG 2.2 AA, SEO tecnico.
 
 - Ledger migration **riallineato**: le migration si applicano con
   `npx supabase db push` (SEMPRE `--dry-run` prima). Ultima applicata:
-  `20260721200000_ordine_token_direct_buy` (21/07 sera, verificata con
-  `migration list`: locale = remoto, niente in sospeso).
+  `20260721200000_ordine_token_direct_buy` (21/07 sera, verificata).
+- **IN SOSPESO: `20260721210000_bucket_sfondi_vetrina`** (bucket sfondi
+  hero/banner, B5): `npx supabase db push --dry-run` (deve elencare SOLO
+  questa), poi `npx supabase db push` dal terminale della titolare. Senza:
+  il bottone "Carica immagine" del pannello vetrina fallisce con errore
+  leggibile ("Bucket not found"), tutto il resto funziona.
 - CLI Supabase ora autenticata e linkata ANCHE sul Mac (oltre che sul PC
   Windows). Nota: il push "vero" va lanciato dal terminale dalla titolare
   (il classificatore permessi dell'assistente blocca le scritture sul DB
@@ -92,7 +105,8 @@ WCAG 2.2 AA, SEO tecnico.
 
 **Legali** (docs/audit-conformita-legale-2026-07-14.md):
 - ~~M10 + B9~~ **chiusi il 21/07** (`18bd936`, migration applicata).
-- **B5**: vincolare gli sfondi banner/hero al bucket (oggi URL libero).
+- ~~B5~~ **chiuso il 21/07** (`744ce03`) — resta SOLO l'applicazione della
+  migration 20260721210000 (vedi "Stato database").
 - **B7**: storicizzazione prezzi Omnibus — SOLO se si annunceranno sconti.
 - **M13-dati**: solo azione titolare (vedi promemoria).
 - **A5**: solo azioni titolare (dominio + provider email, runbook pronto).
