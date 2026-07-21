@@ -131,8 +131,14 @@ WCAG 2.2 AA, SEO tecnico.
 2. Creare l'account **Brevo** (o Workspace), accettare il DPA, configurare i
    record DNS e le env `EMAIL_*` su Vercel come da runbook; poi dismettere
    le `GMAIL_*`.
-3. **Chiedere a Ingrosso BLT ragione sociale e recapiti del fabbricante**
-   (indirizzo postale + email; se extra-UE anche il responsabile UE), poi:
+3. **Chiedere a Ingrosso BLT conferma dei dati del fabbricante** (email in
+   preparazione dalla titolare). Dal sito ingrossoblt.com (21/07) risulta:
+   BLT Distribution s.r.l. — Via O. Scavino 4, 47891 Rovereta, Repubblica
+   di San Marino — tel +378 0549 980377 — web@ingrossoblt.com.
+   ⚠️ San Marino e' FUORI dall'UE: ai fini GPSR va chiesto anche chi e' il
+   **responsabile UE** dei loro prodotti (e segnalare al legale del punto 6
+   la questione importatore: chi porta in UE merce di fabbricante extra-UE
+   puo' avere obblighi propri). Ottenuta la conferma:
    `node scripts/imposta-fabbricante.mjs BLT "Nome | Indirizzo | email" --applica`
    → compila 1840 schede e chiude M13.
 4. ~~Confermare gli orari del negozio~~ **FATTO il 21/07**: orari
