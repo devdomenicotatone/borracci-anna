@@ -21,7 +21,9 @@ export const metadata = {
 
 export default function VieniATrovarciPage() {
   return (
-    <main className="flex-1">
+    // <div>, non <main>: il landmark main lo mette gia il layout della vetrina
+    // (id="contenuto") — un secondo <main> annidato confonde gli screen reader.
+    <div className="flex-1">
       {/* ===== Hero compatto ===== */}
       <section className="bg-sea-gradient relative isolate overflow-hidden text-white">
         <span
@@ -256,6 +258,6 @@ export default function VieniATrovarciPage() {
           </Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

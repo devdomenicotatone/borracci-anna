@@ -6,7 +6,9 @@ import Link from "next/link";
 // (slug inesistente, prodotto ritirato) e ogni URL pubblico non trovato.
 export default function NonTrovato() {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-6 px-4 py-20 text-center sm:py-28">
+    // <div>, non <main>: il landmark main lo mette gia il layout della vetrina
+    // (id="contenuto") — un secondo <main> annidato confonde gli screen reader.
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center gap-6 px-4 py-20 text-center sm:py-28">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-surface-2 text-4xl">
         🏖️
       </div>
@@ -37,6 +39,6 @@ export default function NonTrovato() {
           Sfoglia tutti i prodotti
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

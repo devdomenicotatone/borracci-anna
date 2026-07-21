@@ -12,7 +12,9 @@ export const metadata = {
 
 export default function CheckoutAnnullatoPage() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
+    // <div>, non <main>: il landmark main lo mette gia il layout della vetrina
+    // (id="contenuto") — un secondo <main> annidato confonde gli screen reader.
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-24">
       <div className="w-full max-w-md rounded-3xl bg-surface p-10 text-center shadow-soft ring-1 ring-line">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-surface-2 text-lagoon ring-2 ring-line">
           <svg
@@ -50,6 +52,6 @@ export default function CheckoutAnnullatoPage() {
           </Link>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

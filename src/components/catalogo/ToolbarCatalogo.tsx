@@ -51,6 +51,14 @@ function interoDaCampo(s: string): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
 }
 
+/**
+ * Da quanti temi in su compare il bottone "Tutti i temi" (audit UX desktop
+ * §3: con 127 chip arrivare in fondo alla riga scorribile costa ~16 click di
+ * freccia; il pannello multi-riga li mostra tutti insieme). Sotto soglia la
+ * riga si abbraccia con lo sguardo e il bottone sarebbe rumore.
+ */
+const SOGLIA_PANNELLO_TEMI = 12;
+
 export default function ToolbarCatalogo({
   basePath,
   filtri,
@@ -71,6 +79,10 @@ export default function ToolbarCatalogo({
   const [inTransito, startTransition] = useTransition();
   const [aperto, setAperto] = useState(false);
   const [bozza, setBozza] = useState<BozzaFiltri>(() => bozzaDaFiltri(filtri));
+  // Pannello "Tutti i temi" (desktop): i chip passano dalla riga scorribile a
+  // una griglia multi-riga che li mostra tutti. Stato locale: e solo
+  // presentazione, l'URL non c'entra.
+  const [temiEspansi, setTemiEspansi] = useState(false);
 
   // Cambio di route col drawer aperto (back del browser verso un'altra pagina
   // catalogo: il componente resta montato e lo stato sopravvive): il drawer va
@@ -83,12 +95,16 @@ export default function ToolbarCatalogo({
   if (pathname !== pathnamePrecedente) {
     setPathnamePrecedente(pathname);
     setAperto(false);
+    // Cambio pagina catalogo (altra categoria): i temi sono diversi, il
+    // pannello espanso riparte chiuso come il drawer.
+    setTemiEspansi(false);
   }
 
   // Filtri del drawer (taglia/colore/prezzo), per il badge e i chip attivi.
   const filtriDrawer = contaFiltriDrawer(filtri);
   // Difensivo: facette da una cache precedente potrebbero non avere i franchise.
   const franchiseDisponibili = facette.franchise ?? [];
+  const conPannelloTemi = franchiseDisponibili.length > SOGLIA_PANNELLO_TEMI;
 
   /**
    * Naviga verso la stessa pagina con i filtri dati (pagina implicitamente 1).
@@ -177,10 +193,74 @@ export default function ToolbarCatalogo({
     return () => clearTimeout(t);
   }, [ricerca, naviga]);
 
+  /**
+   * Chip dei temi ("Tutto" + uno per franchise), condivisi tra riga
+   * scorribile e pannello espanso. `dopoScelta` arriva dal pannello: dopo la
+   * selezione si richiude da solo (compito finito, la griglia sotto e gia
+   * filtrata).
+   */
+  function chipTemi(dopoScelta?: () => void) {
+    return (
+      <>
+        {/* "Tutto" = default: nessun franchise attivo, si vede l'intera
+            categoria. Coerente con le righe di navigazione sopra, dove una
+            voce "Tutto" resta selezionata finche non si restringe. */}
+        <button
+          type="button"
+          onClick={() => {
+            naviga({ ...filtri, franchise: "" });
+            dopoScelta?.();
+          }}
+          aria-pressed={filtri.franchise === ""}
+          className={[
+            "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all active:scale-95",
+            filtri.franchise === ""
+              ? "bg-sea text-white shadow-sea"
+              : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
+          ].join(" ")}
+        >
+          Tutto
+        </button>
+        {franchiseDisponibili.map((f) => {
+          const attivo = filtri.franchise === f.slug;
+          return (
+            <button
+              key={f.slug}
+              type="button"
+              onClick={() => {
+                naviga({ ...filtri, franchise: attivo ? "" : f.slug });
+                dopoScelta?.();
+              }}
+              aria-pressed={attivo}
+              className={[
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all active:scale-95",
+                attivo
+                  ? "bg-sea text-white shadow-sea"
+                  : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
+              ].join(" ")}
+            >
+              {f.etichetta}
+              <span
+                className={[
+                  "rounded-full px-1.5 text-xs font-bold tabular-nums",
+                  attivo ? "bg-white/25 text-white" : "bg-surface-2 text-sea",
+                ].join(" ")}
+              >
+                {f.count}
+              </span>
+            </button>
+          );
+        })}
+      </>
+    );
+  }
+
   return (
     <div className="mb-6">
-      {/* Ricerca testuale del catalogo (nome/descrizione, multi-parola). */}
-      <div className="mb-3">
+      {/* Ricerca testuale del catalogo (nome/descrizione, multi-parola).
+          max-w cappata su desktop (audit UX §3): larga quanto il container
+          7xl (1112px+) era sproporzionata per un campo di testo. */}
+      <div className="mb-3 md:max-w-2xl">
         <label className="relative block">
           <span className="sr-only">Cerca nel catalogo</span>
           <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted">
@@ -238,57 +318,45 @@ export default function ToolbarCatalogo({
           dalla colonna `tema` (conteggi DB-side, vedi lib/vetrina); in coda il
           chip "Altro" col complemento (senza tema o sotto soglia): la somma
           dei numeri e il totale. Servono alla scoperta: mostrano cosa c'e
-          senza doverlo cercare. Stessa riga scorribile con frecce delle
-          categorie (NavScorribile): quando sono tanti si raggiungono tutti. */}
+          senza doverlo cercare. Di default stessa riga scorribile con frecce
+          delle categorie (NavScorribile); quando sono tanti (127!), da md in
+          su il bottone "Tutti i temi" apre un pannello multi-riga che li
+          mostra tutti insieme (audit UX §3: in riga costavano ~16 click di
+          freccia) e si richiude da solo alla scelta. */}
       {franchiseDisponibili.length > 0 && (
-        <div className="mb-3">
-          <NavScorribile etichetta="i temi">
-            {/* "Tutto" = default: nessun franchise attivo, si vede l'intera
-                categoria. Coerente con le righe di navigazione sopra, dove una
-                voce "Tutto" resta selezionata finche non si restringe. */}
+        <div id="temi-catalogo" className="mb-3 flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            {temiEspansi ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {chipTemi(() => setTemiEspansi(false))}
+              </div>
+            ) : (
+              <NavScorribile etichetta="i temi">{chipTemi()}</NavScorribile>
+            )}
+          </div>
+          {conPannelloTemi && (
             <button
               type="button"
-              onClick={() => naviga({ ...filtri, franchise: "" })}
-              aria-pressed={filtri.franchise === ""}
-              className={[
-                "inline-flex shrink-0 items-center rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all active:scale-95",
-                filtri.franchise === ""
-                  ? "bg-sea text-white shadow-sea"
-                  : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
-              ].join(" ")}
+              onClick={() => setTemiEspansi((v) => !v)}
+              aria-expanded={temiEspansi}
+              aria-controls="temi-catalogo"
+              className="hidden shrink-0 items-center gap-1.5 rounded-full bg-white px-3.5 py-2 font-display text-sm font-bold text-sea ring-1 ring-line transition-all hover:-translate-y-0.5 hover:ring-sea active:scale-95 md:inline-flex"
             >
-              Tutto
+              {temiEspansi ? "Riduci" : "Tutti i temi"}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`h-4 w-4 transition-transform ${temiEspansi ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
             </button>
-            {franchiseDisponibili.map((f) => {
-              const attivo = filtri.franchise === f.slug;
-              return (
-                <button
-                  key={f.slug}
-                  type="button"
-                  onClick={() =>
-                    naviga({ ...filtri, franchise: attivo ? "" : f.slug })
-                  }
-                  aria-pressed={attivo}
-                  className={[
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 font-display text-sm font-bold transition-all active:scale-95",
-                    attivo
-                      ? "bg-sea text-white shadow-sea"
-                      : "bg-white text-foreground ring-1 ring-line hover:-translate-y-0.5 hover:ring-sea",
-                  ].join(" ")}
-                >
-                  {f.etichetta}
-                  <span
-                    className={[
-                      "rounded-full px-1.5 text-xs font-bold tabular-nums",
-                      attivo ? "bg-white/25 text-white" : "bg-surface-2 text-sea",
-                    ].join(" ")}
-                  >
-                    {f.count}
-                  </span>
-                </button>
-              );
-            })}
-          </NavScorribile>
+          )}
         </div>
       )}
 

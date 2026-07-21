@@ -99,7 +99,10 @@ const FILTRI: { key: Filtro; label: string }[] = [
 
 const CHIP: Record<StatoOrdine, { label: string; cls: string }> = {
   in_attesa: { label: "Da confermare", cls: "bg-sun/30 text-[#8a6500]" },
-  confermato: { label: "Da pagare", cls: "bg-lagoon/15 text-sea" },
+  // text-lagoon-ink e non text-sea: il sea su lagoon/15 si fermava a 4.08:1
+  // (sotto AA, residuo audit a11y 2026-07-21); lagoon-ink e la variante gia
+  // approvata per lo stesso chip lato cliente (STATO_ORDINE_UI).
+  confermato: { label: "Da pagare", cls: "bg-lagoon/15 text-lagoon-ink" },
   pagato: { label: "Pagato", cls: "bg-sea/15 text-sea" },
   annullato: { label: "Annullato", cls: "bg-coral/15 text-coral-ink" },
 };
