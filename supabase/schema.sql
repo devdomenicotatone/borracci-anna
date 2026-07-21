@@ -974,6 +974,42 @@ create policy "vsp_delete_gestore"
   on public.vetrina_sezione_prodotti for delete to authenticated
   using ( public.is_gestore() );
 
+-- Bucket Storage "vetrina" per gli sfondi hero/banner (migration
+-- 20260721210000, finding B5): lettura pubblica, scrittura solo gestore.
+-- Il vincolo applicativo (solo immagini del sito) vive in
+-- src/lib/vetrina-sfondi.ts.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'vetrina', 'vetrina', true,
+  5242880,
+  array['image/jpeg','image/png','image/webp','image/avif']
+)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "vetrina_storage_lettura_pubblica" on storage.objects;
+create policy "vetrina_storage_lettura_pubblica"
+  on storage.objects for select to anon, authenticated
+  using ( bucket_id = 'vetrina' );
+
+drop policy if exists "vetrina_storage_insert_gestore" on storage.objects;
+create policy "vetrina_storage_insert_gestore"
+  on storage.objects for insert to authenticated
+  with check ( bucket_id = 'vetrina' and public.is_gestore() );
+
+drop policy if exists "vetrina_storage_update_gestore" on storage.objects;
+create policy "vetrina_storage_update_gestore"
+  on storage.objects for update to authenticated
+  using ( bucket_id = 'vetrina' and public.is_gestore() )
+  with check ( bucket_id = 'vetrina' and public.is_gestore() );
+
+drop policy if exists "vetrina_storage_delete_gestore" on storage.objects;
+create policy "vetrina_storage_delete_gestore"
+  on storage.objects for delete to authenticated
+  using ( bucket_id = 'vetrina' and public.is_gestore() );
+
 -- ============================================================================
 -- RICERCA/FILTRI LATO SERVER PER LA LISTA PRODOTTI DEL GESTORE
 -- ----------------------------------------------------------------------------

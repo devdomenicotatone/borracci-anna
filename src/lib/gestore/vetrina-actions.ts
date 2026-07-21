@@ -12,6 +12,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { verifySession } from "@/lib/gestore/auth";
 import { leggiSezioniAdmin, type EsitoVetrina } from "@/lib/gestore/vetrina";
 import { TAG_VETRINA_HOME } from "@/lib/vetrina-home";
+import { sfondoVetrinaAmmesso } from "@/lib/vetrina-sfondi";
 import {
   TIPI_SEZIONE_VETRINA,
   type ConfigVetrina,
@@ -252,6 +253,17 @@ export async function salvaSezioneAction(
     ) {
       return { ok: false, error: "Scegli la categoria per questa fascia." };
     }
+    // B5 (audit conformita): sfondo SOLO dal bucket del sito o path relativo.
+    // Un URL esterno farebbe connettere ogni visitatore della home a un host
+    // terzo. Rifiuto con errore chiaro, non scarto silenzioso: il gestore deve
+    // capire perche il link incollato non va bene.
+    if (config.immagineUrl && !sfondoVetrinaAmmesso(config.immagineUrl)) {
+      return {
+        ok: false,
+        error:
+          "L'immagine di sfondo va caricata col bottone “Carica immagine”: i link a siti esterni non sono ammessi.",
+      };
+    }
 
     const { error } = await supabase
       .from("vetrina_sezioni")
@@ -459,6 +471,53 @@ export async function rimuoviProdottoSezioneAction(
     return { ok: true, sezioni };
   } catch {
     return ERRORE_RETE;
+  }
+}
+
+/**
+ * Carica uno sfondo hero/banner nel bucket "vetrina" (B5): il gestore non
+ * incolla piu URL a mano, l'immagine parte dal suo computer gia convertita in
+ * WebP dal client (come la galleria prodotto) e l'URL ritornato e per
+ * costruzione sul bucket del sito, quindi supera la validazione al salvataggio.
+ * Il file NON e legato alla sezione (lo stesso sfondo puo servire piu fasce):
+ * una sostituzione lascia orfano il file precedente — accettato, pochi file
+ * con cap 5MB, nessuna contabilita extra.
+ */
+export async function caricaSfondoVetrinaAction(
+  formData: FormData,
+): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sessione = await verifySession();
+  if (!sessione) return { ok: false, error: "Non autorizzato." };
+  const { supabase } = sessione;
+
+  const file = formData.get("sfondo");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Nessun file selezionato." };
+  }
+  if (file.type !== "image/webp") {
+    return {
+      ok: false,
+      error: "Formato non valido: l'immagine va convertita in WebP.",
+    };
+  }
+  // Stesso tetto del bucket (file_size_limit 5MB): errore chiaro qui invece
+  // del messaggio grezzo dello Storage.
+  if (file.size > 5 * 1024 * 1024) {
+    return { ok: false, error: "Immagine troppo grande (max 5 MB)." };
+  }
+
+  const path = `sfondi/${crypto.randomUUID()}.webp`;
+  try {
+    const { error: up } = await supabase.storage
+      .from("vetrina")
+      .upload(path, file, { upsert: false, contentType: "image/webp" });
+    if (up) return { ok: false, error: up.message };
+    const { data } = supabase.storage.from("vetrina").getPublicUrl(path);
+    // Cache-bust ?v= come per le foto prodotto (convenzione del sito: TTL
+    // lunga dell'optimizer, invalidazione cambiando src).
+    return { ok: true, url: `${data.publicUrl}?v=${Date.now()}` };
+  } catch {
+    return { ok: false, error: "Errore di rete durante il caricamento." };
   }
 }
 

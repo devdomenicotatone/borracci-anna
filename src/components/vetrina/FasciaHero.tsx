@@ -7,26 +7,10 @@ import Image from "next/image";
 import Link from "next/link";
 
 import type { FasciaVetrina } from "@/lib/vetrina-home";
-
-/**
- * True se l'URL punta al bucket Supabase whitelistato nei remotePatterns di
- * next.config.ts: solo quegli host possono passare da next/image (un host non
- * whitelistato manderebbe l'optimizer in errore 500). Duplicata volutamente in
- * FasciaBanner.tsx: verra estratta quando servira altrove.
- */
-function urlSuBucketSupabase(url: string): boolean {
-  try {
-    const u = new URL(url);
-    return (
-      u.protocol === "https:" &&
-      u.hostname === "ozbsslebqtzslfpqpwyz.supabase.co" &&
-      u.pathname.startsWith("/storage/v1/object/public/")
-    );
-  } catch {
-    // URL relativo o malformato: si resta sull'<img> nativo.
-    return false;
-  }
-}
+import {
+  sfondoVetrinaAmmesso,
+  urlSuBucketSupabase,
+} from "@/lib/vetrina-sfondi";
 
 /** CTA che diventa <Link> per i path interni e <a> per hash/URL esterni. */
 function BottoneCta({
@@ -54,7 +38,11 @@ function BottoneCta({
 
 export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
   const { config } = fascia;
-  const immagine = config.immagineUrl?.trim();
+  // B5: sfondi SOLO dal bucket del sito o path relativi. Il salvataggio
+  // rifiuta gia gli host terzi; questa guardia copre i valori legacy a DB
+  // (un URL esterno non viene renderizzato: resta il gradiente mare).
+  const grezzo = config.immagineUrl?.trim();
+  const immagine = grezzo && sfondoVetrinaAmmesso(grezzo) ? grezzo : undefined;
 
   return (
     <section
@@ -84,7 +72,7 @@ export default function FasciaHero({ fascia }: { fascia: FasciaVetrina }) {
               className="-z-20 object-cover"
             />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- sfondo hero scelto dal gestore (URL libero, host non whitelistato: next/image darebbe 500)
+            // eslint-disable-next-line @next/next/no-img-element -- path relativo del sito (stessa origine, ammesso da B5): niente remotePattern, si resta sull'<img> nativo
             <img
               src={immagine}
               alt=""

@@ -7,7 +7,7 @@
 // stesso pattern di GestoreCategorie (`applica`): su errore niente revert, il
 // prossimo canonico corregge.
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 
 import {
@@ -20,6 +20,7 @@ import {
   aggiungiProdottoSezioneAction,
   rimuoviProdottoSezioneAction,
   riordinaProdottiSezioneAction,
+  caricaSfondoVetrinaAction,
 } from "@/lib/gestore/vetrina-actions";
 import type { EsitoVetrina, VetrinaSezioneAdmin } from "@/lib/gestore/vetrina";
 import { useToast } from "@/components/gestore/Toaster";
@@ -584,9 +585,12 @@ function EditorSezione({
               <input value={stickerBasso} onChange={(e) => setStickerBasso(e.target.value)} disabled={occupato} placeholder="☀ Rimini beach" className={inputCls} />
             </Campo>
             <div className="sm:col-span-2">
-              <Campo label="Immagine di sfondo (link)" hint="Opzionale: se vuota resta il gradiente mare.">
-                <input value={immagineUrl} onChange={(e) => setImmagineUrl(e.target.value)} disabled={occupato} placeholder="https://…" className={inputCls} />
-              </Campo>
+              <CampoSfondo
+                valore={immagineUrl}
+                imposta={setImmagineUrl}
+                occupato={occupato}
+                hintVuoto="Opzionale: se non carichi nulla resta il gradiente mare."
+              />
             </div>
           </>
         )}
@@ -614,9 +618,12 @@ function EditorSezione({
                 <ChevronSelect />
               </div>
             </Campo>
-            <Campo label="Immagine di sfondo (link)" hint="Opzionale.">
-              <input value={immagineUrl} onChange={(e) => setImmagineUrl(e.target.value)} disabled={occupato} placeholder="https://…" className={inputCls} />
-            </Campo>
+            <CampoSfondo
+              valore={immagineUrl}
+              imposta={setImmagineUrl}
+              occupato={occupato}
+              hintVuoto="Opzionale: se non carichi nulla resta il colore scelto."
+            />
           </>
         )}
 
@@ -708,6 +715,122 @@ function EditorSezione({
         />
       )}
     </div>
+  );
+}
+
+// --- Immagine di sfondo hero/banner (B5: solo dal bucket del sito) ------------
+
+/**
+ * Campo "Immagine di sfondo" SENZA URL a mano libera (finding B5): l'immagine
+ * parte dal computer del gestore, viene convertita in WebP dal client (stessa
+ * normalizzazione della galleria prodotto: master nitido, l'unica perdita
+ * lossy resta quella di next/image al serve) e caricata nel bucket "vetrina".
+ * L'URL che finisce in config e per costruzione del sito, quindi supera la
+ * validazione del salvataggio. La libreria di compressione si scarica al
+ * primo uso (import dinamico): il bundle del pannello resta invariato.
+ */
+function CampoSfondo({
+  valore,
+  imposta,
+  occupato,
+  hintVuoto,
+}: {
+  valore: string;
+  imposta: (v: string) => void;
+  occupato: boolean;
+  hintVuoto: string;
+}) {
+  const { mostra } = useToast();
+  const inputFileRef = useRef<HTMLInputElement>(null);
+  const [caricando, setCaricando] = useState(false);
+  const bloccato = occupato || caricando;
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      mostra("Scegli un file immagine.", "errore");
+      return;
+    }
+    setCaricando(true);
+    try {
+      const { default: imageCompression } = await import(
+        "browser-image-compression"
+      );
+      const compressa = await imageCompression(file, {
+        maxWidthOrHeight: 2560,
+        maxSizeMB: 8,
+        initialQuality: 0.92,
+        fileType: "image/webp",
+        useWebWorker: true,
+      });
+      const fd = new FormData();
+      fd.append("sfondo", compressa, "sfondo.webp");
+      const esito = await caricaSfondoVetrinaAction(fd);
+      if (!esito.ok || !esito.url) {
+        mostra(esito.error ?? "Caricamento non riuscito. Riprova.", "errore");
+        return;
+      }
+      imposta(esito.url);
+      mostra("Immagine caricata: ora premi Salva.", "ok");
+    } catch {
+      mostra("Caricamento non riuscito. Riprova.", "errore");
+    } finally {
+      setCaricando(false);
+    }
+  }
+
+  return (
+    <Campo
+      label="Immagine di sfondo"
+      hint={
+        valore
+          ? "Premi Salva per rendere effettiva la modifica."
+          : `${hintVuoto} Le immagini restano sul sito: niente link esterni.`
+      }
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        {valore && (
+          <Image
+            src={valore}
+            alt="Anteprima dello sfondo"
+            width={80}
+            height={48}
+            className="h-12 w-20 rounded-lg object-cover ring-1 ring-line"
+          />
+        )}
+        <button
+          type="button"
+          onClick={() => inputFileRef.current?.click()}
+          disabled={bloccato}
+          className="inline-flex h-11 items-center rounded-full bg-white px-5 font-display text-sm font-bold text-sea ring-1 ring-line-strong transition-all hover:-translate-y-0.5 disabled:opacity-50"
+        >
+          {caricando
+            ? "Caricamento…"
+            : valore
+              ? "Sostituisci immagine"
+              : "Carica immagine"}
+        </button>
+        {valore && (
+          <button
+            type="button"
+            onClick={() => imposta("")}
+            disabled={bloccato}
+            className="rounded-lg bg-coral/10 px-2.5 py-1.5 text-xs font-bold text-coral disabled:opacity-50"
+          >
+            Togli
+          </button>
+        )}
+        <input
+          ref={inputFileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onFile}
+        />
+      </div>
+    </Campo>
   );
 }
 
