@@ -128,6 +128,24 @@ WCAG 2.2 AA, SEO tecnico.
 1. **Acquistare il dominio del negozio** e collegarlo a Vercel — prerequisito
    di deliverability (A5) e dei residui SEO. Runbook completo:
    docs/deliverability-email-2026-07-21.md.
+   **Stato al 21/07 sera (acquisto INIZIATO, in pausa):**
+   - Scelto **`annashoprimini.it`**, verificato LIBERO via whois
+     (`annashop.it` è di terzi fino al 2027 con sito rotto sopra —
+     scartato; scartato anche `anna-shop.it` per il gemello ambiguo).
+   - Su Aruba prendere l'offerta **"Dominio con email"** (~1 € il 1° anno,
+     rinnovo 16,49 € + IVA, 5 caselle da 1 GB: la futura
+     `info@annashoprimini.it` chiuderà anche B8) e **NESSUN add-on**
+     (niente LegalBlink GDPR/Accessibilità, PEC extra, hosting, SpazioMail:
+     tutto già coperto o inutile — motivazioni in chat 21/07).
+   - **BLOCCO**: la P.IVA ha già un account cliente Aruba (creato a suo
+     tempo con la PEC borraccianna@pec.it) e l'email di recupero
+     credenziali è quella del **COMMERCIALISTA** (ufficio chiuso la sera):
+     farsi dare da lui lo username `NNNNNNN@aruba.it` (o l'email di
+     recupero), reset password, poi completare l'acquisto DENTRO
+     quell'account. Intestazione ditta individuale gia' compilata e
+     verificata coi dati visura (CF BRRNNA61E65F923H).
+   - Dopo l'acquisto: collegamento a Vercel (2 record DNS, guidato) +
+     aggiornare NEXT_PUBLIC_SITE_URL, poi Brevo come da runbook.
 2. Creare l'account **Brevo** (o Workspace), accettare il DPA, configurare i
    record DNS e le env `EMAIL_*` su Vercel come da runbook; poi dismettere
    le `GMAIL_*`.
