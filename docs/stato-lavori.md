@@ -33,10 +33,11 @@ a11y AA, SEO tecnico, performance, osservabilità, igiene) sono CHIUSI:
 non rifarli, non regredirli (report in docs/). Pattern vincolanti: vedi
 "Note operative" in docs/stato-lavori.md.
 
-LAVORO RIMASTO — un blocco per sessione, in quest'ordine consigliato:
-1. Residui minori UX/a11y (vedi docs/stato-lavori.md).
-2. SEO in produzione (SOLO dopo che esiste il dominio).
+LAVORO RIMASTO:
+1. SEO in produzione (SOLO dopo che esiste il dominio).
 B7 (storicizzazione prezzi Omnibus) solo se si vorranno annunciare sconti.
+Tutto il resto del lavoro tecnico e' CHIUSO: restano le azioni della
+titolare (vedi PROMEMORIA in docs/stato-lavori.md).
 
 A fine sessione: tsc + eslint (A ZERO) + next build puliti, verifica sul
 server locale (porta 3000: prima controlla cosa risponde), commit e push,
@@ -106,15 +107,17 @@ WCAG 2.2 AA, SEO tecnico.
 - **M13-dati**: solo azione titolare (vedi promemoria).
 - **A5**: solo azioni titolare (dominio + provider email, runbook pronto).
 
-**A11y** (docs/audit-a11y-2026-07-21.md):
-- `<main>` annidati nelle pagine vetrina non ancora toccate (uniformare a
-  `<div>` quando si toccano quei file; carrello, PDP, /ordine/[token] e
-  /checkout/successo già fatti).
-- Chip "Da pagare" della ListaOrdini gestore: 4.08:1, sotto AA.
-
-**UX minori** (docs/audit-ux-desktop-2026-07-21.md §3):
-- pannello "Tutti i temi" per i 127 chip su desktop; cap larghezza campo
-  ricerca; FreeShippingBar nel carrello misto ragiona sul subtotale intero.
+**A11y e UX minori — TUTTI CHIUSI il 21/07** (`c65cc47`):
+- ~~`<main>` annidati~~: uniformate anche le ultime tre pagine
+  (vieni-a-trovarci, checkout/annullato, not-found) — la vetrina non ha
+  piu landmark doppi.
+- ~~Chip "Da pagare" gestore~~: text-lagoon-ink (AA), come il chip cliente.
+- ~~Pannello "Tutti i temi"~~: bottone su desktop (>12 temi) che apre i
+  chip in griglia multi-riga; si richiude alla scelta. Mobile invariato.
+- ~~Cap campo ricerca~~: md:max-w-2xl.
+- ~~FreeShippingBar carrello misto~~: era GIA a posto (sistemata con le
+  sezioni separate del carrello, `cd92576`): conta solo la parte in pronta
+  consegna. Solo verifica, nessuna modifica.
 
 **SEO — richiedono la PRODUZIONE con dominio** (docs/audit-seo-2026-07-21.md):
 - peso card OG prodotto (se >~600KB → og:image = JPEG originale);
