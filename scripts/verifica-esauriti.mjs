@@ -29,18 +29,8 @@ function parseCsv(s) {
   return out;
 }
 
-const ADULTO = new Set(["XXS","XS","S","M","L","XL","2XL","3XL","4XL","5XL","6XL"]);
-function normTaglia(g) {
-  let t = pu(g).replace(/\s+/g, " ").trim(); if (!t) return "";
-  let U = t.toUpperCase();
-  if (U === "XXL") U = "2XL"; if (U === "XXXL") U = "3XL"; if (U === "XXXXL") U = "4XL";
-  if (ADULTO.has(U)) return U;
-  if (/^(taglia\s*)?unica$|^tu$|^one[\s-]?size$/i.test(t)) return "Taglia unica";
-  const a = U.match(/^(\d{1,2})\s*ANNI$/); if (a) return `${+a[1]} anni`;
-  const r = t.match(/^(\d{1,2})\s*[-/]\s*(\d{1,2})$/); if (r) return `${+r[1]}-${+r[2]}`;
-  const n = t.match(/^(\d{1,2})$/); if (n && +n[1] <= 16) return String(+n[1]);
-  return U;
-}
+// (la normalizzazione taglie non serve qui: il confronto è per-parent, non
+// per-taglia — la versione completa vive in src/lib/gestore/fornitori/blt-csv.ts)
 const disp = (s) => { const x = (s ?? "").trim().toLowerCase(); return x !== "" && x !== "no stock" && x !== "out of stock"; };
 
 // CSV: parent -> { standalone, qualcheTagliaDisponibile }
@@ -74,7 +64,10 @@ for (const v of varianti) { if (!varPer.has(v.prodotto_id)) varPer.set(v.prodott
 
 // Conferma vendita diretta
 let diretta = 0, richiesta = 0;
-for (const p of prodotti) (p.disponibilita_su_richiesta ? richiesta++ : diretta++);
+for (const p of prodotti) {
+  if (p.disponibilita_su_richiesta) richiesta++;
+  else diretta++;
+}
 console.log(`disponibilita: vendita diretta=${diretta} | su richiesta=${richiesta}`);
 
 // Falsi esauriti: prodotto BLT, stock totale 0, ma CSV lo dà disponibile

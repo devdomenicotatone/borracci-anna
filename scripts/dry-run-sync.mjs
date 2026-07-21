@@ -92,7 +92,8 @@ for (const v of varianti) {
   if (!parent) continue; // prodotto non nel CSV (i 5 casi)
   const info = csvMap.get(chiave(parent, normTaglia(v.taglia)));
   analizzate++;
-  (v.stock > 0 ? attualeDisp++ : attualeEsaur++);
+  if (v.stock > 0) attualeDisp++;
+  else attualeEsaur++;
   if (!info) { senzaRiscontro++; continue; }
   const dTarget = disponibile(info.semaforo);
   const dAttuale = v.stock > 0;

@@ -28,7 +28,10 @@ for (const p of prod ?? []) {
 let conCodice = 0, senzaCodice = 0;
 for (let da = 0; ; da += 1000) {
   const { data } = await sb.from("prodotti").select("codice").range(da, da + 999);
-  for (const r of data ?? []) (r.codice ? conCodice++ : senzaCodice++);
+  for (const r of data ?? []) {
+    if (r.codice) conCodice++;
+    else senzaCodice++;
+  }
   if (!data || data.length < 1000) break;
 }
 console.log(`\n=== catalogo: con codice (BLT) = ${conCodice} | senza codice (tuoi) = ${senzaCodice} ===`);
