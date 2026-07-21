@@ -33,14 +33,15 @@ a11y AA, SEO tecnico, performance, osservabilità, igiene) sono CHIUSI:
 non rifarli, non regredirli (report in docs/). Pattern vincolanti: vedi
 "Note operative" in docs/stato-lavori.md.
 
+ATTENZIONE: la migration 20260721200000 (token direct-buy) potrebbe non
+essere ancora applicata al DB (vedi "Stato database"): in tal caso
+applicarla PRIMA di altro lavoro (login CLI richiesto alla titolare).
+
 LAVORO RIMASTO — un blocco per sessione, in quest'ordine consigliato:
-1. M10+B9: riferimenti ordine per il cliente (numero/token nei direct-buy
-   — richiede RPC, farlo con cautela: integrità chiusa e verificata — e
-   recapiti cliccabili in /ordine/[token] e nelle email di stato).
-2. B5: sfondi banner/hero con URL libero verso host terzi (valutare
+1. B5: sfondi banner/hero con URL libero verso host terzi (valutare
    vincolo al bucket).
-3. Residui minori UX/a11y (vedi docs/stato-lavori.md).
-4. SEO in produzione (SOLO dopo che esiste il dominio).
+2. Residui minori UX/a11y (vedi docs/stato-lavori.md).
+3. SEO in produzione (SOLO dopo che esiste il dominio).
 B7 (storicizzazione prezzi Omnibus) solo se si vorranno annunciare sconti.
 
 A fine sessione: tsc + eslint (A ZERO) + next build puliti, verifica sul
@@ -63,24 +64,42 @@ strutturata, backfill 1785/1842), **M13 pronto lato codice** (mancano i
 dati del fabbricante dalla titolare). Report:
 residui-legali-m12-m13-2026-07-21.md.
 
+Sessione M10+B9 (21/07 sera): `18bd936` — **M10 e B9 chiusi lato codice**.
+Token pubblico anche per gli ordini direct-buy (RPC, migration
+20260721200000 — firma/lock/idempotenza invariati), "Ordine #N" + link
+/ordine/[token] nelle email di conferma e nella pagina di successo, blocco
+recapiti cliccabili (email con oggetto precompilato, telefono, WhatsApp)
+su /ordine/[token], recapiti in chiaro nelle email di ricezione/annullo.
+Bonus: via i `<main>` annidati da /ordine/[token] e /checkout/successo.
+**M10 e' DAVVERO chiuso solo dopo l'applicazione della migration** (vedi
+"Stato database"). Verifica visiva di /ordine/[token] con dati reali
+ancora da fare (DB senza ordini): basta una richiesta di prova dal sito.
+
 Audit precedenti (tutti chiusi, report in docs/): conformità legale
 (critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
 WCAG 2.2 AA, SEO tecnico.
 
-## Stato database (al 2026-07-21)
+## Stato database (al 2026-07-21, sera)
 
 - Ledger migration **riallineato**: le migration si applicano con
   `npx supabase db push` (SEMPRE `--dry-run` prima). Ultima applicata:
-  `20260721180000_prodotto_composizione_gpsr`. Niente in sospeso.
+  `20260721180000_prodotto_composizione_gpsr`.
+- **IN SOSPESO: `20260721200000_ordine_token_direct_buy`** (token per i
+  direct-buy, M10). Sul Mac la CLI Supabase NON è autenticata: serve
+  `npx supabase login` (apre il browser, azione della titolare), poi
+  `npx supabase link --project-ref ozbsslebqtzslfpqpwyz` e
+  `npx supabase db push --dry-run` (deve elencare SOLO questa) e infine
+  `npx supabase db push`. Il codice già deployato è compatibile in
+  entrambe le direzioni: senza migration le email di conferma direct-buy
+  escono col numero ma senza link /ordine/[token].
 - Backfill dati eseguiti: `composizione` su 1785 prodotti (21/07).
-- Tabella `ordini` vuota al 21/07 (pre-lancio): nessun backfill ordini.
+- Tabella `ordini` vuota al 21/07 sera (pre-lancio): nessun backfill ordini.
 
 ## Residui aperti (in ordine consigliato)
 
 **Legali** (docs/audit-conformita-legale-2026-07-14.md):
-- **M10 + B9** (buona coppia): numero/token ordine visibile per i
-  direct-buy (RPC con cautela) + recapiti cliccabili in /ordine/[token] e
-  nelle email di stato.
+- ~~M10 + B9~~ **chiusi il 21/07** (`18bd936`) — resta SOLO l'applicazione
+  della migration 20260721200000 (vedi "Stato database").
 - **B5**: vincolare gli sfondi banner/hero al bucket (oggi URL libero).
 - **B7**: storicizzazione prezzi Omnibus — SOLO se si annunceranno sconti.
 - **M13-dati**: solo azione titolare (vedi promemoria).
@@ -88,7 +107,8 @@ WCAG 2.2 AA, SEO tecnico.
 
 **A11y** (docs/audit-a11y-2026-07-21.md):
 - `<main>` annidati nelle pagine vetrina non ancora toccate (uniformare a
-  `<div>` quando si toccano quei file; carrello e PDP già fatti).
+  `<div>` quando si toccano quei file; carrello, PDP, /ordine/[token] e
+  /checkout/successo già fatti).
 - Chip "Da pagare" della ListaOrdini gestore: 4.08:1, sotto AA.
 
 **UX minori** (docs/audit-ux-desktop-2026-07-21.md §3):
