@@ -75,10 +75,10 @@ src/lib/vetrina-sfondi.ts): rifiuto al salvataggio con errore chiaro +
 guardia al rendering per i legacy (host esterni mai renderizzati). Nel
 pannello via il campo "incolla link": bottone "Carica immagine" (WebP
 client-side come la galleria, import dinamico), anteprima e "Togli".
-Bucket Storage dedicato `vetrina` (migration 20260721210000, DA
-APPLICARE — vedi "Stato database"). Nessuna fascia a DB aveva immagini:
-zero retrocompatibilita da gestire. Senza migration: upload fallisce con
-errore leggibile, il resto funziona.
+Bucket Storage dedicato `vetrina` (migration 20260721210000, applicata e
+verificata la notte stessa). Nessuna fascia a DB aveva immagini: zero
+retrocompatibilita da gestire. Da provare a mano nel pannello: caricare
+uno sfondo su una fascia e salvarla (primo giro reale del bottone).
 
 Audit precedenti (tutti chiusi, report in docs/): conformità legale
 (critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
@@ -88,12 +88,8 @@ WCAG 2.2 AA, SEO tecnico.
 
 - Ledger migration **riallineato**: le migration si applicano con
   `npx supabase db push` (SEMPRE `--dry-run` prima). Ultima applicata:
-  `20260721200000_ordine_token_direct_buy` (21/07 sera, verificata).
-- **IN SOSPESO: `20260721210000_bucket_sfondi_vetrina`** (bucket sfondi
-  hero/banner, B5): `npx supabase db push --dry-run` (deve elencare SOLO
-  questa), poi `npx supabase db push` dal terminale della titolare. Senza:
-  il bottone "Carica immagine" del pannello vetrina fallisce con errore
-  leggibile ("Bucket not found"), tutto il resto funziona.
+  `20260721210000_bucket_sfondi_vetrina` (21/07 notte, verificata: remoto
+  up to date, bucket presente con settaggi giusti). Niente in sospeso.
 - CLI Supabase ora autenticata e linkata ANCHE sul Mac (oltre che sul PC
   Windows). Nota: il push "vero" va lanciato dal terminale dalla titolare
   (il classificatore permessi dell'assistente blocca le scritture sul DB
@@ -105,8 +101,7 @@ WCAG 2.2 AA, SEO tecnico.
 
 **Legali** (docs/audit-conformita-legale-2026-07-14.md):
 - ~~M10 + B9~~ **chiusi il 21/07** (`18bd936`, migration applicata).
-- ~~B5~~ **chiuso il 21/07** (`744ce03`) — resta SOLO l'applicazione della
-  migration 20260721210000 (vedi "Stato database").
+- ~~B5~~ **chiuso il 21/07** (`744ce03`, migration applicata).
 - **B7**: storicizzazione prezzi Omnibus — SOLO se si annunceranno sconti.
 - **M13-dati**: solo azione titolare (vedi promemoria).
 - **A5**: solo azioni titolare (dominio + provider email, runbook pronto).
