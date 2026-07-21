@@ -1,0 +1,152 @@
+# Stato lavori — documento vivo (canonico)
+
+> **Ultimo aggiornamento: 2026-07-21.** Questo file è la fonte di verità
+> portabile su cosa è fatto, cosa resta e cosa spetta alla titolare: viaggia
+> col repo, a differenza della memoria locale dell'assistente. **Va
+> aggiornato a fine di ogni sessione di lavoro.**
+
+## Come riprendere il lavoro (nuovo PC o nuova chat)
+
+1. `git clone` / `git pull`.
+2. Su una macchina NUOVA servono anche (non sono nel repo):
+   - `.env.local` (secrets: Supabase, Stripe, Gmail, BLT, cron… — trasferirla
+     in modo sicuro dalla macchina attuale);
+   - CLI Supabase autenticata e linkata (`npx supabase login`, progetto
+     `ozbsslebqtzslfpqpwyz`) per le migration via `db push`;
+   - CLI Vercel autenticata (`npx vercel login`) solo se servono env/deploy.
+3. Incollare in chat il prompt di ripartenza qui sotto (o semplicemente:
+   *"allinea la repo e leggi docs/stato-lavori.md, poi prosegui col primo
+   punto aperto"*).
+
+### Prompt di ripartenza (aggiornato al 2026-07-21)
+
+```
+Prima di tutto allinea la repo locale con GitHub (git pull) e leggi
+docs/stato-lavori.md (stato canonico: fatto / da fare / promemoria).
+
+CONTESTO. E-commerce "Anna Shop di Borracci Anna" (microimpresa, Rimini,
+spedizioni solo Italia, Stripe Checkout, due flussi: diretto e su
+richiesta). Next.js 16 CUSTOM: leggi AGENTS.md e le guide in
+node_modules/next/dist/docs/ prima di scrivere codice. I 5 cantieri
+principali e gli audit (legale critici, integrità, sicurezza, mobile,
+a11y AA, SEO tecnico, performance, osservabilità, igiene) sono CHIUSI:
+non rifarli, non regredirli (report in docs/). Pattern vincolanti: vedi
+"Note operative" in docs/stato-lavori.md.
+
+LAVORO RIMASTO — un blocco per sessione, in quest'ordine consigliato:
+1. M10+B9: riferimenti ordine per il cliente (numero/token nei direct-buy
+   — richiede RPC, farlo con cautela: integrità chiusa e verificata — e
+   recapiti cliccabili in /ordine/[token] e nelle email di stato).
+2. B5: sfondi banner/hero con URL libero verso host terzi (valutare
+   vincolo al bucket).
+3. Residui minori UX/a11y (vedi docs/stato-lavori.md).
+4. SEO in produzione (SOLO dopo che esiste il dominio).
+B7 (storicizzazione prezzi Omnibus) solo se si vorranno annunciare sconti.
+
+A fine sessione: tsc + eslint (A ZERO) + next build puliti, verifica sul
+server locale (porta 3000: prima controlla cosa risponde), commit e push,
+AGGIORNA docs/stato-lavori.md e ristampa l'elenco aggiornato.
+```
+
+## Cantieri principali — 5/5 CHIUSI (tutti su main)
+
+| # | Cantiere | Commit | Report | Esito in breve |
+| --- | --- | --- | --- | --- |
+| 1 | Performance bundle | `388498b` | audit-performance-bundle-2026-07-21.md | sospetti smentiti dalla misura, bundle già sani; baseline + 3 script di misura in `scripts/` |
+| 2 | Osservabilità | `efcbf10` | osservabilita-2026-07-21.md | alert email con dedup su webhook Stripe e sync BLT, banner "cron fermo", M11 chiuso (flag email_conferma) |
+| 3 | Deliverability email | `2095c46` | deliverability-email-2026-07-21.md | trasporto SMTP provider-ready via env (testato sui 2 percorsi); BLOCCO esterno: manca il dominio |
+| 4 | Dipendenze e igiene | `f9afdfc` | igiene-dipendenze-2026-07-21.md | eslint a ZERO, vulnerabilità 0, server-only dichiarata; falsi positivi depcheck documentati |
+| 5 | UX desktop | `5c74fa6` | audit-ux-desktop-2026-07-21.md | CTA PDP sopra la piega, 5 colonne a xl, carrello a norma (M1/M2/M3+B6 chiusi) |
+
+Sessione extra residui legali: `9de3761` — **M12 chiuso** (composizione
+strutturata, backfill 1785/1842), **M13 pronto lato codice** (mancano i
+dati del fabbricante dalla titolare). Report:
+residui-legali-m12-m13-2026-07-21.md.
+
+Audit precedenti (tutti chiusi, report in docs/): conformità legale
+(critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
+WCAG 2.2 AA, SEO tecnico.
+
+## Stato database (al 2026-07-21)
+
+- Ledger migration **riallineato**: le migration si applicano con
+  `npx supabase db push` (SEMPRE `--dry-run` prima). Ultima applicata:
+  `20260721180000_prodotto_composizione_gpsr`. Niente in sospeso.
+- Backfill dati eseguiti: `composizione` su 1785 prodotti (21/07).
+- Tabella `ordini` vuota al 21/07 (pre-lancio): nessun backfill ordini.
+
+## Residui aperti (in ordine consigliato)
+
+**Legali** (docs/audit-conformita-legale-2026-07-14.md):
+- **M10 + B9** (buona coppia): numero/token ordine visibile per i
+  direct-buy (RPC con cautela) + recapiti cliccabili in /ordine/[token] e
+  nelle email di stato.
+- **B5**: vincolare gli sfondi banner/hero al bucket (oggi URL libero).
+- **B7**: storicizzazione prezzi Omnibus — SOLO se si annunceranno sconti.
+- **M13-dati**: solo azione titolare (vedi promemoria).
+- **A5**: solo azioni titolare (dominio + provider email, runbook pronto).
+
+**A11y** (docs/audit-a11y-2026-07-21.md):
+- `<main>` annidati nelle pagine vetrina non ancora toccate (uniformare a
+  `<div>` quando si toccano quei file; carrello e PDP già fatti).
+- Chip "Da pagare" della ListaOrdini gestore: 4.08:1, sotto AA.
+
+**UX minori** (docs/audit-ux-desktop-2026-07-21.md §3):
+- pannello "Tutti i temi" per i 127 chip su desktop; cap larghezza campo
+  ricerca; FreeShippingBar nel carrello misto ragiona sul subtotale intero.
+
+**SEO — richiedono la PRODUZIONE con dominio** (docs/audit-seo-2026-07-21.md):
+- peso card OG prodotto (se >~600KB → og:image = JPEG originale);
+- Rich Results Test su una PDP + verifica Search Console.
+
+## PROMEMORIA TITOLARE (azioni NON eseguibili dall'assistente)
+
+1. **Acquistare il dominio del negozio** e collegarlo a Vercel — prerequisito
+   di deliverability (A5) e dei residui SEO. Runbook completo:
+   docs/deliverability-email-2026-07-21.md.
+2. Creare l'account **Brevo** (o Workspace), accettare il DPA, configurare i
+   record DNS e le env `EMAIL_*` su Vercel come da runbook; poi dismettere
+   le `GMAIL_*`.
+3. **Chiedere a Ingrosso BLT ragione sociale e recapiti del fabbricante**
+   (indirizzo postale + email; se extra-UE anche il responsabile UE), poi:
+   `node scripts/imposta-fabbricante.mjs BLT "Nome | Indirizzo | email" --applica`
+   → compila 1840 schede e chiude M13.
+4. Confermare gli **orari del negozio**: aggiornare INSIEME `NEGOZIO.orari`
+   e `NEGOZIO.orariStrutturati` in src/lib/negozio.ts.
+5. Sostituire l'**email di contatto** (oggi casella personale dello
+   sviluppatore, B8) — nota: è anche la casella che riceve gli alert
+   tecnici e le notifiche ordine.
+6. Far **validare i testi legali** pubblicati da un legale.
+7. Confermare l'**esenzione microimpresa EAA** (se non esente serve la
+   dichiarazione di accessibilità).
+8. (Eventuale) URL delle condizioni nella dashboard Stripe se si vorrà
+   `consent_collection` al posto del `custom_text`.
+
+## Note operative vincolanti (per chi riprende il lavoro)
+
+- **Standard di fine sessione**: tsc 0 · eslint **0** · `next build` pulito ·
+  verifica sul server locale · commit+push · aggiornare QUESTO file.
+- **Migration**: `npx supabase db push` (dry-run prima). Mai SQL Editor a
+  mano: il ledger è allineato dal 21/07 e deve restarlo.
+- **Pattern UI vincolanti**: coral-ink per i fill con testo bianco (mai
+  bg-coral col testo); velo scuro sempre attivo sui hero; StatoInvio nei
+  form; `{" "}` espliciti nei nodi JSX con entità HTML (quirk del Next
+  custom); robots solo /gestore + noindex crawlabile sulle private;
+  JSON-LD della PDP con spedizione/reso; niente og title/description nel
+  root layout.
+- **Carrello/spedizione**: la tariffa arriva ai componenti SEMPRE come prop
+  dal server (`SPEDIZIONE_ITALIA_CENTS` è env server-only); il totale
+  mostrato deve restare identico all'addebito Stripe.
+- **Bundle**: confini lazy da non regredire (editor Filerobot dietro
+  dynamic ssr:false; @imgly dentro il click; leaflet dentro await import;
+  qrcode lazy in CondividiProdotto). Nuove dipendenze client >20KB → misura
+  prima/dopo con gli script `scripts/bundle-*.mjs`.
+- **Stock semaforo BLT (>=999)**: mai mostrarlo come numero al cliente.
+- **Trappola PDP**: `caricaProdotto` ricostruisce l'oggetto campo per campo
+  — una colonna nuova va aggiunta al select E al return.
+- **Porta 3000**: verificare prima cosa risponde; dev server con `npm run
+  dev` in background; fermarlo prima di `next build` (condividono .next).
+- **Windows/PowerShell 5.1**: commit multilinea con `git commit -F <file>`
+  (le virgolette interne spezzano -m); mai patchare sorgenti con
+  Set-Content (BOM/CRLF); niente `process.exit()` negli script Node con
+  fetch keep-alive aperti.
