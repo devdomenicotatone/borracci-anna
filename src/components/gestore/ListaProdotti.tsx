@@ -777,10 +777,17 @@ export default function ListaProdotti({
         </p>
       )}
 
-      {/* Barra azioni in blocco (sopra la bottom-nav mobile). */}
+      {/* La barra azioni e fixed: questo distanziale evita che copra le ultime
+          righe della lista finche la selezione e attiva. */}
+      {selezionati.size > 0 && <div aria-hidden className="h-40 md:h-28" />}
+
+      {/* Barra azioni in blocco (sopra la bottom-nav mobile; a md+ centrata
+          sulla colonna dei contenuti: sidebar w-60 → offset +7.5rem). Sempre
+          flex-wrap: se lo spazio non basta si va a capo in righe ordinate,
+          cosi nessun elemento puo collassare a zero. */}
       {selezionati.size > 0 && (
-        <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 md:inset-x-auto md:bottom-6 md:left-1/2 md:w-auto md:-translate-x-1/2">
-          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2.5 rounded-3xl bg-foreground p-3 text-white shadow-[0_18px_50px_-12px_rgba(10,31,51,0.55)] md:flex-nowrap md:rounded-full md:py-2.5 md:pl-5">
+        <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 md:inset-x-auto md:bottom-6 md:left-[calc(50%+7.5rem)] md:w-max md:max-w-[calc(100vw-17rem)] md:-translate-x-1/2">
+          <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2.5 rounded-3xl bg-foreground p-3 text-white shadow-[0_18px_50px_-12px_rgba(10,31,51,0.55)] md:max-w-none md:pl-5">
             {confermaElimina ? (
               // Conferma inline a due passi: niente modale, ma un'azione
               // distruttiva non parte mai al primo click.
@@ -808,11 +815,15 @@ export default function ListaProdotti({
               </>
             ) : (
               <>
-                <span className="font-display text-sm font-bold tabular-nums">
+                <span className="shrink-0 font-display text-sm font-bold tabular-nums">
                   {selezionati.size}{" "}
                   {selezionati.size === 1 ? "selezionato" : "selezionati"}
                 </span>
-                <div className="min-w-0 flex-1 basis-40 [&_select]:h-11 [&_select]:rounded-full [&_select]:text-sm">
+                {/* La select (bianca di suo) qui vive su fondo scuro: la si
+                    riveste da "ghost" con gli override; le option restano su
+                    fondo bianco per il menu nativo. min-w reale: mai schiacciata
+                    a scheggia, al limite va a capo. */}
+                <div className="min-w-[10rem] flex-1 basis-44 [&_optgroup]:bg-white [&_optgroup]:text-foreground [&_option]:bg-white [&_option]:text-foreground [&_select]:h-11 [&_select]:rounded-full [&_select]:bg-white/10 [&_select]:text-sm [&_select]:text-white [&_select]:ring-white/25 [&_span]:text-white/70">
                   <CategoriaSelect
                     id="bulk-categoria"
                     categorie={categorie}
