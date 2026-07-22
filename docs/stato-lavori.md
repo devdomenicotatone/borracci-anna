@@ -148,11 +148,14 @@ WCAG 2.2 AA, SEO tecnico.
    - Dominio + www agganciati al progetto Vercel via CLI (autenticata sul
      Mac, utente domenicotatonedev-8873); verifica Vercel superata,
      certificato SSL in emissione automatica al momento della scrittura.
-   - **`NEXT_PUBLIC_SITE_URL` (Production) → https://annashoprimini.it**;
-     il deploy col push di questo commit la rende effettiva.
+   - **`NEXT_PUBLIC_SITE_URL` (Production) → https://annashoprimini.it**,
+     deploy eseguito e VERIFICATO il 22/07: https 200 su apex e www,
+     certificati emessi (rinnovo automatico), robots/sitemap col dominio
+     nuovo. Il vecchio borracci-anna.vercel.app resta attivo (i canonical
+     puntano al dominio: nessun problema SEO).
    - **PROSSIMI PASSI (in ordine)**:
-     1) verificare https/lucchetto e sito sul dominio (email/link ora
-        usano annashoprimini.it);
+     1) opzionale (cosmesi): in dashboard Vercel impostare i redirect
+        www → apex e vercel.app → dominio;
      2) creare `info@annashoprimini.it` dal pannello Aruba → chiude B8
         (sostituire NEGOZIO.email in src/lib/negozio.ts + template
         Supabase Auth in dashboard);
