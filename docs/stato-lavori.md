@@ -154,8 +154,11 @@ WCAG 2.2 AA, SEO tecnico.
      nuovo. Il vecchio borracci-anna.vercel.app resta attivo (i canonical
      puntano al dominio: nessun problema SEO).
    - **PROSSIMI PASSI (in ordine)**:
-     1) opzionale (cosmesi): in dashboard Vercel impostare i redirect
-        www → apex e vercel.app → dominio;
+     1) ~~redirect vercel.app → dominio~~ FATTO il 22/07 dalla titolare
+        (308 permanente, verificato). Resta opzionale il redirect
+        www → apex (oggi www serve il sito direttamente: ok anche cosi).
+        ⚠️ IGNORARE il badge Vercel "DNS Change Recommended": i nameserver
+        DEVONO restare su Aruba (record email);
      2) creare `info@annashoprimini.it` dal pannello Aruba → chiude B8
         (sostituire NEGOZIO.email in src/lib/negozio.ts + template
         Supabase Auth in dashboard);
