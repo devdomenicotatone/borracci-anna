@@ -137,22 +137,32 @@ WCAG 2.2 AA, SEO tecnico.
 1. **Acquistare il dominio del negozio** e collegarlo a Vercel — prerequisito
    di deliverability (A5) e dei residui SEO. Runbook completo:
    docs/deliverability-email-2026-07-21.md.
-   **Stato al 21/07 notte: DOMINIO ACQUISTATO ✅**
-   - **`annashoprimini.it`** comprato su Aruba (ordine MO21804631, offerta
-     "Dominio con email": 5 caselle da 1 GB incluse — la futura
-     `info@annashoprimini.it` chiuderà anche B8). Nessun add-on.
-   - Intestazione VERIFICATA: ditta individuale Borracci Anna, sede
-     Rimini Viale Regina Margherita 169c, legale rappresentante Anna
-     (CF BRRNNA61E65F923H). Account Aruba: quello storico della P.IVA
-     (stesso della PEC), credenziali recuperate e in mano alla titolare.
-   - In attesa dell'**email di attivazione** Aruba (qualche ora).
-   - **PROSSIMI PASSI (in ordine)**: 1) collegare il dominio a Vercel
-     (Project → Settings → Domains + 2 record DNS su Aruba, guidato);
-     2) aggiornare `NEXT_PUBLIC_SITE_URL` su Vercel e redeploy;
-     3) creare la casella `info@annashoprimini.it` dal pannello Aruba
-     (chiude B8: sostituire NEGOZIO.email in src/lib/negozio.ts);
-     4) Brevo + SPF/DKIM/DMARC come da runbook deliverability;
-     5) residui SEO "solo in produzione" (audit-seo-2026-07-21.md).
+   **Stato al 22/07 pomeriggio: DOMINIO ATTIVO E COLLEGATO ✅**
+   - **`annashoprimini.it`** registrato al Registro .it (stato [ok]),
+     intestato a Borracci Anna con sede Rimini, rinnovo automatico ON,
+     offerta "Dominio con email" (5 caselle da 1 GB per il futuro info@).
+     Account Aruba storico della P.IVA recuperato (username 11684238).
+   - **DNS su Aruba (INVARIATI i nameserver)**: record A `@` →
+     76.76.21.21 (Vercel); `www` segue l'apex via CNAME preesistente.
+     Record `mail`/`mx`/SPF Aruba INTATTI (servono per le caselle email).
+   - Dominio + www agganciati al progetto Vercel via CLI (autenticata sul
+     Mac, utente domenicotatonedev-8873); verifica Vercel superata,
+     certificato SSL in emissione automatica al momento della scrittura.
+   - **`NEXT_PUBLIC_SITE_URL` (Production) → https://annashoprimini.it**;
+     il deploy col push di questo commit la rende effettiva.
+   - **PROSSIMI PASSI (in ordine)**:
+     1) verificare https/lucchetto e sito sul dominio (email/link ora
+        usano annashoprimini.it);
+     2) creare `info@annashoprimini.it` dal pannello Aruba → chiude B8
+        (sostituire NEGOZIO.email in src/lib/negozio.ts + template
+        Supabase Auth in dashboard);
+     3) Brevo + SPF/DKIM/DMARC come da runbook. ⚠️ SPF: esiste gia'
+        `v=spf1 include:_spf.aruba.it ~all` su Aruba → gli include di
+        Brevo vanno UNITI in quell'UNICO record, mai due record SPF;
+     4) residui SEO in produzione (audit-seo-2026-07-21.md);
+     5) opzionale: aggiornare l'endpoint webhook nella dashboard Stripe
+        al nuovo dominio (il vecchio borracci-anna.vercel.app resta
+        comunque attivo, quindi NON e' urgente).
 2. Creare l'account **Brevo** (o Workspace), accettare il DPA, configurare i
    record DNS e le env `EMAIL_*` su Vercel come da runbook; poi dismettere
    le `GMAIL_*`.
