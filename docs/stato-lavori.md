@@ -162,10 +162,22 @@ WCAG 2.2 AA, SEO tecnico.
      3) Brevo + SPF/DKIM/DMARC come da runbook. ⚠️ SPF: esiste gia'
         `v=spf1 include:_spf.aruba.it ~all` su Aruba → gli include di
         Brevo vanno UNITI in quell'UNICO record, mai due record SPF;
-     4) residui SEO in produzione (audit-seo-2026-07-21.md);
-     5) opzionale: aggiornare l'endpoint webhook nella dashboard Stripe
-        al nuovo dominio (il vecchio borracci-anna.vercel.app resta
-        comunque attivo, quindi NON e' urgente).
+     4) residui SEO in produzione (audit-seo-2026-07-21.md).
+   - **STRIPE (22/07): webhook CREATO, prima NON ESISTEVA.** Scoperta:
+     la produzione usa la chiave TEST (verificato dalle sessioni checkout)
+     e nessun endpoint webhook era mai stato configurato → i pagamenti di
+     prova sul sito deployato NON registravano ordini. Ora: endpoint
+     `we_1Tw3ryRjjhybTfmzgGt96XNt` (test mode) →
+     https://annashoprimini.it/api/stripe/webhook coi 4 eventi checkout;
+     `STRIPE_WEBHOOK_SECRET` (Production, sensitive) aggiornato via
+     `scripts/configura-webhook-stripe.sh` lanciato dalla titolare (le
+     scritture su pagamenti/segreti sono bloccate all'assistente).
+     **DA FARE SUBITO: acquisto di prova end-to-end** sul sito con carta
+     test 4242 4242 4242 4242 → deve nascere l'ordine nel pannello + email.
+     **AL GO-LIVE (soldi veri)**: mettere su Vercel le chiavi live
+     (STRIPE_SECRET_KEY sk_live_) e ricreare l'endpoint in modalita' live
+     con relativo STRIPE_WEBHOOK_SECRET (stesso giro dello script, che
+     pero' va adattato: oggi si RIFIUTA di girare con chiavi live).
 2. Creare l'account **Brevo** (o Workspace), accettare il DPA, configurare i
    record DNS e le env `EMAIL_*` su Vercel come da runbook; poi dismettere
    le `GMAIL_*`.
