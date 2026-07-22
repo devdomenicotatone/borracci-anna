@@ -81,6 +81,15 @@ verificata la notte stessa). Nessuna fascia a DB aveva immagini: zero
 retrocompatibilita da gestire. Da provare a mano nel pannello: caricare
 uno sfondo su una fascia e salvarla (primo giro reale del bottone).
 
+Sessione barra bulk (22/07 notte): `c3e3e4a` — fix grafico alla barra
+azioni in blocco di /gestore/prodotti: la select categorie (bianca su
+fondo scuro) collassava a "scheggia" nella riga nowrap e la barra fixed
+copriva le ultime righe della lista. Ora select ghost scura con min-width
+reale, wrap ordinato quando manca spazio, barra centrata sulla colonna
+dei contenuti (non sul viewport) e distanziale in fondo alla lista.
+Verificata con pagina di anteprima temporanea (poi rimossa) a 1600/1024/
+375px, stati Assegna/Rimuovi e conferma eliminazione inclusi.
+
 Audit precedenti (tutti chiusi, report in docs/): conformità legale
 (critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
 WCAG 2.2 AA, SEO tecnico.
