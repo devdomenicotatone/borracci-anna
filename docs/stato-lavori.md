@@ -189,11 +189,19 @@ WCAG 2.2 AA, SEO tecnico.
      2) ~~creare `info@annashoprimini.it`~~ **FATTO il 23/07**: casella
         creata dal pannello Aruba (via postmaster; catch-all e reset al
         primo accesso disattivati) e `NEGOZIO.email` sostituita
-        (`44f449e`) → **B8 chiuso lato codice**. Restano due code:
-        [T] verificare in dashboard Supabase (Authentication → Emails)
-        che template e mittente non citino la vecchia gmail — i template
-        nel repo (supabase/templates/) sono gia' puliti, nessuna email nel
-        corpo; [T] configurare l'accesso a info@ (webmail.aruba.it o
+        (`44f449e`) → **B8 chiuso lato codice**. Verifica dashboard
+        Supabase FATTA il 23/07 (screenshot titolare): nessuna vecchia
+        gmail nei corpi ✓, MA i 3 template Auth in dashboard sono a una
+        versione VECCHIA (manca il paragrafo fallback "copia e incolla
+        questo indirizzo") e gli OGGETTI sono rimasti ai default inglesi
+        di Supabase. → [T] riallineare i 3 template incollando i corpi da
+        supabase/templates/ e impostando gli oggetti italiani (indicati
+        nei commenti in testa ai file e in piano-area-utente.md §57);
+        ⚠️ farlo con la TRADUZIONE AUTOMATICA di Chrome DISATTIVATA (la
+        pagina tradotta altera l'HTML mostrato nell'editor: salvare in
+        quello stato rischia di salvare markup corrotto; verificare
+        anche una "D" spuria vista dopo </div> nel template cambio
+        email). [T] configurare l'accesso a info@ (webmail.aruba.it o
         client): DAL PROSSIMO DEPLOY notifiche ordine, alert tecnici e
         risposte dei clienti arrivano LI', va presidiata;
      3) Brevo + SPF/DKIM/DMARC come da runbook. ⚠️ SPF: esiste gia'
