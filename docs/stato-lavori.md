@@ -90,6 +90,33 @@ dei contenuti (non sul viewport) e distanziale in fondo alla lista.
 Verificata con pagina di anteprima temporanea (poi rimossa) a 1600/1024/
 375px, stati Assegna/Rimuovi e conferma eliminazione inclusi.
 
+Sessione doppia CTA carrello mobile (23/07): `182aaa0` — la barra sticky mobile di
+/carrello (totale + "Vai al pagamento") conviveva col riepilogo nei
+carrelli corti → doppio bottone impilato (segnalazione titolare, era un
+caso limite non gestito del fix anti-abbandono). Ora in
+CarrelloContenuto.tsx un IntersectionObserver su un'ancora (callback ref,
+lint-safe con le regole react-hooks nuove) monta la barra SOLO quando la
+CTA del riepilogo — o il modulo richiesta nel carrello tutto-richiesta —
+sta sotto la piega; sparisce anche a CTA superata (footer/compilazione
+modulo). Nuova micro-animazione `rise-in` in globals.css. Verificato nel
+browser a 375px: 1 articolo = mai barra; 4 articoli = barra in cima, via
+al riepilogo, torna risalendo; footer sempre libero; console pulita;
+tsc + eslint a zero.
+
+Sessione feedback quick-add (23/07, stessa chat): `1d9ffb8` — il mini-cart drawer si
+apriva a OGNI aggiunta, anche dal quick-add delle card — fastidioso in
+navigazione (segnalazione titolare, confermata dal pattern dei big:
+listing → toast leggero, PDP → drawer). Ora `aggiungi` del CartProvider
+accetta `feedback: "drawer" | "toast"` (default drawer: PDP invariate,
+BarraAcquistoMobile/BloccoAcquisto/BloccoRichiesta non toccati);
+QuickAddTaglie passa "toast". Il Toaster condiviso impara un'azione
+opzionale {testo, href} resa come link nel toast (z-10 sopra l'overlay
+di chiusura, il tap chiude anche il toast): quick-add → "Aggiunto al
+carrello · Vedi carrello". Verificato nel browser: quick-add = toast +
+badge senza drawer (auto-chiusura 3,5s ok, link cliccabile via
+elementFromPoint), PDP = drawer come prima; console pulita; tsc +
+eslint 0 + next build pulito.
+
 Audit precedenti (tutti chiusi, report in docs/): conformità legale
 (critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
 WCAG 2.2 AA, SEO tecnico.
