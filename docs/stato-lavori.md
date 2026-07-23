@@ -1,6 +1,6 @@
 # Stato lavori — documento vivo (canonico)
 
-> **Ultimo aggiornamento: 2026-07-21.** Questo file è la fonte di verità
+> **Ultimo aggiornamento: 2026-07-24.** Questo file è la fonte di verità
 > portabile su cosa è fatto, cosa resta e cosa spetta alla titolare: viaggia
 > col repo, a differenza della memoria locale dell'assistente. **Va
 > aggiornato a fine di ogni sessione di lavoro.**
@@ -116,6 +116,21 @@ carrello · Vedi carrello". Verificato nel browser: quick-add = toast +
 badge senza drawer (auto-chiusura 3,5s ok, link cliccabile via
 elementFromPoint), PDP = drawer come prima; console pulita; tsc +
 eslint 0 + next build pulito.
+
+Sessione orari leggibili (24/07): `9dacfc8` — gli orari in footer e
+"Vieni a trovarci" erano un muro di testo su una riga (segnalazione
+titolare). `NEGOZIO.orari` (stringa) sostituito da `NEGOZIO.orariApertura`
+strutturato: {stagione, fasce[{periodo, orario, nota?}]}, sempre unica
+fonte insieme a `orariStrutturati` (JSON-LD home invariato). Footer: riga
+introduttiva + una riga per fascia "periodo · orario", nota pasquale in
+piccolo. Scheda "Il negozio": righe periodo→orario con puntini di
+raccordo appoggiati sulla baseline; sotto sm la lista esce dal rientro
+dell'icona (-ml-[54px], accoppiato a icona 40px + gap 14px) e scende a
+text-sm — unico modo di tenere la riga più lunga ("Giugno–settembre
+7:30–23:30", 245px naturali) su una linea fino a 320px; l'orario è
+whitespace-nowrap (mai spezzato al trattino). Verificato nel browser a
+320/375/1280 via misure DOM (righe h=1 riga, zero overflow, puntini in
+baseline); tsc + eslint 0 + next build puliti.
 
 Audit precedenti (tutti chiusi, report in docs/): conformità legale
 (critici C1-C4), integrità ordini/magazzino, sicurezza, mobile, a11y
@@ -239,8 +254,8 @@ WCAG 2.2 AA, SEO tecnico.
 4. ~~Confermare gli orari del negozio~~ **FATTO il 21/07**: orari
    stagionali confermati dalla titolare e scritti in negozio.ts (testo +
    JSON-LD per periodi a date fisse; il tratto pasquale, a inizio mobile,
-   vive solo nel testo). Se in futuro cambiano: aggiornare INSIEME
-   `NEGOZIO.orari` e `NEGOZIO.orariStrutturati`.
+   vive solo nella fascia marzo-aprile). Se in futuro cambiano: aggiornare
+   INSIEME `NEGOZIO.orariApertura` e `NEGOZIO.orariStrutturati`.
 5. ~~Sostituire l'**email di contatto**~~ **FATTO il 23/07** (`44f449e`):
    ora è `info@annashoprimini.it` (casella Aruba del dominio). Riceve
    anche alert tecnici e notifiche ordine: va presidiata (vedi punto 1,
