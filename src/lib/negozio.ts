@@ -23,8 +23,8 @@ export const NEGOZIO = {
   /** Coordinate del civico 169/C (nodo indirizzo OpenStreetMap "169c"). */
   coordinate: { lat: 44.0357392, lng: 12.6160953 },
 
-  /** Contatto cliente. */
-  email: "1.domenicotatone@gmail.com",
+  /** Contatto cliente: casella del dominio su Aruba (B8, creata il 23/07). */
+  email: "info@annashoprimini.it",
   /**
    * Numero WhatsApp in formato internazionale SENZA "+" ne spazi (es.
    * "393331234567"). Lascia "" per nascondere il bottone WhatsApp finche non
