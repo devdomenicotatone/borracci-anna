@@ -72,7 +72,8 @@ export default function Footer() {
                 {NEGOZIO.indirizzoCompleto}
               </a>
             </p>
-            <p className="flex items-start gap-2.5 text-[#b9cad8]">
+            {/* div, non p: contiene una lista (ul dentro p = HTML non valido). */}
+            <div className="flex items-start gap-2.5 text-[#b9cad8]">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -86,8 +87,25 @@ export default function Footer() {
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 7v5l3 2" />
               </svg>
-              <span>{NEGOZIO.orari}</span>
-            </p>
+              <div>
+                <p>{NEGOZIO.orariApertura.stagione}:</p>
+                <ul className="mt-1.5 space-y-1">
+                  {NEGOZIO.orariApertura.fasce.map((f) => (
+                    <li key={f.periodo}>
+                      {f.periodo} ·{" "}
+                      <span className="font-semibold tabular-nums text-[#dfe9f1]">
+                        {f.orario}
+                      </span>
+                      {f.nota ? (
+                        <span className="block text-sm text-[#90a6b8]">
+                          {f.nota}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
             <p>
               <Link
                 href="/vieni-a-trovarci"

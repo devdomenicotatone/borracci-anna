@@ -59,8 +59,8 @@ export default async function Home() {
     // (da Pasqua al 30 settembre): un blocco per ciascun periodo a date
     // fisse, ancorato all'anno corrente al render — il dato non scade mai.
     // Il tratto pasquale (marzo-aprile, inizio mobile ogni anno) non ha date
-    // affidabili: vive solo nel testo di NEGOZIO.orari, meglio nessun dato
-    // che date sbagliate su Google.
+    // affidabili: vive solo nella fascia "Marzo e aprile" di
+    // NEGOZIO.orariApertura, meglio nessun dato che date sbagliate su Google.
     openingHoursSpecification: NEGOZIO.orariStrutturati.periodi.map((p) => {
       const anno = new Date().getFullYear();
       return {

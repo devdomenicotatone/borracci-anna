@@ -42,20 +42,34 @@ export const NEGOZIO = {
   /**
    * Orari di apertura (confermati dalla titolare il 21/07/2026). Il negozio e
    * STAGIONALE: apre ogni anno la settimana di Pasqua e chiude il 30
-   * settembre; sempre orario continuato, 7 giorni su 7. UNICA fonte insieme a
+   * settembre; sempre orario continuato, 7 giorni su 7. Forma per la VISTA
+   * (footer e "Vieni a trovarci"): riga introduttiva + una riga per fascia,
+   * cosi non si rende mai come muro di testo. UNICA fonte insieme a
    * `orariStrutturati`: se gli orari cambiano, aggiornare ENTRAMBI.
    */
-  orari:
-    "Da Pasqua al 30 settembre, orario continuato: marzo e aprile 9:00–20:00 " +
-    "(a Pasqua anche più a lungo), maggio 8:00–22:30, giugno–settembre " +
-    "7:30–23:30.",
+  orariApertura: {
+    /** Riga introduttiva: stagione e formula, senza gli orari puntuali. */
+    stagione:
+      "Aperti tutti i giorni da Pasqua al 30 settembre, orario continuato",
+    /** Fasce in ordine di stagione; la `nota` facoltativa va resa in piccolo. */
+    fasce: [
+      {
+        periodo: "Marzo e aprile",
+        orario: "9:00–20:00",
+        nota: "a Pasqua anche più a lungo",
+      },
+      { periodo: "Maggio", orario: "8:00–22:30" },
+      { periodo: "Giugno–settembre", orario: "7:30–23:30" },
+    ] as readonly { periodo: string; orario: string; nota?: string }[],
+  },
   /**
    * Stessi orari in forma strutturata (schema.org openingHoursSpecification,
    * JSON-LD ClothingStore in home). SOLO i periodi a date fisse: il tratto
    * marzo–aprile parte dalla settimana di Pasqua, che cambia ogni anno —
-   * meglio nessun dato che date sbagliate su Google; quel tratto vive nel
-   * testo di `orari`. `validaDa`/`validaA` sono "MM-GG": l'anno corrente lo
-   * aggiunge la home al render, cosi il dato non scade mai.
+   * meglio nessun dato che date sbagliate su Google; quel tratto vive nella
+   * fascia "Marzo e aprile" di `orariApertura`. `validaDa`/`validaA` sono
+   * "MM-GG": l'anno corrente lo aggiunge la home al render, cosi il dato non
+   * scade mai.
    */
   orariStrutturati: {
     /** Tutti i periodi valgono 7 giorni su 7 (orario continuato). */

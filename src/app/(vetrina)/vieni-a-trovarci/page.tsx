@@ -126,11 +126,45 @@ export default function VieniATrovarciPage() {
                     <path d="M12 7v5l3 2" />
                   </svg>
                 </span>
-                <div>
+                {/* flex-1: le righe orario (coi puntini di raccordo) devono
+                    poter occupare tutta la larghezza della scheda. */}
+                <div className="min-w-0 flex-1">
                   <p className="font-display text-sm font-bold uppercase tracking-wide text-muted">
                     Orari
                   </p>
-                  <p className="font-medium text-foreground">{NEGOZIO.orari}</p>
+                  <p className="font-medium text-foreground">
+                    {NEGOZIO.orariApertura.stagione}.
+                  </p>
+                  {/* Sotto sm la lista esce dal rientro dell'icona (40px +
+                      gap 14px) e scende a text-sm: e l'unico modo di tenere
+                      periodo e orario sulla stessa riga fino a 320px. */}
+                  <ul className="-ml-[54px] mt-2.5 max-w-[22rem] space-y-1.5 text-sm sm:ml-0 sm:text-base">
+                    {NEGOZIO.orariApertura.fasce.map((f) => (
+                      <li key={f.periodo}>
+                        <span className="flex items-baseline gap-2 sm:gap-3">
+                          <span className="font-medium text-foreground">
+                            {f.periodo}
+                          </span>
+                          {/* Puntini di raccordo stile menu: solo decorativi. */}
+                          <span
+                            aria-hidden="true"
+                            className="min-w-3 flex-1 border-b-2 border-dotted border-line sm:min-w-5"
+                          />
+                          {/* nowrap: un orario spezzato al trattino ("7:30–" a
+                              capo "23:30") non e mai accettabile; in emergenza
+                              va a capo il periodo, non l'orario. */}
+                          <span className="whitespace-nowrap font-semibold tabular-nums text-foreground">
+                            {f.orario}
+                          </span>
+                        </span>
+                        {f.nota ? (
+                          <span className="block text-xs text-muted sm:text-sm">
+                            {f.nota}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </li>
 
