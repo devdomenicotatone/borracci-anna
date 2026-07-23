@@ -12,7 +12,7 @@
 // Con un solo tipo di articoli la pagina resta a sezione unica, come prima.
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import CartItem, { CheckoutButton } from "@/components/CartItem";
 import FreeShippingBar from "@/components/cart/FreeShippingBar";
@@ -53,6 +53,32 @@ export default function CarrelloContenuto({
   // Token dell'ultima richiesta inviata da un carrello misto: mostra il banner
   // di conferma mentre l'utente completa il pagamento delle righe rimaste.
   const [tokenRichiesta, setTokenRichiesta] = useState<string | null>(null);
+
+  // Barra sticky mobile SOLO quando serve: l'ancora sta sulla CTA del
+  // riepilogo (o sul modulo richiesta) e la barra compare solo finche' quella
+  // CTA e' SOTTO la piega. Con l'ancora visibile — o gia' superata, es. mentre
+  // si compila il modulo o si legge il footer — la barra sparisce: prima, nei
+  // carrelli corti, CTA del riepilogo e barra convivevano una sopra l'altra
+  // (doppio "Vai al pagamento"). Parte nascosta (niente doppione al primo
+  // paint SSR); l'observer decide al mount. Callback ref, non effect: segue da
+  // solo l'ancora quando il layout cambia sezione (misto ↔ singola dopo
+  // l'invio della richiesta) e il setState vive solo nel callback observer.
+  // Senza IntersectionObserver (browser d'epoca) la barra resta nascosta: la
+  // CTA nel riepilogo c'e' comunque sempre.
+  const [mostraBarra, setMostraBarra] = useState(false);
+  const observerBarra = useRef<IntersectionObserver | null>(null);
+  const ancoraBarra = useCallback((nodo: HTMLDivElement | null) => {
+    observerBarra.current?.disconnect();
+    observerBarra.current = null;
+    if (!nodo || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([voce]) => {
+      // top > 0 = ancora da raggiungere (sotto il viewport); top < 0 fuori
+      // schermo verso l'alto = superata, la barra non serve piu'.
+      setMostraBarra(!voce.isIntersecting && voce.boundingClientRect.top > 0);
+    });
+    observer.observe(nodo);
+    observerBarra.current = observer;
+  }, []);
 
   if (count === 0) {
     // Carrello svuotato a mano dopo l'invio della richiesta (caso raro): il
@@ -95,12 +121,15 @@ export default function CarrelloContenuto({
 
       {misto ? (
         <>
+          {/* Nel misto l'ancora della barra sta sulla CTA dei disponibili:
+              e' il pagamento che la barra spinge. */}
           <SezioneDisponibili
             righe={disponibili}
             valuta={valuta}
             misto
             tariffaItaliaCents={tariffaItaliaCents}
             slotFooter={!prefill ? <InvitoAccedi /> : null}
+            refAncoraBarra={ancoraBarra}
           />
           <div className="mt-12">
             <SezioneRichiesta
@@ -121,6 +150,7 @@ export default function CarrelloContenuto({
           prefill={prefill}
           onInviata={setTokenRichiesta}
           slotFooter={footerRiepilogo}
+          refAncoraBarra={ancoraBarra}
         />
       ) : (
         <SezioneDisponibili
@@ -129,6 +159,7 @@ export default function CarrelloContenuto({
           misto={false}
           tariffaItaliaCents={tariffaItaliaCents}
           slotFooter={footerRiepilogo}
+          refAncoraBarra={ancoraBarra}
         />
       )}
 
@@ -137,60 +168,65 @@ export default function CarrelloContenuto({
           come ultimo figlio del wrapper: aderisce al fondo dello schermo durante
           lo scroll del carrello ma si sgancia a fine contenuto, cosi il Footer
           (riga legale inclusa) resta leggibile senza padding compensativi.
+          Montata SOLO quando l'ancora sulla CTA del riepilogo e' sotto la
+          piega (observer qui sopra): nei carrelli corti non appare proprio,
+          niente doppio "Vai al pagamento" impilato.
           -mx-4 annulla il px-4 del <main> della pagina → full-bleed su mobile.
           z-30 come le save-bar del gestore: sotto i drawer (z-50) e i toast
           (z-60). Il riepilogo esteso qui sopra resta per il dettaglio voci e
           per desktop. Nel carrello MISTO la barra spinge il pagamento (totale
           dei soli disponibili) e linka la sezione richiesta. */}
-      <div className="sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:hidden">
-        {/* Totale coerente col riepilogo: quando c'e un pagamento diretto la
+      {mostraBarra && (
+        <div className="animate-rise-in sticky bottom-0 z-30 -mx-4 mt-6 border-t border-line bg-white/95 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:hidden">
+          {/* Totale coerente col riepilogo: quando c'e un pagamento diretto la
             cifra INCLUDE la spedizione reale (M3+B6); nel flusso richiesta
             resta la stima del solo subtotale. */}
-        <div className="flex items-center justify-between">
-          <span className="font-display text-sm font-bold text-foreground">
-            {misto
-              ? "Disponibili subito (IVA incl.)"
-              : disponibili.length > 0
-                ? "Totale (IVA inclusa)"
-                : "Totale stimato (IVA incl.)"}
-          </span>
-          <span className="font-display text-lg font-extrabold tabular-nums text-sea">
-            {(() => {
-              if (disponibili.length === 0) {
-                return formatPrezzo(subtotaleDi(righe), valuta);
-              }
-              const sub = subtotaleDi(misto ? disponibili : righe);
-              return formatPrezzo(
-                sub + costoSpedizione(sub, tariffaItaliaCents),
-                valuta,
-              );
-            })()}
-          </span>
-        </div>
-        <div className="mt-2">
-          {disponibili.length === 0 ? (
-            // Flusso richiesta: i campi del modulo sono obbligatori, quindi il
-            // CTA porta al modulo invece di inviare da qui.
+          <div className="flex items-center justify-between">
+            <span className="font-display text-sm font-bold text-foreground">
+              {misto
+                ? "Disponibili subito (IVA incl.)"
+                : disponibili.length > 0
+                  ? "Totale (IVA inclusa)"
+                  : "Totale stimato (IVA incl.)"}
+            </span>
+            <span className="font-display text-lg font-extrabold tabular-nums text-sea">
+              {(() => {
+                if (disponibili.length === 0) {
+                  return formatPrezzo(subtotaleDi(righe), valuta);
+                }
+                const sub = subtotaleDi(misto ? disponibili : righe);
+                return formatPrezzo(
+                  sub + costoSpedizione(sub, tariffaItaliaCents),
+                  valuta,
+                );
+              })()}
+            </span>
+          </div>
+          <div className="mt-2">
+            {disponibili.length === 0 ? (
+              // Flusso richiesta: i campi del modulo sono obbligatori, quindi
+              // il CTA porta al modulo invece di inviare da qui.
+              <a
+                href="#richiesta"
+                className="flex h-12 w-full items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral"
+              >
+                Compila la richiesta
+              </a>
+            ) : (
+              <CheckoutButton />
+            )}
+          </div>
+          {misto && (
             <a
               href="#richiesta"
-              className="flex h-12 w-full items-center justify-center rounded-full bg-coral-ink px-6 font-display font-bold text-white shadow-coral"
+              className="mt-1 flex min-h-10 items-center justify-center text-center text-xs font-bold text-sea underline-offset-2 hover:underline"
             >
-              Compila la richiesta
+              E {articoli(quantitaDi(suRichiesta))} su richiesta → compila la
+              richiesta
             </a>
-          ) : (
-            <CheckoutButton />
           )}
         </div>
-        {misto && (
-          <a
-            href="#richiesta"
-            className="mt-1 flex min-h-10 items-center justify-center text-center text-xs font-bold text-sea underline-offset-2 hover:underline"
-          >
-            E {articoli(quantitaDi(suRichiesta))} su richiesta → compila la
-            richiesta
-          </a>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -233,12 +269,15 @@ function SezioneDisponibili({
   misto,
   tariffaItaliaCents,
   slotFooter = null,
+  refAncoraBarra,
 }: {
   righe: RigaCarrello[];
   valuta: string;
   misto: boolean;
   tariffaItaliaCents: number;
   slotFooter?: React.ReactNode;
+  /** Ancora per la barra sticky mobile: va sul blocco del CheckoutButton. */
+  refAncoraBarra?: React.Ref<HTMLDivElement>;
 }) {
   const sub = subtotaleDi(righe);
   const n = quantitaDi(righe);
@@ -297,7 +336,7 @@ function SezioneDisponibili({
           </span>
         </div>
 
-        <div className="mt-5">
+        <div ref={refAncoraBarra} className="mt-5">
           <CheckoutButton />
         </div>
         <p className="mt-3 text-center text-xs text-muted">
@@ -327,6 +366,7 @@ function SezioneRichiesta({
   prefill,
   onInviata,
   slotFooter = null,
+  refAncoraBarra,
 }: {
   righe: RigaCarrello[];
   valuta: string;
@@ -334,6 +374,9 @@ function SezioneRichiesta({
   prefill: PrefillRichiesta | null;
   onInviata: (token: string) => void;
   slotFooter?: React.ReactNode;
+  /** Ancora per la barra sticky mobile (solo carrello tutto-richiesta):
+   *  va sul modulo, che e' dove porta il CTA "Compila la richiesta". */
+  refAncoraBarra?: React.Ref<HTMLDivElement>;
 }) {
   const sub = subtotaleDi(righe);
   const n = quantitaDi(righe);
@@ -430,7 +473,7 @@ function SezioneRichiesta({
           </p>
         )}
         {/* scroll-mt: l'ancora #richiesta non deve finire sotto l'header sticky. */}
-        <div id="richiesta" className="mt-5 scroll-mt-24">
+        <div id="richiesta" ref={refAncoraBarra} className="mt-5 scroll-mt-24">
           <ModuloRichiesta prefill={prefill} misto={misto} onInviata={onInviata} />
         </div>
 

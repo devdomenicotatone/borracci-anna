@@ -331,6 +331,19 @@ html[data-tendine-chiuse] header .tendina-header {
   animation: pop-in 0.15s ease-out;
 }
 
+/* Ingresso dal bordo inferiore della barra sticky del carrello mobile. */
+@keyframes rise-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-rise-in {
+  animation: rise-in 0.25s ease-out;
+}
+
 /* Rispetta chi preferisce meno movimento. */
 @media (prefers-reduced-motion: reduce) {
   *,
