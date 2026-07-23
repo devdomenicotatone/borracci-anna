@@ -127,11 +127,19 @@ interface CartContextValue {
   drawerAperto: boolean;
   apriDrawer: () => void;
   chiudiDrawer: () => void;
-  /** Aggiunge una variante e apre il mini-cart. */
+  /**
+   * Aggiunge una variante. Feedback di conferma:
+   * - "drawer" (default): apre il mini-cart — per le schede prodotto, dove
+   *   la valutazione e' conclusa e "procedi o continua?" e' la domanda giusta;
+   * - "toast": notifica leggera con link "Vedi carrello" — per il quick-add
+   *   dalle card, dove l'utente sta scorrendo il catalogo e il drawer a ogni
+   *   aggiunta interromperebbe la navigazione (pattern dei big del fashion).
+   */
   aggiungi: (input: {
     prodotto: Prodotto;
     variante: Variante;
     quantita: number;
+    feedback?: "drawer" | "toast";
   }) => Promise<void>;
   /**
    * Imposta la quantita di una riga: feedback ottimistico immediato, Server
@@ -242,7 +250,7 @@ export function CartProvider({
   const chiudiDrawer = useCallback(() => setDrawerAperto(false), []);
 
   const aggiungi = useCallback<CartContextValue["aggiungi"]>(
-    async ({ prodotto, variante, quantita }) => {
+    async ({ prodotto, variante, quantita, feedback = "drawer" }) => {
       const snapshot = righe;
       // Feedback immediato: id provvisorio, rimpiazzato dall'esito reale.
       setRighe(
@@ -256,7 +264,14 @@ export function CartProvider({
 
       if (esito.ok) {
         applicaRigheServer(esito.righe);
-        setDrawerAperto(true);
+        if (feedback === "toast") {
+          mostra("Aggiunto al carrello", "ok", {
+            testo: "Vedi carrello",
+            href: "/carrello",
+          });
+        } else {
+          setDrawerAperto(true);
+        }
         if (esito.avviso) {
           mostra(esito.avviso, "errore");
         }

@@ -2,8 +2,12 @@
 
 // Toaster condiviso (vetrina + area gestore): context + contenitore aria-live.
 // useToast().mostra(messaggio, "ok" | "errore") da qualunque client component.
+// Terzo argomento opzionale: un'azione {testo, href} resa come link nel toast
+// (es. "Vedi carrello" sull'aggiunta rapida) — il tap sul link chiude anche
+// il toast.
 // Storicamente viveva in components/gestore/Toaster.tsx, che ora ne fa il re-export.
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   createContext,
@@ -16,14 +20,21 @@ import {
 
 type TipoToast = "ok" | "errore";
 
+/** Link d'azione opzionale in coda al messaggio. */
+interface AzioneToast {
+  testo: string;
+  href: string;
+}
+
 interface Toast {
   id: number;
   tipo: TipoToast;
   messaggio: string;
+  azione?: AzioneToast;
 }
 
 interface ToastContextValue {
-  mostra: (messaggio: string, tipo?: TipoToast) => void;
+  mostra: (messaggio: string, tipo?: TipoToast, azione?: AzioneToast) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -49,24 +60,27 @@ export function ToasterProvider({
   const pathname = usePathname();
   const inGestore = pathname.startsWith("/gestore");
 
-  const mostra = useCallback((messaggio: string, tipo: TipoToast = "ok") => {
-    const id = (counter.current += 1);
-    setToasts((t) => [...t, { id, tipo, messaggio }]);
-    // Gli errori NON si auto-chiudono (WCAG 2.2.1): per il checkout il toast
-    // e l'unico canale del messaggio (anche testi lunghi dal server) e un
-    // timer fisso non basta a leggerli. Restano finche l'utente non li chiude
-    // col bottone/tap gia presente sul toast.
-    if (tipo === "errore") return;
-    // Auto-dismiss dei toast informativi: base 3,5s + 50ms per ogni carattere
-    // oltre i 40, cosi anche i testi lunghi restano leggibili (oltre alla
-    // chiusura manuale al tap).
-    const durata = 3500 + Math.max(0, messaggio.length - 40) * 50;
-    const timer = setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id));
-      timers.current.delete(timer);
-    }, durata);
-    timers.current.add(timer);
-  }, []);
+  const mostra = useCallback(
+    (messaggio: string, tipo: TipoToast = "ok", azione?: AzioneToast) => {
+      const id = (counter.current += 1);
+      setToasts((t) => [...t, { id, tipo, messaggio, azione }]);
+      // Gli errori NON si auto-chiudono (WCAG 2.2.1): per il checkout il toast
+      // e l'unico canale del messaggio (anche testi lunghi dal server) e un
+      // timer fisso non basta a leggerli. Restano finche l'utente non li chiude
+      // col bottone/tap gia presente sul toast.
+      if (tipo === "errore") return;
+      // Auto-dismiss dei toast informativi: base 3,5s + 50ms per ogni carattere
+      // oltre i 40, cosi anche i testi lunghi restano leggibili (oltre alla
+      // chiusura manuale al tap).
+      const durata = 3500 + Math.max(0, messaggio.length - 40) * 50;
+      const timer = setTimeout(() => {
+        setToasts((t) => t.filter((x) => x.id !== id));
+        timers.current.delete(timer);
+      }, durata);
+      timers.current.add(timer);
+    },
+    [],
+  );
 
   // Chiusura anticipata al tap sul toast; l'eventuale timeout residuo che
   // scatterà più tardi filtra un id ormai assente ed è innocuo.
@@ -148,6 +162,18 @@ export function ToasterProvider({
               onClick={() => rimuovi(t.id)}
               className="absolute inset-0 rounded-2xl"
             />
+            {/* Il link d'azione DOPO l'overlay e con z-10: nell'ordine di
+                stacking vince lui, cosi resta cliccabile; il resto del toast
+                continua a chiudere. Navigando, il toast si chiude da solo. */}
+            {t.azione && (
+              <Link
+                href={t.azione.href}
+                onClick={() => rimuovi(t.id)}
+                className="relative z-10 shrink-0 whitespace-nowrap underline underline-offset-2 hover:opacity-80"
+              >
+                {t.azione.testo}
+              </Link>
+            )}
           </div>
         ))}
       </div>

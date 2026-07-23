@@ -5,7 +5,10 @@
 // (Server Action, giacenze fresche); le taglie esaurite sono barrate.
 //
 // - UN solo colore (o nessuno): il tap sulla taglia aggiunge subito al
-//   carrello (CartProvider: badge ottimistico + mini-cart che si apre).
+//   carrello (CartProvider: badge ottimistico + toast "Aggiunto al carrello"
+//   con link — NIENTE mini-cart: chi usa il quick-add sta scorrendo la
+//   griglia e il drawer a ogni aggiunta interromperebbe la navigazione;
+//   dalle schede prodotto invece il drawer resta il feedback giusto).
 // - PIU colori: la taglia da sola non basta a scegliere la variante, quindi
 //   il tap porta alla scheda con la taglia gia preselezionata (?taglia=...).
 // - Nessuna taglia (es. palloni, un colore): bottone unico "Aggiungi".
@@ -74,7 +77,7 @@ export default function QuickAddTaglie({ prodotto }: { prodotto: Prodotto }) {
     if (!variante) return;
     setAperto(false);
     startTransition(async () => {
-      await aggiungi({ prodotto, variante, quantita: 1 });
+      await aggiungi({ prodotto, variante, quantita: 1, feedback: "toast" });
     });
   }
 
