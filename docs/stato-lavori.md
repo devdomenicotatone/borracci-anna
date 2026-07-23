@@ -186,9 +186,16 @@ WCAG 2.2 AA, SEO tecnico.
         www → apex (oggi www serve il sito direttamente: ok anche cosi).
         ⚠️ IGNORARE il badge Vercel "DNS Change Recommended": i nameserver
         DEVONO restare su Aruba (record email);
-     2) creare `info@annashoprimini.it` dal pannello Aruba → chiude B8
-        (sostituire NEGOZIO.email in src/lib/negozio.ts + template
-        Supabase Auth in dashboard);
+     2) ~~creare `info@annashoprimini.it`~~ **FATTO il 23/07**: casella
+        creata dal pannello Aruba (via postmaster; catch-all e reset al
+        primo accesso disattivati) e `NEGOZIO.email` sostituita
+        (`44f449e`) → **B8 chiuso lato codice**. Restano due code:
+        [T] verificare in dashboard Supabase (Authentication → Emails)
+        che template e mittente non citino la vecchia gmail — i template
+        nel repo (supabase/templates/) sono gia' puliti, nessuna email nel
+        corpo; [T] configurare l'accesso a info@ (webmail.aruba.it o
+        client): DAL PROSSIMO DEPLOY notifiche ordine, alert tecnici e
+        risposte dei clienti arrivano LI', va presidiata;
      3) Brevo + SPF/DKIM/DMARC come da runbook. ⚠️ SPF: esiste gia'
         `v=spf1 include:_spf.aruba.it ~all` su Aruba → gli include di
         Brevo vanno UNITI in quell'UNICO record, mai due record SPF;
@@ -226,9 +233,10 @@ WCAG 2.2 AA, SEO tecnico.
    JSON-LD per periodi a date fisse; il tratto pasquale, a inizio mobile,
    vive solo nel testo). Se in futuro cambiano: aggiornare INSIEME
    `NEGOZIO.orari` e `NEGOZIO.orariStrutturati`.
-5. Sostituire l'**email di contatto** (oggi casella personale dello
-   sviluppatore, B8) — nota: è anche la casella che riceve gli alert
-   tecnici e le notifiche ordine.
+5. ~~Sostituire l'**email di contatto**~~ **FATTO il 23/07** (`44f449e`):
+   ora è `info@annashoprimini.it` (casella Aruba del dominio). Riceve
+   anche alert tecnici e notifiche ordine: va presidiata (vedi punto 1,
+   passo 2).
 6. Far **validare i testi legali** pubblicati da un legale.
 7. ~~Confermare l'esenzione microimpresa EAA~~ **FATTO il 21/07**: la
    titolare conferma <10 dipendenti e fatturato ≤2M € → microimpresa,
